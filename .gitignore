@@ -21,3 +21,7 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Internal development artifacts
+CLAUDE.md
+references/
