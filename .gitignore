@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.vite/
+
+# Rust / Tauri build output (can exceed 1 GB)
+src-tauri/target/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
