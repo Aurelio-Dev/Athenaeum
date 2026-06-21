@@ -27,3 +27,7 @@ rfd = "0.15"
 base64 = "0.22"
 tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tauri-plugin-fs = "2.5.1"
+# Usado apenas pelo comando import_document, que precisa de uma transacao real
+# (BEGIN...COMMIT numa unica conexao). Reaproveitamos o MESMO pool do plugin-sql,
+# entao a versao precisa casar com a que o plugin ja traz (0.8.x).
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }

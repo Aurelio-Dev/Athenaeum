@@ -8,6 +8,8 @@
   --color-surface-card: #FFFFFF;
   --color-surface-muted: #F3F4F6;
   --color-surface-subtle: #EEF0F3;
+  /* Fundo de elementos flutuantes escuros (toolbar de selecao do leitor). */
+  --color-surface-elevated: #1E2130;
   --color-overlay-modal: rgba(24, 24, 27, 0.7);
 
   --color-text-primary: #18181B;
@@ -50,6 +52,15 @@
   --color-status-slate-text: #475569;
   --color-status-red-bg: #FEE2E2;
   --color-status-red-text: #B91C1C;
+
+  /* Highlight da tela de leitura. Unica cor por ora (Amber, validada WCAG AA).
+     bg e usado como marca-texto (mix-blend-multiply); text para acentos/lista. */
+  --color-highlight-amber-bg: #FEF3C7;
+  --color-highlight-amber-text: #92400E;
+
+  /* Icone "Marcar" ativo na toolbar de selecao — ambar mais vivido que o texto
+     de tag (#92400E). NAO substitui o par tag-amber-bg/text: usos diferentes. */
+  --color-accent-icon-amber: #F59E0B;
 
   --color-spine-violet: #6D28D9;
   --color-spine-indigo: #4F46E5;

@@ -1,8 +1,9 @@
 use base64::Engine;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri_plugin_sql::{Migration, MigrationKind};
+use tauri::Manager;
+use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
 #[derive(Serialize)]
 struct SelectedPdfFile {
@@ -45,6 +46,203 @@ fn read_pdf_file(file_path: String) -> Result<String, String> {
   let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
 
   Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+// ===========================================================================
+// import_document — importacao de PDF com transacao REAL.
+//
+// O resto da persistencia do app roda em TypeScript via plugin-sql: cada acao do
+// usuario e 1 statement atomico, o que ja e seguro. A IMPORTACAO e diferente:
+// ela grava varias linhas relacionadas (colecao, tags, documento, autores,
+// vinculos) que precisam entrar TODAS ou NENHUMA. Isso exige uma transacao numa
+// unica conexao (BEGIN...COMMIT) — algo que o pool do plugin-sql, acessado
+// statement-a-statement pelo TS, nao garante. Por isso ESTE caso (e so ele) vive
+// no Rust. Nao use isso como precedente para mover outras escritas para ca.
+//
+// Alem do banco, a importacao copia o PDF para o storage do app. O sistema de
+// arquivos NAO participa da transacao SQLite, entao a ordem das etapas e o
+// tratamento de erro sao explicitos para nunca deixar arquivo orfao (PDF
+// copiado, mas sem linha correspondente no banco).
+// ===========================================================================
+
+// Tag ja resolvida no TS (id = slug, color_token = tom validado em WCAG AA).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportTag {
+  id: String,
+  name: String,
+  color_token: String,
+}
+
+// Tudo o que o comando precisa para gravar o documento. Os ids/tokens ja vem
+// resolvidos do TS (slug, tom da tag, id da colecao), entao o Rust so cuida da
+// copia do arquivo e da transacao — nao replica regra de negocio.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportDocumentRequest {
+  id: String,
+  title: String,
+  source: String,
+  year: i64,
+  status: String,
+  progress: i64,
+  favorite: bool,
+  collection_id: String,
+  collection_name: String,
+  file_name: String,
+  // Caminho de ONDE copiar o PDF (arquivo escolhido pelo usuario).
+  source_path: String,
+  notes: String,
+  updated_at: String,
+  authors: Vec<String>,
+  tags: Vec<ImportTag>,
+}
+
+// Mesma string usada no TS em Database.load(...). E a chave do pool no estado.
+const DATABASE_KEY: &str = "sqlite:athenaeum.db";
+
+#[tauri::command]
+async fn import_document<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  db_instances: tauri::State<'_, DbInstances>,
+  request: ImportDocumentRequest,
+) -> Result<String, String> {
+  // -------------------------------------------------------------------------
+  // ETAPA 1 — Copiar o PDF para o storage do app (operacao de filesystem, FORA
+  // da transacao do banco).
+  //
+  // Por que copiar ANTES de tocar no banco: se a copia falhar, retornamos erro
+  // sem ter aberto nenhuma transacao — nao ha nada a reverter. O caminho inverso
+  // (gravar a linha e so depois copiar) poderia deixar uma linha no banco
+  // apontando para um arquivo que nunca foi criado.
+  // -------------------------------------------------------------------------
+  let data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("Nao foi possivel achar o diretorio de dados: {error}"))?;
+  let pdf_dir = data_dir.join("pdfs");
+  std::fs::create_dir_all(&pdf_dir)
+    .map_err(|error| format!("Nao foi possivel criar a pasta de PDFs: {error}"))?;
+
+  // No storage, o arquivo se chama <id>.pdf (o id ja e unico). O nome original
+  // de exibicao vai separado, na coluna file_name.
+  let dest_path = pdf_dir.join(format!("{}.pdf", request.id));
+  let dest_path_str = dest_path.to_string_lossy().into_owned();
+
+  let source_path = Path::new(&request.source_path);
+  if !source_path.exists() {
+    return Err("Arquivo de origem nao encontrado.".to_string());
+  }
+
+  // Se a copia do arquivo falhar, nem tentamos abrir a transacao.
+  std::fs::copy(source_path, &dest_path)
+    .map_err(|error| format!("Nao foi possivel copiar o PDF: {error}"))?;
+
+  // -------------------------------------------------------------------------
+  // ETAPA 2 — Gravar tudo numa unica transacao, reaproveitando o MESMO pool do
+  // plugin-sql (mesma conexao logica, mesmas PRAGMAs de durabilidade).
+  // -------------------------------------------------------------------------
+  let instances = db_instances.0.read().await;
+  let pool = match instances.get(DATABASE_KEY) {
+    Some(DbPool::Sqlite(pool)) => pool,
+    _ => {
+      // Banco ainda nao carregado: desfaz a copia para nao deixar orfao.
+      let _ = std::fs::remove_file(&dest_path);
+      return Err("Banco de dados nao carregado.".to_string());
+    }
+  };
+
+  // Toda a escrita fica neste bloco async que devolve Result. Qualquer `?` aqui
+  // dentro encerra o bloco com Err e dropa a `tx` SEM commit (rollback
+  // automatico). Caimos entao no `if let Err(...)` abaixo, onde apagamos o
+  // arquivo ja copiado. Assim banco e disco ficam sempre coerentes.
+  let write_result: Result<(), String> = async {
+    let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+
+    // Colecao: cria se ainda nao existir (o id ja foi resolvido no TS).
+    sqlx::query("INSERT OR IGNORE INTO collections (id, name, is_system) VALUES (?, ?, 0)")
+      .bind(&request.collection_id)
+      .bind(&request.collection_name)
+      .execute(&mut *tx)
+      .await
+      .map_err(|error| error.to_string())?;
+
+    // Tags: upsert mantendo a cor validada.
+    for tag in &request.tags {
+      sqlx::query(
+        "INSERT INTO tags (id, name, color_token) VALUES (?, ?, ?) \
+         ON CONFLICT(name) DO UPDATE SET color_token = excluded.color_token",
+      )
+      .bind(&tag.id)
+      .bind(&tag.name)
+      .bind(&tag.color_token)
+      .execute(&mut *tx)
+      .await
+      .map_err(|error| error.to_string())?;
+    }
+
+    // Documento. file_path aponta para a COPIA no storage do app (nao para o
+    // arquivo original do usuario, que pode ser movido/apagado depois).
+    sqlx::query(
+      "INSERT INTO documents (\
+         id, title, source, year, status, progress, favorite, collection_id, \
+         file_name, file_path, notes, reading_location_json, updated_at\
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+    )
+    .bind(&request.id)
+    .bind(&request.title)
+    .bind(&request.source)
+    .bind(request.year)
+    .bind(&request.status)
+    .bind(request.progress)
+    .bind(i64::from(request.favorite))
+    .bind(&request.collection_id)
+    .bind(&request.file_name)
+    .bind(&dest_path_str)
+    .bind(&request.notes)
+    .bind(&request.updated_at)
+    .execute(&mut *tx)
+    .await
+    .map_err(|error| error.to_string())?;
+
+    // Autores, preservando a ordem.
+    for (index, author) in request.authors.iter().enumerate() {
+      sqlx::query("INSERT INTO document_authors (document_id, author, author_order) VALUES (?, ?, ?)")
+        .bind(&request.id)
+        .bind(author)
+        .bind(index as i64)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+
+    // Vinculo documento<->tags.
+    for (index, tag) in request.tags.iter().enumerate() {
+      sqlx::query("INSERT INTO document_tags (document_id, tag_id, tag_order) VALUES (?, ?, ?)")
+        .bind(&request.id)
+        .bind(&tag.id)
+        .bind(index as i64)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+
+    // Confirma tudo de uma vez. Se isto falhar, o `?` propaga e nada e gravado.
+    tx.commit().await.map_err(|error| error.to_string())?;
+    Ok(())
+  }
+  .await;
+
+  if let Err(error) = write_result {
+    // A transacao foi revertida (tx dropada sem commit), mas o ARQUIVO ja havia
+    // sido copiado na Etapa 1. Apagamos para nao sobrar PDF orfao sem linha.
+    let _ = std::fs::remove_file(&dest_path);
+    return Err(error);
+  }
+
+  // Sucesso: devolve o caminho final (storage do app) para o frontend apontar o
+  // documento para a copia estavel.
+  Ok(dest_path_str)
 }
 
 #[tauri::command]
@@ -396,6 +594,71 @@ CREATE INDEX idx_documents_deleted_at ON documents(deleted_at);
 "#,
       kind: MigrationKind::Up,
     },
+    // v3: tabela de anotacoes da tela de leitura (highlights + comentarios).
+    //
+    // Cada linha e uma anotacao ancorada a uma selecao de texto numa pagina.
+    // Modelamos highlight e comentario na MESMA tabela: `note = ''` significa
+    // highlight puro; `note <> ''` significa highlight com comentario.
+    //
+    // Decisao de confiabilidade (prioridade #1 do projeto): toda a geometria do
+    // highlight fica em UMA coluna (`rects_json`), entao criar/editar/excluir uma
+    // anotacao e sempre UM unico statement SQL. O SQLite garante atomicidade por
+    // statement, logo nao precisamos de transacao multi-statement (que seria
+    // insegura no pool de conexoes do plugin-sql).
+    Migration {
+      version: 3,
+      description: "create_reading_annotations",
+      sql: r#"
+CREATE TABLE annotations (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  -- Pagina 1-based onde a anotacao vive. Uma selecao que cruza paginas vira
+  -- uma anotacao por pagina (cada uma com seus proprios rects).
+  page INTEGER NOT NULL CHECK (page >= 1),
+  -- Cor do highlight. Por ora so 'amber' (unica cor validada em WCAG AA para
+  -- este uso). Verde/Green fica reservado para status "concluido" e nao entra
+  -- aqui. Extensao futura reaproveitaria violet/indigo/blue/teal/rose, que ja
+  -- sao validados; nao inventar cores novas sem validar contraste.
+  color TEXT NOT NULL DEFAULT 'amber' CHECK (color IN ('amber')),
+  -- Texto exato selecionado: usado na lista do painel, no copiar, e como sinal
+  -- de verificacao/fallback de re-ancoragem se o PDF mudar.
+  selected_text TEXT NOT NULL,
+  -- Comentario opcional do usuario. '' = highlight sem comentario.
+  note TEXT NOT NULL DEFAULT '',
+  -- Geometria: JSON com array de retangulos normalizados (fracoes 0..1 do
+  -- tamanho da pagina renderizada), ex: [{"x":0.1,"y":0.2,"w":0.3,"h":0.02}].
+  -- Normalizado para sobreviver a zoom, DPR e tamanho de janela.
+  rects_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_annotations_document_id ON annotations(document_id);
+CREATE INDEX idx_annotations_document_page ON annotations(document_id, page);
+
+-- Mantem updated_at em dia em qualquer UPDATE que nao o altere explicitamente,
+-- seguindo o mesmo padrao das outras tabelas.
+CREATE TRIGGER annotations_touch_updated_at
+AFTER UPDATE ON annotations
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+  UPDATE annotations
+  SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = NEW.id;
+END;
+"#,
+      kind: MigrationKind::Up,
+    },
+    Migration {
+      version: 4,
+      description: "add_collection_descriptions",
+      sql: r#"
+ALTER TABLE collections ADD COLUMN description TEXT NOT NULL DEFAULT '';
+"#,
+      kind: MigrationKind::Up,
+    },
   ]
 }
 
@@ -418,7 +681,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![open_file_location, read_pdf_file, select_pdf_file])
+    .invoke_handler(tauri::generate_handler![import_document, open_file_location, read_pdf_file, select_pdf_file])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

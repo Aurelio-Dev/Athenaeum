@@ -10,6 +10,9 @@ type AppShellProps = {
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
   onRouteChange: (route: LibraryRoute) => void;
+  onCreateCollection: (name: string, description: string) => Promise<void>;
+  onRenameCollection: (collection: LibraryCollection, name: string, description: string) => Promise<void>;
+  onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
   children: ReactNode;
 };
 
@@ -21,6 +24,9 @@ export function AppShell({
   searchTerm,
   onSearchTermChange,
   onRouteChange,
+  onCreateCollection,
+  onRenameCollection,
+  onDeleteCollection,
   children,
 }: AppShellProps) {
   return (
@@ -33,6 +39,9 @@ export function AppShell({
         searchTerm={searchTerm}
         onSearchTermChange={onSearchTermChange}
         onRouteChange={onRouteChange}
+        onCreateCollection={onCreateCollection}
+        onRenameCollection={onRenameCollection}
+        onDeleteCollection={onDeleteCollection}
       />
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
     </div>

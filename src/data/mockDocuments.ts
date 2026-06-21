@@ -11,11 +11,11 @@ export const availableSubjectTags: SubjectTag[] = [
 ];
 
 export const mockCollections: LibraryCollection[] = [
-  { id: "machine-learning-papers", name: "Machine Learning Papers" },
-  { id: "engineering-books", name: "Engineering Books" },
-  { id: "business-books", name: "Business Books" },
-  { id: "psychology", name: "Psychology" },
-  { id: "reading-queue", name: "Reading Queue" },
+  { id: "machine-learning-papers", name: "Machine Learning Papers", description: "Artigos, livros e referencias sobre aprendizado de maquina." },
+  { id: "engineering-books", name: "Engineering Books", description: "Livros tecnicos para arquitetura, sistemas e engenharia." },
+  { id: "business-books", name: "Business Books", description: "Leituras sobre estrategia, produto e negocios." },
+  { id: "psychology", name: "Psychology", description: "Textos sobre mente, comportamento e tomada de decisao." },
+  { id: "reading-queue", name: "Reading Queue", description: "Itens separados para ler em seguida." },
 ];
 
 export const mockDocuments: LibraryDocument[] = [

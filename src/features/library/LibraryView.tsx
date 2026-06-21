@@ -3,7 +3,9 @@ import { remove } from "@tauri-apps/plugin-fs";
 import { AppShell } from "../../components/AppShell";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import {
+  createCollection as createPersistedCollection,
   createDocument,
+  deleteCollection as deletePersistedCollection,
   emptyTrash,
   getDocumentFilePaths,
   getTrashFilePaths,
@@ -11,10 +13,12 @@ import {
   moveDocumentToTrash,
   permanentlyDeleteDocument,
   restoreDocument,
+  renameCollection as renamePersistedCollection,
   setDocumentFavorite,
   setDocumentNote,
   setDocumentReadingLocation,
   setDocumentReadingStarted,
+  updateCollectionDescription as updatePersistedCollectionDescription,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
 } from "../../lib/database";
 import type { DocumentMetadataUpdates } from "../../lib/database";
@@ -47,13 +51,17 @@ export function LibraryView() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+  const [editingCollectionDescriptionId, setEditingCollectionDescriptionId] = useState<string | null>(null);
+  const [collectionDescriptionDraft, setCollectionDescriptionDraft] = useState("");
+  const [collectionDescriptionError, setCollectionDescriptionError] = useState("");
+  const [isSavingCollectionDescription, setIsSavingCollectionDescription] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   const isTrashRoute = activeRoute.type === "trash";
 
-  const refreshLibrary = useCallback(async () => {
-    const snapshot = await loadLibrarySnapshot({ searchTerm, statusFilter, sortMode, route: activeRoute });
+  const refreshLibrary = useCallback(async (routeOverride: LibraryRoute = activeRoute) => {
+    const snapshot = await loadLibrarySnapshot({ searchTerm, statusFilter, sortMode, route: routeOverride });
 
     setAllDocuments(snapshot.allDocuments);
     setDocuments(snapshot.documents);
@@ -117,8 +125,12 @@ export function LibraryView() {
   const listClassName = viewMode === "grid" ? "grid grid-cols-2 gap-3" : "flex flex-col gap-3";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
+  const activeCollection =
+    activeRoute.type === "collection" ? collections.find((collection) => collection.name === activeRoute.collectionName) ?? null : null;
   const emptyMessage = isTrashRoute ? "Sua lixeira esta vazia" : "Nenhum documento encontrado";
   const emptyDescription = isTrashRoute ? "Itens movidos para a lixeira aparecem aqui por ate 30 dias." : "Ajuste a busca ou os filtros para ver a biblioteca novamente.";
+  const isEditingActiveCollectionDescription =
+    Boolean(activeCollection) && editingCollectionDescriptionId === activeCollection?.id;
 
   async function openForReading(documentToOpen: LibraryDocument) {
     await setDocumentReadingStarted(documentToOpen.id);
@@ -184,6 +196,72 @@ export function LibraryView() {
     setSelectedDocumentId(document.id);
   }
 
+  async function createCollection(name: string, description: string) {
+    const collection = await createPersistedCollection(name, description);
+    const nextRoute: LibraryRoute = { type: "collection", collectionName: collection.name };
+    setActiveRoute(nextRoute);
+    await refreshLibrary(nextRoute);
+  }
+
+  async function renameCollection(collection: LibraryCollection, name: string, description: string) {
+    const renamedCollection = await renamePersistedCollection(collection.id, name, description);
+    const nextRoute: LibraryRoute =
+      activeRoute.type === "collection" && activeRoute.collectionName === collection.name
+        ? { type: "collection", collectionName: renamedCollection.name }
+        : activeRoute;
+
+    setActiveRoute(nextRoute);
+    await refreshLibrary(nextRoute);
+  }
+
+  function startEditingCollectionDescription(collection: LibraryCollection) {
+    setEditingCollectionDescriptionId(collection.id);
+    setCollectionDescriptionDraft(collection.description);
+    setCollectionDescriptionError("");
+  }
+
+  function cancelEditingCollectionDescription() {
+    setEditingCollectionDescriptionId(null);
+    setCollectionDescriptionDraft("");
+    setCollectionDescriptionError("");
+  }
+
+  async function saveCollectionDescription(collection: LibraryCollection) {
+    if (isSavingCollectionDescription) {
+      return;
+    }
+
+    setIsSavingCollectionDescription(true);
+    setCollectionDescriptionError("");
+
+    try {
+      const updatedCollection = await updatePersistedCollectionDescription(collection.id, collectionDescriptionDraft);
+      setCollections((currentCollections) =>
+        currentCollections.map((currentCollection) =>
+          currentCollection.id === collection.id
+            ? { ...currentCollection, description: updatedCollection.description }
+            : currentCollection,
+        ),
+      );
+      setEditingCollectionDescriptionId(null);
+    } catch (error) {
+      console.error("Nao foi possivel atualizar a descricao da colecao.", error);
+      setCollectionDescriptionError("Nao foi possivel salvar a descricao.");
+    } finally {
+      setIsSavingCollectionDescription(false);
+    }
+  }
+
+  async function deleteCollection(collection: LibraryCollection) {
+    await deletePersistedCollection(collection.id);
+
+    const nextRoute: LibraryRoute =
+      activeRoute.type === "collection" && activeRoute.collectionName === collection.name ? { type: "all" } : activeRoute;
+
+    setActiveRoute(nextRoute);
+    await refreshLibrary(nextRoute);
+  }
+
   async function removeFiles(filePaths: string[]) {
     for (const filePath of filePaths) {
       try {
@@ -224,9 +302,31 @@ export function LibraryView() {
       searchTerm={searchTerm}
       onSearchTermChange={setSearchTerm}
       onRouteChange={setActiveRoute}
+      onCreateCollection={createCollection}
+      onRenameCollection={renameCollection}
+      onDeleteCollection={deleteCollection}
     >
       <header className="flex flex-wrap items-center gap-4 border-b border-border-subtle bg-surface-panel px-8 py-6">
-        <LibraryHeader title={getRouteTitle(activeRoute)} count={documents.length} subtitle={getRouteSubtitle(activeRoute, allDocuments.length)} />
+        <LibraryHeader
+          title={getRouteTitle(activeRoute)}
+          count={documents.length}
+          subtitle={getRouteSubtitle(activeRoute, allDocuments.length)}
+          subtitleContent={
+            activeCollection ? (
+              <CollectionDescriptionHeader
+                collection={activeCollection}
+                isEditing={isEditingActiveCollectionDescription}
+                draft={collectionDescriptionDraft}
+                error={collectionDescriptionError}
+                isSaving={isSavingCollectionDescription}
+                onStartEditing={() => startEditingCollectionDescription(activeCollection)}
+                onDraftChange={setCollectionDescriptionDraft}
+                onCancel={cancelEditingCollectionDescription}
+                onSave={() => void saveCollectionDescription(activeCollection)}
+              />
+            ) : undefined
+          }
+        />
         {isTrashRoute && trashCount > 0 ? (
           <button
             type="button"
@@ -343,6 +443,80 @@ export function LibraryView() {
         />
       ) : null}
     </AppShell>
+  );
+}
+
+type CollectionDescriptionHeaderProps = {
+  collection: LibraryCollection;
+  isEditing: boolean;
+  draft: string;
+  error: string;
+  isSaving: boolean;
+  onStartEditing: () => void;
+  onDraftChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+};
+
+function CollectionDescriptionHeader({
+  collection,
+  isEditing,
+  draft,
+  error,
+  isSaving,
+  onStartEditing,
+  onDraftChange,
+  onCancel,
+  onSave,
+}: CollectionDescriptionHeaderProps) {
+  if (isEditing) {
+    return (
+      <div className="mt-2 grid max-w-2xl gap-2">
+        <textarea
+          value={draft}
+          onChange={(event) => onDraftChange(event.target.value)}
+          maxLength={240}
+          rows={2}
+          className="resize-none rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
+          autoFocus
+        />
+        {error ? <p className="text-xs font-semibold text-status-red-text">{error}</p> : null}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-text-inverse shadow-button hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
+            onClick={onSave}
+            disabled={isSaving}
+          >
+            {isSaving ? "Salvando..." : "Salvar"}
+          </button>
+          <button
+            type="button"
+            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={onCancel}
+            disabled={isSaving}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <p
+      className="mt-1 max-w-2xl cursor-text text-sm leading-6 text-text-secondary"
+      onDoubleClick={onStartEditing}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onStartEditing();
+        }
+      }}
+    >
+      {collection.description.trim() || "Sem descricao"}
+    </p>
   );
 }
 

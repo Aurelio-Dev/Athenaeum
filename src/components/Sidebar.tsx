@@ -1,3 +1,4 @@
+import { type MouseEvent, useState } from "react";
 import { IconButton } from "./IconButton";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
@@ -9,6 +10,9 @@ type SidebarProps = {
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
   onRouteChange: (route: LibraryRoute) => void;
+  onCreateCollection: (name: string, description: string) => Promise<void>;
+  onRenameCollection: (collection: LibraryCollection, name: string, description: string) => Promise<void>;
+  onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
 };
 
 type NavItem = {
@@ -17,6 +21,19 @@ type NavItem = {
   count?: number;
   route: LibraryRoute;
 };
+
+type CollectionDialogState =
+  | { type: "create" }
+  | { type: "edit"; collection: LibraryCollection }
+  | { type: "delete"; collection: LibraryCollection; count: number }
+  | null;
+
+type CollectionContextMenuState = {
+  collection: LibraryCollection;
+  count: number;
+  x: number;
+  y: number;
+} | null;
 
 const navItems = (documents: LibraryDocument[], trashCount: number): NavItem[] => [
   { label: "Todos os itens", icon: "list", count: documents.length, route: { type: "all" } },
@@ -37,7 +54,19 @@ function isRouteActive(activeRoute: LibraryRoute, route: LibraryRoute) {
   return true;
 }
 
-function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" | "plus" }) {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Erro desconhecido.";
+}
+
+function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" | "plus" | "edit" }) {
   const commonProps = {
     width: 16,
     height: 16,
@@ -111,6 +140,15 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
     );
   }
 
+  if (name === "edit") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+      </svg>
+    );
+  }
+
   return (
     <svg {...commonProps}>
       <line x1="8" x2="20" y1="6" y2="6" />
@@ -131,14 +169,90 @@ export function Sidebar({
   searchTerm,
   onSearchTermChange,
   onRouteChange,
+  onCreateCollection,
+  onRenameCollection,
+  onDeleteCollection,
 }: SidebarProps) {
+  const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
+  const [collectionName, setCollectionName] = useState("");
+  const [collectionDescription, setCollectionDescription] = useState("");
+  const [collectionError, setCollectionError] = useState("");
+  const [isSubmittingCollection, setIsSubmittingCollection] = useState(false);
+  const [collectionContextMenu, setCollectionContextMenu] = useState<CollectionContextMenuState>(null);
   const collectionCounts = new Map<string, number>();
   documents.forEach((document) => {
     collectionCounts.set(document.collection, (collectionCounts.get(document.collection) ?? 0) + 1);
   });
 
+  function openCreateCollectionDialog() {
+    setCollectionContextMenu(null);
+    setCollectionName("");
+    setCollectionDescription("");
+    setCollectionError("");
+    setCollectionDialog({ type: "create" });
+  }
+
+  function openEditCollectionDialog(collection: LibraryCollection) {
+    setCollectionContextMenu(null);
+    setCollectionName(collection.name);
+    setCollectionDescription(collection.description);
+    setCollectionError("");
+    setCollectionDialog({ type: "edit", collection });
+  }
+
+  function openDeleteCollectionDialog(collection: LibraryCollection) {
+    setCollectionContextMenu(null);
+    setCollectionName(collection.name);
+    setCollectionDescription(collection.description);
+    setCollectionError("");
+    setCollectionDialog({ type: "delete", collection, count: collectionCounts.get(collection.name) ?? 0 });
+  }
+
+  function openCollectionContextMenu(event: MouseEvent, collection: LibraryCollection) {
+    event.preventDefault();
+    event.stopPropagation();
+    setCollectionContextMenu({
+      collection,
+      count: collectionCounts.get(collection.name) ?? 0,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function closeCollectionDialog() {
+    if (!isSubmittingCollection) {
+      setCollectionDialog(null);
+      setCollectionError("");
+    }
+  }
+
+  async function submitCollectionDialog() {
+    if (!collectionDialog || isSubmittingCollection) {
+      return;
+    }
+
+    setIsSubmittingCollection(true);
+    setCollectionError("");
+
+    try {
+      if (collectionDialog.type === "create") {
+        await onCreateCollection(collectionName, collectionDescription);
+      } else if (collectionDialog.type === "edit") {
+        await onRenameCollection(collectionDialog.collection, collectionName, collectionDescription);
+      } else {
+        await onDeleteCollection(collectionDialog.collection);
+      }
+
+      setCollectionDialog(null);
+    } catch (error) {
+      setCollectionError(getErrorMessage(error));
+    } finally {
+      setIsSubmittingCollection(false);
+    }
+  }
+
   return (
-    <aside className="flex h-full w-[300px] shrink-0 flex-col border-r border-black bg-sidebar text-sidebar-text">
+    <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-black bg-sidebar text-sidebar-text">
       <div className="flex items-center gap-3 px-5 pb-2 pt-5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-text-inverse">
           <Icon name="brand" />
@@ -159,7 +273,7 @@ export function Sidebar({
         </label>
       </div>
 
-      <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-2">
+      <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2">
         <div className="space-y-1">
           {navItems(documents, trashCount).map((item) => (
             <button
@@ -183,36 +297,43 @@ export function Sidebar({
 
         <div className="mt-6 flex items-center justify-between px-3 pb-2">
           <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-sidebar-muted">Coleções</span>
-          <IconButton label="Nova coleção" variant="ghost">
+          <IconButton label="Nova colecao" variant="ghost" onClick={openCreateCollectionDialog}>
             <Icon name="plus" />
           </IconButton>
         </div>
 
         <div className="space-y-1">
           {collections.map((collection) => (
-            <button
+            <div
               key={collection.id}
-              type="button"
-              onClick={() => onRouteChange({ type: "collection", collectionName: collection.name })}
+              onContextMenu={(event) => openCollectionContextMenu(event, collection)}
               className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
                 isRouteActive(activeRoute, { type: "collection", collectionName: collection.name })
                   ? "bg-sidebar-active text-text-inverse"
                   : "text-sidebar-text hover:bg-sidebar-raised"
               }`}
             >
-              <span className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                onClick={() => {
+                  setCollectionContextMenu(null);
+                  onRouteChange({ type: "collection", collectionName: collection.name });
+                }}
+              >
                 <Icon name="folder" />
                 <span className="truncate">{collection.name}</span>
-              </span>
-              <span className="rounded-full bg-sidebar-raised px-2 py-0.5 text-xs text-sidebar-text">
+              </button>
+              <span className="ml-2 rounded-full bg-sidebar-raised px-2 py-0.5 text-xs text-sidebar-text">
                 {collectionCounts.get(collection.name) ?? 0}
               </span>
-            </button>
+            </div>
           ))}
         </div>
 
         <button
           type="button"
+          onClick={openCreateCollectionDialog}
           className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-sidebar-raised"
         >
           <Icon name="plus" />
@@ -224,6 +345,148 @@ export function Sidebar({
         <span className="h-2.5 w-2.5 rounded-full bg-status-green-text ring-4 ring-status-green" />
         <span className="text-xs text-sidebar-muted">Sincronizado · há instantes</span>
       </div>
+      {collectionContextMenu ? (
+        <div
+          className="fixed inset-0 z-[65]"
+          role="presentation"
+          onMouseDown={() => setCollectionContextMenu(null)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setCollectionContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute w-52 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar-raised py-1 text-sm text-sidebar-text shadow-2xl"
+            style={{ left: collectionContextMenu.x, top: collectionContextMenu.y }}
+            role="menu"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold hover:bg-sidebar-active hover:text-text-inverse"
+              role="menuitem"
+              onClick={openCreateCollectionDialog}
+            >
+              <Icon name="plus" />
+              Nova colecao
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold hover:bg-sidebar-active hover:text-text-inverse"
+              role="menuitem"
+              onClick={() => openEditCollectionDialog(collectionContextMenu.collection)}
+            >
+              <Icon name="edit" />
+              Editar colecao
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold text-status-red-text hover:bg-status-red"
+              role="menuitem"
+              onClick={() => openDeleteCollectionDialog(collectionContextMenu.collection)}
+            >
+              <Icon name="trash" />
+              Excluir colecao
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {collectionDialog ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={closeCollectionDialog}>
+          <section
+            className="w-full max-w-md rounded-xl bg-surface-panel text-text-primary shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="collection-dialog-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="border-b border-border-subtle px-6 py-5">
+              <h2 id="collection-dialog-title" className="text-lg font-bold">
+                {collectionDialog.type === "create"
+                  ? "Nova colecao"
+                  : collectionDialog.type === "edit"
+                    ? "Editar colecao"
+                    : "Excluir colecao?"}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                {collectionDialog.type === "delete"
+                  ? `Os ${collectionDialog.count} documentos desta colecao serao mantidos e movidos para outra colecao.`
+                  : "Organize sua biblioteca com uma colecao personalizada."}
+              </p>
+            </header>
+
+            <div className="px-6 py-5">
+              {collectionDialog.type === "delete" ? (
+                <div className="rounded-lg border border-border-muted bg-surface-muted px-4 py-3 text-sm font-semibold text-text-primary">
+                  {collectionDialog.collection.name}
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-semibold text-text-primary">Nome</span>
+                    <input
+                      value={collectionName}
+                      onChange={(event) => setCollectionName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void submitCollectionDialog();
+                        }
+                      }}
+                      className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary"
+                      autoFocus
+                    />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm font-semibold text-text-primary">Descricao</span>
+                    <textarea
+                      value={collectionDescription}
+                      onChange={(event) => setCollectionDescription(event.target.value)}
+                      maxLength={240}
+                      rows={3}
+                      className="resize-none rounded-lg border border-border-muted px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {collectionError ? (
+                <div className="mt-4 rounded-lg bg-status-red px-4 py-3 text-sm font-semibold text-status-red-text">{collectionError}</div>
+              ) : null}
+            </div>
+
+            <footer className="flex justify-end gap-3 border-t border-border-subtle px-6 py-4">
+              <button
+                type="button"
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={closeCollectionDialog}
+                disabled={isSubmittingCollection}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
+                  collectionDialog.type === "delete"
+                    ? "bg-status-red text-status-red-text hover:brightness-95"
+                    : "bg-primary text-text-inverse shadow-button hover:bg-primary-hover"
+                } disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none`}
+                onClick={() => void submitCollectionDialog()}
+                disabled={isSubmittingCollection}
+              >
+                {isSubmittingCollection
+                  ? "Salvando..."
+                  : collectionDialog.type === "create"
+                    ? "Criar colecao"
+                    : collectionDialog.type === "edit"
+                      ? "Salvar"
+                      : "Excluir"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </aside>
   );
 }

@@ -10,6 +10,10 @@ module.exports = {
           card: "var(--color-surface-card)",
           muted: "var(--color-surface-muted)",
           subtle: "var(--color-surface-subtle)",
+          elevated: "var(--color-surface-elevated)",
+        },
+        accent: {
+          "icon-amber": "var(--color-accent-icon-amber)",
         },
         overlay: {
           modal: "var(--color-overlay-modal)",
@@ -60,6 +64,10 @@ module.exports = {
           "slate-text": "var(--color-status-slate-text)",
           red: "var(--color-status-red-bg)",
           "red-text": "var(--color-status-red-text)",
+        },
+        highlight: {
+          amber: "var(--color-highlight-amber-bg)",
+          "amber-text": "var(--color-highlight-amber-text)",
         },
         spine: {
           violet: "var(--color-spine-violet)",

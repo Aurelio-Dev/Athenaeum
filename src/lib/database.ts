@@ -1,6 +1,8 @@
+import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { availableSubjectTags, mockCollections, mockDocuments } from "../data/mockDocuments";
 import { getSubjectTagTone } from "../styles/designTokens";
+import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../types/library";
 
 const databaseUrl = "sqlite:athenaeum.db";
@@ -30,6 +32,7 @@ type DocumentRow = {
 type CollectionRow = {
   id: string;
   name: string;
+  description: string | null;
 };
 
 type TagRow = {
@@ -42,6 +45,35 @@ type CountRow = {
 
 type FilePathRow = {
   filePath: string | null;
+};
+
+type CollectionLookupRow = {
+  id: string;
+  name: string;
+  description: string | null;
+};
+
+type AnnotationRow = {
+  id: string;
+  documentId: string;
+  page: number;
+  color: HighlightColor;
+  selectedText: string;
+  note: string;
+  rectsJson: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Dados necessarios para criar uma anotacao. id e timestamps sao gerados aqui
+// dentro para o chamador ficar simples.
+export type NewAnnotation = {
+  documentId: string;
+  page: number;
+  color: HighlightColor;
+  selectedText: string;
+  note: string;
+  rects: NormalizedRect[];
 };
 
 export type LibrarySnapshot = {
@@ -154,8 +186,8 @@ async function seedInitialData(database: Database) {
 
   for (const collection of mockCollections) {
     await database.execute(
-      "INSERT INTO collections (id, name, is_system) VALUES ($1, $2, 0) ON CONFLICT(id) DO UPDATE SET name = excluded.name",
-      [collection.id, collection.name],
+      "INSERT INTO collections (id, name, description, is_system) VALUES ($1, $2, $3, 0) ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description",
+      [collection.id, collection.name, collection.description],
     );
   }
 
@@ -193,15 +225,63 @@ async function upsertTag(database: Database, tag: SubjectTag) {
 }
 
 async function findCollectionId(database: Database, collectionName: string) {
-  const rows = await database.select<Array<{ id: string }>>("SELECT id FROM collections WHERE name = $1 LIMIT 1", [collectionName]);
+  const rows = await database.select<Array<{ id: string }>>("SELECT id FROM collections WHERE name = $1 COLLATE NOCASE LIMIT 1", [collectionName]);
 
   if (rows[0]) {
     return rows[0].id;
   }
 
-  const collectionId = slugify(collectionName);
+  const collectionId = await createUniqueCollectionId(database, collectionName);
   await database.execute("INSERT INTO collections (id, name, is_system) VALUES ($1, $2, 0)", [collectionId, collectionName]);
   return collectionId;
+}
+
+async function findCollectionByName(database: Database, collectionName: string) {
+  const rows = await database.select<CollectionLookupRow[]>(
+    "SELECT id, name, description FROM collections WHERE name = $1 COLLATE NOCASE LIMIT 1",
+    [collectionName],
+  );
+
+  return rows[0] ?? null;
+}
+
+async function createUniqueCollectionId(database: Database, collectionName: string) {
+  const baseId = slugify(collectionName);
+  let nextId = baseId;
+  let suffix = 2;
+
+  while ((await database.select<Array<{ id: string }>>("SELECT id FROM collections WHERE id = $1 LIMIT 1", [nextId]))[0]) {
+    nextId = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return nextId;
+}
+
+async function ensureFallbackCollection(database: Database, ignoredCollectionId: string) {
+  const fallbackName = "Sem colecao";
+  const existingFallback = await findCollectionByName(database, fallbackName);
+
+  if (existingFallback && existingFallback.id !== ignoredCollectionId) {
+    return existingFallback.id;
+  }
+
+  if (!existingFallback) {
+    const fallbackId = await createUniqueCollectionId(database, fallbackName);
+    await database.execute("INSERT INTO collections (id, name, is_system) VALUES ($1, $2, 0)", [fallbackId, fallbackName]);
+    return fallbackId;
+  }
+
+  const [otherCollection] = await database.select<CollectionLookupRow[]>(
+    "SELECT id, name, description FROM collections WHERE id != $1 ORDER BY is_system ASC, created_at ASC, name ASC LIMIT 1",
+    [ignoredCollectionId],
+  );
+
+  if (!otherCollection) {
+    throw new Error("Nao foi possivel encontrar uma colecao para receber os documentos.");
+  }
+
+  return otherCollection.id;
 }
 
 async function insertDocument(database: Database, document: LibraryDocument) {
@@ -367,7 +447,7 @@ function buildFtsQuery(searchTerm: string) {
 export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promise<LibrarySnapshot> {
   const database = await getDatabase();
   const [collections, availableTags, allDocuments, documents, trashCountRows] = await Promise.all([
-    database.select<CollectionRow[]>("SELECT id, name FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
+    database.select<CollectionRow[]>("SELECT id, name, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
     database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC"),
     listDocuments(database, { searchTerm: "", statusFilter: "all", sortMode: "recentes", route: { type: "all" } }),
     listDocuments(database, options),
@@ -375,7 +455,11 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
   ]);
 
   return {
-    collections,
+    collections: collections.map((collection) => ({
+      id: collection.id,
+      name: collection.name,
+      description: collection.description ?? "",
+    })),
     allDocuments,
     availableTags: availableTags.map((tag) => tag.name),
     documents,
@@ -389,16 +473,126 @@ export async function listDocuments(database: Database, options: ListDocumentsOp
   return rows.map(mapDocumentRow);
 }
 
+function normalizeCollectionName(collectionName: string) {
+  return collectionName.trim().replace(/\s+/g, " ");
+}
+
+function normalizeCollectionDescription(collectionDescription: string) {
+  return collectionDescription.trim().replace(/\s+/g, " ").slice(0, 240);
+}
+
+export async function createCollection(collectionName: string, collectionDescription = "") {
+  const database = await getDatabase();
+  const name = normalizeCollectionName(collectionName);
+  const description = normalizeCollectionDescription(collectionDescription);
+
+  if (name.length === 0) {
+    throw new Error("Informe um nome para a colecao.");
+  }
+
+  if (await findCollectionByName(database, name)) {
+    throw new Error("Ja existe uma colecao com esse nome.");
+  }
+
+  const id = await createUniqueCollectionId(database, name);
+  await database.execute("INSERT INTO collections (id, name, description, is_system) VALUES ($1, $2, $3, 0)", [id, name, description]);
+
+  return { id, name, description };
+}
+
+export async function renameCollection(collectionId: string, collectionName: string, collectionDescription = "") {
+  const database = await getDatabase();
+  const name = normalizeCollectionName(collectionName);
+  const description = normalizeCollectionDescription(collectionDescription);
+
+  if (name.length === 0) {
+    throw new Error("Informe um nome para a colecao.");
+  }
+
+  const existingCollection = await findCollectionByName(database, name);
+  if (existingCollection && existingCollection.id !== collectionId) {
+    throw new Error("Ja existe uma colecao com esse nome.");
+  }
+
+  await database.execute("UPDATE collections SET name = $1, description = $2 WHERE id = $3", [name, description, collectionId]);
+
+  return { id: collectionId, name, description };
+}
+
+export async function updateCollectionDescription(collectionId: string, collectionDescription: string) {
+  const database = await getDatabase();
+  const description = normalizeCollectionDescription(collectionDescription);
+
+  await database.execute("UPDATE collections SET description = $1 WHERE id = $2", [description, collectionId]);
+
+  return { id: collectionId, description };
+}
+
+export async function deleteCollection(collectionId: string) {
+  const database = await getDatabase();
+  const fallbackCollectionId = await ensureFallbackCollection(database, collectionId);
+
+  await database.execute("UPDATE documents SET collection_id = $1 WHERE collection_id = $2", [fallbackCollectionId, collectionId]);
+  await database.execute("DELETE FROM collections WHERE id = $1", [collectionId]);
+}
+
+function uniqueTrimmed(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
+}
+
+// Resolve o id da colecao SEM inserir: devolve o id existente (se houver) ou o
+// slug do nome. A criacao da colecao (se nova) acontece DENTRO da transacao do
+// comando Rust, para o import ser totalmente atomico.
+async function resolveCollectionIdForImport(database: Database, collectionName: string) {
+  const rows = await database.select<Array<{ id: string }>>("SELECT id FROM collections WHERE name = $1 LIMIT 1", [collectionName]);
+  return rows[0]?.id ?? slugify(collectionName);
+}
+
 export async function createDocument(document: LibraryDocument): Promise<LibraryDocument> {
   const database = await getDatabase();
 
-  try {
-    await insertDocument(database, document);
-    return document;
-  } catch (error) {
-    await deletePartialDocument(database, document.id);
-    throw error;
+  // Sem arquivo de origem (ex.: drag-drop que nao expoe o caminho): mantemos o
+  // fluxo antigo em TS, sem copia para o storage do app.
+  if (!document.filePath) {
+    try {
+      await insertDocument(database, document);
+      return document;
+    } catch (error) {
+      await deletePartialDocument(database, document.id);
+      throw error;
+    }
   }
+
+  // Com arquivo: o import vai para o comando Rust transacional, que copia o PDF
+  // para o storage do app e grava colecao + tags + documento + autores + vinculos
+  // numa unica transacao (tudo ou nada). Os ids/tons sao resolvidos aqui no TS
+  // para o Rust nao precisar replicar regra de negocio.
+  const collectionId = await resolveCollectionIdForImport(database, document.collection);
+  const tags = uniqueTrimmed(document.tags);
+
+  const storedFilePath = await invoke<string>("import_document", {
+    request: {
+      id: document.id,
+      title: document.title,
+      source: document.source,
+      year: document.year,
+      status: document.status,
+      progress: document.progress,
+      favorite: document.favorite,
+      collectionId,
+      collectionName: document.collection,
+      fileName: document.fileName ?? `${document.id}.pdf`,
+      sourcePath: document.filePath,
+      notes: document.notes ?? "",
+      updatedAt: document.updatedAt,
+      authors: uniqueTrimmed(document.authors),
+      tags: tags.map((tag) => ({ id: slugify(tag), name: tag, colorToken: getSubjectTagTone(tag) })),
+    },
+  });
+
+  // O PDF agora vive no storage do app; o documento passa a referenciar a copia
+  // estavel (sobrevive a mover/apagar o arquivo original).
+  return { ...document, filePath: storedFilePath };
 }
 
 async function deletePartialDocument(database: Database, documentId: string) {
@@ -522,6 +716,120 @@ export async function permanentlyDeleteDocument(documentId: string) {
 export async function emptyTrash() {
   const database = await getDatabase();
   await database.execute("DELETE FROM documents WHERE deleted_at IS NOT NULL");
+}
+
+function isNormalizedRect(value: unknown): value is NormalizedRect {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const rect = value as Record<string, unknown>;
+  return (
+    typeof rect.x === "number" &&
+    typeof rect.y === "number" &&
+    typeof rect.w === "number" &&
+    typeof rect.h === "number"
+  );
+}
+
+function parseRects(value: string): NormalizedRect[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter(isNormalizedRect) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapAnnotationRow(row: AnnotationRow): Annotation {
+  return {
+    id: row.id,
+    documentId: row.documentId,
+    page: row.page,
+    color: row.color,
+    selectedText: row.selectedText,
+    note: row.note,
+    rects: parseRects(row.rectsJson),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export async function listAnnotations(documentId: string): Promise<Annotation[]> {
+  const database = await getDatabase();
+  const rows = await database.select<AnnotationRow[]>(
+    `SELECT
+      id,
+      document_id AS documentId,
+      page,
+      color,
+      selected_text AS selectedText,
+      note,
+      rects_json AS rectsJson,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM annotations
+    WHERE document_id = $1
+    ORDER BY page ASC, created_at ASC`,
+    [documentId],
+  );
+
+  return rows.map(mapAnnotationRow);
+}
+
+// Escrita imediata: ao resolver, o INSERT esta commitado e duravel
+// (synchronous=FULL por conexao). Um unico statement => atomico.
+export async function createAnnotation(input: NewAnnotation): Promise<Annotation> {
+  const database = await getDatabase();
+  const now = new Date().toISOString();
+  const annotation: Annotation = {
+    id: crypto.randomUUID(),
+    documentId: input.documentId,
+    page: input.page,
+    color: input.color,
+    selectedText: input.selectedText,
+    note: input.note,
+    rects: input.rects,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await database.execute(
+    `INSERT INTO annotations (
+      id,
+      document_id,
+      page,
+      color,
+      selected_text,
+      note,
+      rects_json,
+      created_at,
+      updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      annotation.id,
+      annotation.documentId,
+      annotation.page,
+      annotation.color,
+      annotation.selectedText,
+      annotation.note,
+      JSON.stringify(annotation.rects),
+      annotation.createdAt,
+      annotation.updatedAt,
+    ],
+  );
+
+  return annotation;
+}
+
+export async function updateAnnotationNote(annotationId: string, note: string): Promise<void> {
+  const database = await getDatabase();
+  await database.execute("UPDATE annotations SET note = $1 WHERE id = $2", [note, annotationId]);
+}
+
+export async function deleteAnnotation(annotationId: string): Promise<void> {
+  const database = await getDatabase();
+  await database.execute("DELETE FROM annotations WHERE id = $1", [annotationId]);
 }
 
 async function purgeExpiredTrash(database: Database) {

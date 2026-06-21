@@ -2,8 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { TagBadge } from "../../components/TagBadge";
+import "pdfjs-dist/web/pdf_viewer.css";
+import { createAnnotation, deleteAnnotation, listAnnotations, setDocumentReadingLocation, updateAnnotationNote } from "../../lib/database";
+import type { NewAnnotation } from "../../lib/database";
+import type { Annotation, AnnotationSaveState } from "../../types/annotation";
 import type { LibraryDocument, ReadingLocation } from "../../types/library";
+import { captureSelection, type CapturedSelection, type PageElement } from "../reader/anchor";
+import { HighlightLayer } from "../reader/HighlightLayer";
+import { NotePopover } from "../reader/NotePopover";
+import { PdfTextLayer } from "../reader/PdfTextLayer";
+import { ReaderSidePanel } from "../reader/ReaderSidePanel";
+import { SelectionToolbar } from "../reader/SelectionToolbar";
+import { useReaderPersistence } from "../reader/useReaderPersistence";
 
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
 type PdfOutlineItem = {
@@ -20,6 +30,13 @@ const fallbackPageCount = 15;
 const minZoom = 70;
 const maxZoom = 140;
 const zoomStep = 10;
+// Escala base do PDF: o canvas e a camada de texto usam a MESMA escala para o
+// texto transparente cair exatamente sobre as letras.
+const pdfBaseScale = 1.35;
+
+function pageScale(zoom: number) {
+  return (zoom / 100) * pdfBaseScale;
+}
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -113,10 +130,6 @@ function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev
   );
 }
 
-function formatAuthors(authors: string[]) {
-  return authors.length > 4 ? `${authors.slice(0, 4).join(", ")} et al.` : authors.join(", ");
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -144,9 +157,20 @@ function buildFallbackPageNumbers() {
   return Array.from({ length: fallbackPageCount }, (_, index) => index + 1);
 }
 
-function PdfCanvasPage({ pdfDocument, pageNumber, zoom }: { pdfDocument: PdfDocument; pageNumber: number; zoom: number }) {
+type PdfCanvasPageProps = {
+  pdfDocument: PdfDocument;
+  pageNumber: number;
+  zoom: number;
+  annotations: Annotation[];
+  saveStates: Map<string, AnnotationSaveState>;
+  onRetry: (annotationId: string) => void;
+  onSelectAnnotation: (annotation: Annotation) => void;
+};
+
+function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates, onRetry, onSelectAnnotation }: PdfCanvasPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isRendering, setIsRendering] = useState(true);
+  const scale = pageScale(zoom);
 
   useEffect(() => {
     let isCancelled = false;
@@ -155,7 +179,7 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom }: { pdfDocument: PdfDocu
     async function renderPage() {
       setIsRendering(true);
       const page = await pdfDocument.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: (zoom / 100) * 1.35 });
+      const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
       const canvasContext = canvas?.getContext("2d");
 
@@ -192,12 +216,20 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom }: { pdfDocument: PdfDocu
       isCancelled = true;
       renderTask?.cancel();
     };
-  }, [pageNumber, pdfDocument, zoom]);
+  }, [pageNumber, pdfDocument, scale]);
 
+  // article e `relative` para ancorar a camada de texto e os highlights, que
+  // ficam sobrepostos ao canvas com inset-0.
   return (
-    <article className="mx-auto overflow-hidden bg-white shadow-[0_18px_42px_rgba(15,23,42,0.18)]">
+    <article className="relative mx-auto bg-white shadow-[0_18px_42px_rgba(15,23,42,0.18)]">
       {isRendering ? <div className="h-[72vh] w-[min(850px,calc(100vw-64px))] animate-pulse bg-white" /> : null}
       <canvas ref={canvasRef} className={isRendering ? "hidden" : "block"} />
+      {!isRendering ? (
+        <>
+          <PdfTextLayer pdfDocument={pdfDocument} pageNumber={pageNumber} scale={scale} />
+          <HighlightLayer annotations={annotations} saveStates={saveStates} onRetry={onRetry} onSelect={onSelectAnnotation} />
+        </>
+      ) : null}
     </article>
   );
 }
@@ -342,10 +374,25 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   const [zoom, setZoom] = useState(getInitialZoom(document));
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [leftPanelTab, setLeftPanelTab] = useState<"pages" | "summary">("pages");
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [notesText, setNotesText] = useState(document.notes ?? "");
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [saveStates, setSaveStates] = useState<Map<string, AnnotationSaveState>>(new Map());
+  const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
+  const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
+  // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
+  const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
 
   const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
+  const annotationsByPage = useMemo(() => {
+    const grouped = new Map<number, Annotation[]>();
+    for (const annotation of annotations) {
+      const list = grouped.get(annotation.page) ?? [];
+      list.push(annotation);
+      grouped.set(annotation.page, list);
+    }
+    return grouped;
+  }, [annotations]);
 
   useEffect(() => {
     if (!hasPdfSource(document)) {
@@ -414,6 +461,225 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
     setNotesText(document.notes ?? "");
   }, [document.id, document.notes]);
 
+  // Carrega as anotacoes salvas ao abrir/trocar de documento.
+  useEffect(() => {
+    let isCancelled = false;
+    setAnnotations([]);
+    setSaveStates(new Map());
+    failedCreatesRef.current = new Map();
+
+    listAnnotations(document.id)
+      .then((loaded) => {
+        if (!isCancelled) {
+          setAnnotations(loaded);
+        }
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel carregar as anotacoes.", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [document.id]);
+
+  const setSaveState = useCallback((annotationId: string, state: AnnotationSaveState) => {
+    setSaveStates((current) => {
+      const next = new Map(current);
+      next.set(annotationId, state);
+      return next;
+    });
+  }, []);
+
+  const clearSaveState = useCallback((annotationId: string) => {
+    setSaveStates((current) => {
+      if (!current.has(annotationId)) {
+        return current;
+      }
+      const next = new Map(current);
+      next.delete(annotationId);
+      return next;
+    });
+  }, []);
+
+  // Criacao otimista: a anotacao ja aparece na tela com estado "saving" e so
+  // vira "saved" quando o banco confirma (escrita imediata e duravel). Se falhar,
+  // fica "unsaved" (visivel + retry) — nunca some sem o usuario saber.
+  // Devolve a anotacao salva (com id real) ou null se a escrita falhou.
+  const persistNewAnnotation = useCallback(
+    async (optimisticId: string, payload: NewAnnotation): Promise<Annotation | null> => {
+      setSaveState(optimisticId, "saving");
+      try {
+        const saved = await createAnnotation(payload);
+        failedCreatesRef.current.delete(optimisticId);
+        setAnnotations((current) => current.map((item) => (item.id === optimisticId ? saved : item)));
+        clearSaveState(optimisticId);
+        return saved;
+      } catch (error) {
+        console.warn("Nao foi possivel salvar a anotacao.", error);
+        failedCreatesRef.current.set(optimisticId, payload);
+        setSaveState(optimisticId, "unsaved");
+        return null;
+      }
+    },
+    [clearSaveState, setSaveState],
+  );
+
+  // Adiciona a anotacao de forma otimista e dispara a persistencia. Devolve o id
+  // otimista e a Promise da persistencia (resolve com a anotacao salva ou null).
+  const addAnnotationFromPayload = useCallback(
+    (payload: NewAnnotation) => {
+      const optimisticId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      setAnnotations((current) => [...current, { id: optimisticId, createdAt: now, updatedAt: now, ...payload }]);
+      return { optimisticId, persisted: persistNewAnnotation(optimisticId, payload) };
+    },
+    [persistNewAnnotation],
+  );
+
+  const retryAnnotation = useCallback(
+    (annotationId: string) => {
+      const payload = failedCreatesRef.current.get(annotationId);
+      if (payload) {
+        void persistNewAnnotation(annotationId, payload);
+      }
+    },
+    [persistNewAnnotation],
+  );
+
+  function buildPayload(page: number, text: string, rects: NewAnnotation["rects"]): NewAnnotation {
+    return { documentId: document.id, page, color: "amber", selectedText: text, note: "", rects };
+  }
+
+  // Cria um highlight por pagina tocada pela selecao (regra "uma anotacao por
+  // pagina"). Cada pagina vira uma anotacao independente.
+  const highlightSelection = useCallback(() => {
+    if (!pendingSelection) {
+      return;
+    }
+
+    for (const pageRects of pendingSelection.pages) {
+      addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects));
+    }
+
+    window.getSelection()?.removeAllRanges();
+    setPendingSelection(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addAnnotationFromPayload, document.id, pendingSelection]);
+
+  // Como "Marcar", mas abre o editor de nota da anotacao da primeira pagina assim
+  // que ela for persistida (precisamos do id real para salvar a nota depois).
+  const commentSelection = useCallback(() => {
+    if (!pendingSelection) {
+      return;
+    }
+
+    pendingSelection.pages.forEach((pageRects, index) => {
+      const { persisted } = addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects));
+      if (index === 0) {
+        void persisted.then((saved) => {
+          if (saved) {
+            setEditingAnnotationId(saved.id);
+          }
+        });
+      }
+    });
+
+    window.getSelection()?.removeAllRanges();
+    setPendingSelection(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addAnnotationFromPayload, document.id, pendingSelection]);
+
+  // Abre o editor ao clicar num highlight ja salvo. Highlights ainda nao
+  // persistidos (saving/unsaved) nao abrem editor — o emblema de retry cuida deles.
+  const openAnnotationEditor = useCallback(
+    (annotation: Annotation) => {
+      const state = saveStates.get(annotation.id) ?? "saved";
+      if (state === "saved") {
+        setEditingAnnotationId(annotation.id);
+      }
+    },
+    [saveStates],
+  );
+
+  // Salva a nota de forma imediata. LANCA em caso de falha para o NotePopover
+  // manter o texto e avisar — so atualiza o estado local e fecha apos confirmar.
+  const saveAnnotationNote = useCallback(
+    async (note: string) => {
+      const annotationId = editingAnnotationId;
+      if (!annotationId) {
+        return;
+      }
+
+      await updateAnnotationNote(annotationId, note);
+      setAnnotations((current) => current.map((item) => (item.id === annotationId ? { ...item, note } : item)));
+      setEditingAnnotationId(null);
+    },
+    [editingAnnotationId],
+  );
+
+  // Remove a anotacao (highlight + nota). LANCA em caso de falha para o popup
+  // avisar; so atualiza o estado local apos o banco confirmar.
+  const removeAnnotation = useCallback(
+    async (annotationId: string) => {
+      await deleteAnnotation(annotationId);
+      setAnnotations((current) => current.filter((item) => item.id !== annotationId));
+      failedCreatesRef.current.delete(annotationId);
+      clearSaveState(annotationId);
+      setEditingAnnotationId((current) => (current === annotationId ? null : current));
+    },
+    [clearSaveState],
+  );
+
+  // Notas livres do documento: atualiza o estado local e persiste imediatamente
+  // (campo unico em documents.notes, via prop do LibraryView).
+  const handleNotesChange = useCallback(
+    (nextNotes: string) => {
+      setNotesText(nextNotes);
+      onSaveNotes(document.id, nextNotes);
+    },
+    [document.id, onSaveNotes],
+  );
+
+  // Remocao pela lista do painel: a falha so mantem o item (sem perda de dado).
+  const handleDeleteAnnotationFromList = useCallback(
+    (annotationId: string) => {
+      void removeAnnotation(annotationId).catch((error) => {
+        console.warn("Nao foi possivel remover a anotacao.", error);
+      });
+    },
+    [removeAnnotation],
+  );
+
+  const copySelection = useCallback(() => {
+    if (!pendingSelection) {
+      return;
+    }
+
+    void navigator.clipboard.writeText(pendingSelection.text).catch((error) => {
+      console.warn("Nao foi possivel copiar a selecao.", error);
+    });
+    window.getSelection()?.removeAllRanges();
+    setPendingSelection(null);
+  }, [pendingSelection]);
+
+  // Le a selecao atual do navegador no fim de cada interacao de mouse sobre a
+  // area de leitura e posiciona a toolbar (ou a esconde, se nao houver selecao).
+  const handleReaderMouseUp = useCallback(() => {
+    if (!pdfDocument) {
+      return;
+    }
+
+    const pageElements: PageElement[] = [];
+    pageRefs.current.forEach((element, index) => {
+      if (element) {
+        pageElements.push({ page: index + 1, element });
+      }
+    });
+
+    setPendingSelection(captureSelection(pageElements));
+  }, [pdfDocument]);
+
   const scrollToPage = useCallback((page: number) => {
     const readerSurface = readerSurfaceRef.current;
     const pageElement = pageRefs.current[page - 1];
@@ -465,6 +731,18 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
     onClose(getCurrentReadingLocation());
   }, [getCurrentReadingLocation, onClose]);
 
+  // Autosave da posicao de leitura DURANTE a leitura. Escrita imediata de 1
+  // statement (reading_location_json/progress), agendada com debounce para nao
+  // gravar a cada evento de scroll. O flush exato no fechamento fica com o
+  // closeAndSave (onClose) acima.
+  const persistReadingLocation = useCallback(() => {
+    void setDocumentReadingLocation(document, getCurrentReadingLocation()).catch((error) => {
+      console.warn("Nao foi possivel salvar a posicao de leitura.", error);
+    });
+  }, [document, getCurrentReadingLocation]);
+
+  const { schedule: scheduleReadingSave } = useReaderPersistence(persistReadingLocation, 750);
+
   useEffect(() => {
     const readerSurface = readerSurfaceRef.current;
     const location = document.readingLocation;
@@ -487,16 +765,38 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeAndSave();
+      if (event.key !== "Escape") {
+        return;
       }
+
+      // Com o popup de nota aberto, o proprio NotePopover trata o Esc; aqui so
+      // garantimos que o leitor nao feche por baixo dele.
+      if (editingAnnotationId) {
+        return;
+      }
+
+      // Esc primeiro fecha a toolbar de selecao; so fecha o leitor se nao houver
+      // selecao ativa.
+      if (pendingSelection) {
+        window.getSelection()?.removeAllRanges();
+        setPendingSelection(null);
+        return;
+      }
+
+      closeAndSave();
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeAndSave]);
+  }, [closeAndSave, editingAnnotationId, pendingSelection]);
 
   function handleReaderScroll() {
+    // A toolbar e posicionada por coordenadas de viewport; ao rolar ela ficaria
+    // deslocada, entao escondemos a selecao pendente.
+    if (pendingSelection) {
+      setPendingSelection(null);
+    }
+
     const readerSurface = readerSurfaceRef.current;
 
     if (!readerSurface) {
@@ -511,14 +811,17 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
       }
     });
     setCurrentPage(activePage);
+    scheduleReadingSave();
   }
 
   function changeZoom(nextZoom: number) {
     setZoom(clamp(nextZoom, minZoom, maxZoom));
+    scheduleReadingSave();
   }
 
   const progress = Math.round((currentPage / totalPages) * 100);
   const summaryItems = pdfOutline.length > 0 ? pdfOutline : ["Resumo", "Arquitetura", "Treinamento", "Resultados", "Conclusoes"].map((title) => ({ title }));
+  const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#11131d] text-slate-200" role="dialog" aria-modal="true" aria-labelledby="reader-title">
@@ -546,10 +849,10 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
           </button>
           <button
             type="button"
-            aria-label="Anotacoes"
-            title="Anotacoes"
-            className={`rounded-lg p-2 transition ${notesOpen ? "bg-primary text-white ring-1 ring-indigo-200" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-            onClick={() => setNotesOpen((isOpen) => !isOpen)}
+            aria-label="Notas e anotacoes"
+            title="Notas e anotacoes"
+            className={`rounded-lg p-2 transition ${sidePanelOpen ? "bg-primary text-white ring-1 ring-indigo-200" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+            onClick={() => setSidePanelOpen((isOpen) => !isOpen)}
           >
             <Icon name="notes" />
           </button>
@@ -629,7 +932,7 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
           </aside>
         ) : null}
 
-        <main ref={readerSurfaceRef} className="min-w-0 flex-1 overflow-y-auto px-5 py-8" onScroll={handleReaderScroll}>
+        <main ref={readerSurfaceRef} className="min-w-0 flex-1 overflow-y-auto px-5 py-8" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
           {isPdfLoading ? (
             <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
               Carregando PDF...
@@ -646,9 +949,18 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
                   ref={(element) => {
                     pageRefs.current[page - 1] = element;
                   }}
+                  className="mx-auto w-fit"
                 >
                   {pdfDocument ? (
-                    <PdfCanvasPage pdfDocument={pdfDocument} pageNumber={page} zoom={zoom} />
+                    <PdfCanvasPage
+                      pdfDocument={pdfDocument}
+                      pageNumber={page}
+                      zoom={zoom}
+                      annotations={annotationsByPage.get(page) ?? []}
+                      saveStates={saveStates}
+                      onRetry={retryAnnotation}
+                      onSelectAnnotation={openAnnotationEditor}
+                    />
                   ) : (
                     <FallbackReaderPage page={page} zoom={zoom} document={document} />
                   )}
@@ -658,59 +970,38 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
           )}
         </main>
 
-        {notesOpen ? (
-          <aside className="absolute inset-y-0 right-0 z-20 w-[326px] max-w-[calc(100vw-32px)] shrink-0 border-l border-slate-300 bg-surface-panel shadow-2xl lg:relative lg:shadow-none">
-            <header className="flex items-center border-b border-border-subtle px-5 py-4">
-              <h2 className="text-base font-semibold text-text-primary">Anotacoes</h2>
-              <button type="button" aria-label="Fechar anotacoes" className="ml-auto rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={() => setNotesOpen(false)}>
-                <Icon name="close" />
-              </button>
-            </header>
-
-            <div className="px-5 py-5">
-              <div className="rounded-lg border border-border-subtle bg-surface-card p-4">
-                <h3 className="font-semibold text-text-primary">{document.title}</h3>
-                <p className="mt-2 text-sm text-text-secondary">
-                  {formatAuthors(document.authors)} - {document.year}
-                </p>
-              </div>
-
-              <div className="mt-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-text-subtle">Tags</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {document.tags.map((tag) => (
-                    <TagBadge key={tag} tag={tag} />
-                  ))}
-                </div>
-              </div>
-
-              <label className="mt-6 block">
-                <span className="text-xs font-bold uppercase tracking-wider text-text-subtle">Notas</span>
-                <textarea
-                  className="mt-3 h-64 w-full resize-none rounded-lg border border-border-muted bg-surface-panel px-4 py-3 text-sm leading-6 text-text-primary outline-none focus:border-primary"
-                  value={notesText}
-                  placeholder="Escreva suas anotacoes sobre este PDF. Elas serao salvas automaticamente."
-                  onChange={(event) => {
-                    const nextNotes = event.target.value;
-                    setNotesText(nextNotes);
-                    onSaveNotes(document.id, nextNotes);
-                  }}
-                />
-              </label>
-
-              <div className="mt-6">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Progresso geral</span>
-                  <span className="font-bold text-primary">{progress}%</span>
-                </div>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-            </div>
-          </aside>
+        {sidePanelOpen ? (
+          <ReaderSidePanel
+            document={document}
+            notesText={notesText}
+            onNotesChange={handleNotesChange}
+            annotations={annotations}
+            progress={progress}
+            onJumpToPage={scrollToPage}
+            onDeleteAnnotation={handleDeleteAnnotationFromList}
+            onClose={() => setSidePanelOpen(false)}
+          />
         ) : null}
       </div>
+
+      {pendingSelection ? (
+        <SelectionToolbar
+          anchor={pendingSelection.anchor}
+          onHighlight={highlightSelection}
+          onComment={commentSelection}
+          onCopy={copySelection}
+        />
+      ) : null}
+
+      {editingAnnotation ? (
+        <NotePopover
+          selectedText={editingAnnotation.selectedText}
+          initialNote={editingAnnotation.note}
+          onCancel={() => setEditingAnnotationId(null)}
+          onSave={saveAnnotationNote}
+          onDelete={() => removeAnnotation(editingAnnotation.id)}
+        />
+      ) : null}
     </div>
   );
 }
