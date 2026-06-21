@@ -1,4 +1,4 @@
-# Athenaeum# Athenaeum
+# Athenaeum
 
 > Gerenciador de biblioteca pessoal de PDFs e artigos acadêmicos. Offline-first, open source, roda 100% localmente — sem nuvem, sem conta, sem servidor.
 
