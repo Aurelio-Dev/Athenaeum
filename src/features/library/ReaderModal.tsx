@@ -16,6 +16,10 @@ import { SelectionToolbar } from "../reader/SelectionToolbar";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
 
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
+type PageSize = {
+  width: number;
+  height: number;
+};
 type PdfOutlineItem = {
   title: string;
 };
@@ -142,6 +146,49 @@ function hasPdfSource(document: LibraryDocument) {
   return Boolean(document.fileUrl || document.filePath);
 }
 
+function estimatedPageSize(zoom: number): PageSize {
+  const zoomRatio = zoom / 100;
+  return {
+    width: Math.round(850 * zoomRatio),
+    height: Math.round(1120 * zoomRatio),
+  };
+}
+
+function useInViewport<T extends Element>(rootMargin: string) {
+  const elementRef = useRef<T | null>(null);
+  const [isInViewport, setIsInViewport] = useState(false);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInViewport(entry.isIntersecting);
+      },
+      { root: null, rootMargin },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [rootMargin]);
+
+  return { elementRef, isInViewport };
+}
+
+function PdfPagePlaceholder({ pageSize, label }: { pageSize: PageSize; label?: string }) {
+  return (
+    <article
+      className="mx-auto flex items-center justify-center bg-white text-xs font-semibold text-slate-400 shadow-[0_18px_42px_rgba(15,23,42,0.18)]"
+      style={{ width: pageSize.width, minHeight: pageSize.height }}
+    >
+      {label}
+    </article>
+  );
+}
+
 function base64ToBytes(base64: string) {
   const binary = window.atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -165,9 +212,11 @@ type PdfCanvasPageProps = {
   saveStates: Map<string, AnnotationSaveState>;
   onRetry: (annotationId: string) => void;
   onSelectAnnotation: (annotation: Annotation) => void;
+  pageSize: PageSize;
+  onPageSize: (pageNumber: number, size: PageSize) => void;
 };
 
-function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates, onRetry, onSelectAnnotation }: PdfCanvasPageProps) {
+function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates, onRetry, onSelectAnnotation, pageSize, onPageSize }: PdfCanvasPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isRendering, setIsRendering] = useState(true);
   const scale = pageScale(zoom);
@@ -180,6 +229,7 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
       setIsRendering(true);
       const page = await pdfDocument.getPage(pageNumber);
       const viewport = page.getViewport({ scale });
+      onPageSize(pageNumber, { width: viewport.width, height: viewport.height });
       const canvas = canvasRef.current;
       const canvasContext = canvas?.getContext("2d");
 
@@ -216,13 +266,17 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
       isCancelled = true;
       renderTask?.cancel();
     };
-  }, [pageNumber, pdfDocument, scale]);
+  }, [onPageSize, pageNumber, pdfDocument, scale]);
 
   // article e `relative` para ancorar a camada de texto e os highlights, que
   // ficam sobrepostos ao canvas com inset-0.
   return (
-    <article className="relative mx-auto bg-white shadow-[0_18px_42px_rgba(15,23,42,0.18)]">
-      {isRendering ? <div className="h-[72vh] w-[min(850px,calc(100vw-64px))] animate-pulse bg-white" /> : null}
+    <article className="relative mx-auto bg-white shadow-[0_18px_42px_rgba(15,23,42,0.18)]" style={isRendering ? { width: pageSize.width, minHeight: pageSize.height } : undefined}>
+      {isRendering ? (
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-400">
+          Renderizando pagina {pageNumber}...
+        </div>
+      ) : null}
       <canvas ref={canvasRef} className={isRendering ? "hidden" : "block"} />
       {!isRendering ? (
         <>
@@ -231,6 +285,23 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
         </>
       ) : null}
     </article>
+  );
+}
+
+function VirtualPdfCanvasPage(props: PdfCanvasPageProps) {
+  const { elementRef, isInViewport } = useInViewport<HTMLDivElement>("900px 0px");
+  const [hasEnteredViewport, setHasEnteredViewport] = useState(false);
+
+  useEffect(() => {
+    if (isInViewport) {
+      setHasEnteredViewport(true);
+    }
+  }, [isInViewport]);
+
+  return (
+    <div ref={elementRef}>
+      {hasEnteredViewport ? <PdfCanvasPage {...props} /> : <PdfPagePlaceholder pageSize={props.pageSize} />}
+    </div>
   );
 }
 
@@ -286,6 +357,38 @@ function PdfThumbnail({ pdfDocument, page, active, onClick }: { pdfDocument: Pdf
       </div>
       <span className="mt-2 block text-center text-sm text-text-subtle">{page}</span>
     </button>
+  );
+}
+
+function ThumbnailPlaceholder({ page, active, onClick }: { page: number; active: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="block w-full text-left" onClick={onClick}>
+      <div
+        className={`mx-auto h-44 w-36 overflow-hidden rounded border bg-white p-1 shadow-sm transition ${
+          active ? "border-primary ring-2 ring-primary-soft" : "border-indigo-200 hover:border-primary"
+        }`}
+      >
+        <div className="h-full w-full animate-pulse rounded bg-slate-100" />
+      </div>
+      <span className="mt-2 block text-center text-sm text-text-subtle">{page}</span>
+    </button>
+  );
+}
+
+function LazyPdfThumbnail({ pdfDocument, page, active, onClick }: { pdfDocument: PdfDocument; page: number; active: boolean; onClick: () => void }) {
+  const { elementRef, isInViewport } = useInViewport<HTMLDivElement>("600px 0px");
+  const [hasRendered, setHasRendered] = useState(false);
+
+  useEffect(() => {
+    if (isInViewport) {
+      setHasRendered(true);
+    }
+  }, [isInViewport]);
+
+  return (
+    <div ref={elementRef}>
+      {hasRendered ? <PdfThumbnail pdfDocument={pdfDocument} page={page} active={active} onClick={onClick} /> : <ThumbnailPlaceholder page={page} active={active} onClick={onClick} />}
+    </div>
   );
 }
 
@@ -365,6 +468,7 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   const fallbackPageNumbers = useMemo(buildFallbackPageNumbers, []);
   const readerSurfaceRef = useRef<HTMLElement | null>(null);
   const pageRefs = useRef<Array<HTMLElement | null>>([]);
+  const [pageSizes, setPageSizes] = useState<Map<number, PageSize>>(new Map());
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
   const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
   const [pdfError, setPdfError] = useState("");
@@ -384,6 +488,7 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
 
   const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
+  const defaultPageSize = useMemo(() => estimatedPageSize(zoom), [zoom]);
   const annotationsByPage = useMemo(() => {
     const grouped = new Map<number, Annotation[]>();
     for (const annotation of annotations) {
@@ -393,6 +498,26 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
     }
     return grouped;
   }, [annotations]);
+
+  useEffect(() => {
+    setPageSizes(new Map());
+  }, [document.id, zoom]);
+
+  const updatePageSize = useCallback((pageNumber: number, size: PageSize) => {
+    setPageSizes((current) => {
+      const previous = current.get(pageNumber);
+      const width = Math.round(size.width);
+      const height = Math.round(size.height);
+
+      if (previous && Math.round(previous.width) === width && Math.round(previous.height) === height) {
+        return current;
+      }
+
+      const next = new Map(current);
+      next.set(pageNumber, { width, height });
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!hasPdfSource(document)) {
@@ -908,7 +1033,7 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
                 <div className="space-y-7">
                   {pageNumbers.map((page) =>
                     pdfDocument ? (
-                      <PdfThumbnail key={page} pdfDocument={pdfDocument} page={page} active={page === currentPage} onClick={() => scrollToPage(page)} />
+                      <LazyPdfThumbnail key={page} pdfDocument={pdfDocument} page={page} active={page === currentPage} onClick={() => scrollToPage(page)} />
                     ) : (
                       <FallbackThumbnail key={page} page={page} active={page === currentPage} onClick={() => scrollToPage(page)} />
                     ),
@@ -952,14 +1077,16 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
                   className="mx-auto w-fit"
                 >
                   {pdfDocument ? (
-                    <PdfCanvasPage
+                    <VirtualPdfCanvasPage
                       pdfDocument={pdfDocument}
                       pageNumber={page}
                       zoom={zoom}
+                      pageSize={pageSizes.get(page) ?? defaultPageSize}
                       annotations={annotationsByPage.get(page) ?? []}
                       saveStates={saveStates}
                       onRetry={retryAnnotation}
                       onSelectAnnotation={openAnnotationEditor}
+                      onPageSize={updatePageSize}
                     />
                   ) : (
                     <FallbackReaderPage page={page} zoom={zoom} document={document} />

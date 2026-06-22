@@ -3,6 +3,7 @@ import { IconButton } from "../../components/IconButton";
 import { TagBadge } from "../../components/TagBadge";
 import type { LibraryCollection, LibraryDocument, SubjectTag } from "../../types/library";
 import { invoke } from "@tauri-apps/api/core";
+import { DocumentPreview } from "./DocumentPreview";
 import { TagSelector } from "./TagSelector";
 
 type DocumentDetailsPanelProps = {
@@ -88,42 +89,6 @@ function HeartIcon({ filled }: { filled: boolean }) {
     >
       <path d="M12 20s-7-4.6-7-9.4A3.6 3.6 0 0 1 12 8a3.6 3.6 0 0 1 7 2.6C19 15.4 12 20 12 20z" />
     </svg>
-  );
-}
-
-function PdfPreview({ year }: { year: number }) {
-  return (
-    <div className="rounded-lg border border-border-muted bg-surface-muted p-4">
-      <div className="rounded-md border border-indigo-200 bg-surface-panel px-5 py-4 shadow-card">
-        <div className="mx-auto h-2 w-36 rounded-full bg-primary" />
-        <div className="mx-auto mt-2 h-1.5 w-44 rounded-full bg-indigo-200" />
-        <div className="mx-auto mt-2 h-1.5 w-32 rounded-full bg-indigo-200" />
-        <div className="mt-5 rounded border border-indigo-200 bg-primary-soft p-3">
-          <div className="h-1.5 w-24 rounded-full bg-indigo-300" />
-          <div className="mt-2 space-y-1.5">
-            <div className="h-1 w-full rounded-full bg-indigo-200" />
-            <div className="h-1 w-11/12 rounded-full bg-indigo-200" />
-            <div className="h-1 w-10/12 rounded-full bg-indigo-200" />
-            <div className="h-1 w-8/12 rounded-full bg-indigo-200" />
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-5">
-          <div className="space-y-1.5">
-            <div className="h-1 w-full rounded-full bg-indigo-200" />
-            <div className="h-1 w-10/12 rounded-full bg-indigo-200" />
-            <div className="h-1 w-11/12 rounded-full bg-indigo-200" />
-            <div className="h-1 w-8/12 rounded-full bg-indigo-200" />
-          </div>
-          <div className="space-y-1.5">
-            <div className="h-1 w-full rounded-full bg-indigo-200" />
-            <div className="h-1 w-9/12 rounded-full bg-indigo-200" />
-            <div className="h-1 w-11/12 rounded-full bg-indigo-200" />
-            <div className="h-1 w-7/12 rounded-full bg-indigo-200" />
-          </div>
-        </div>
-      </div>
-      <p className="mt-3 text-center text-sm text-text-secondary">15 paginas - {year}</p>
-    </div>
   );
 }
 
@@ -320,7 +285,7 @@ export function DocumentDetailsPanel({
       </header>
 
       <div className="max-h-[42rem] overflow-y-auto px-6 py-6 xl:max-h-none xl:h-[calc(100vh-145px)]">
-        <PdfPreview year={document.year} />
+        <DocumentPreview documentId={document.id} filePath={document.filePath} year={document.year} />
 
         <section className="mt-6">
           <h2 className="text-lg font-bold tracking-normal text-text-primary">{document.title}</h2>

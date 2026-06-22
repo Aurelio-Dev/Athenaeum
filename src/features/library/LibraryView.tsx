@@ -1,15 +1,19 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { remove } from "@tauri-apps/plugin-fs";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import {
+  countTrashDocuments,
   createCollection as createPersistedCollection,
   createDocument,
   deleteCollection as deletePersistedCollection,
   emptyTrash,
   getDocumentFilePaths,
   getTrashFilePaths,
-  loadLibrarySnapshot,
+  listAvailableTags,
+  listCollections,
+  listLibraryDocuments,
   moveDocumentToTrash,
   permanentlyDeleteDocument,
   restoreDocument,
@@ -18,10 +22,9 @@ import {
   setDocumentNote,
   setDocumentReadingLocation,
   setDocumentReadingStarted,
-  updateCollectionDescription as updatePersistedCollectionDescription,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
 } from "../../lib/database";
-import type { DocumentMetadataUpdates } from "../../lib/database";
+import type { DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
 import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag, ViewMode } from "../../types/library";
 import { AddPdfModal } from "./AddPdfModal";
 import { DocumentCard } from "./DocumentCard";
@@ -36,12 +39,32 @@ type PendingConfirmation =
   | { type: "empty-trash" }
   | null;
 
+const allDocumentsOptions: ListDocumentsOptions = {
+  searchTerm: "",
+  statusFilter: "all",
+  sortMode: "recentes",
+  route: { type: "all" },
+};
+
+const libraryQueryKeys = {
+  all: ["library"] as const,
+  collections: () => ["library", "collections"] as const,
+  tags: () => ["library", "tags"] as const,
+  trashCount: () => ["library", "trashCount"] as const,
+  documents: ({ searchTerm, statusFilter, sortMode, route }: ListDocumentsOptions) =>
+    [
+      "library",
+      "documents",
+      searchTerm,
+      statusFilter,
+      sortMode,
+      route.type,
+      route.type === "collection" ? route.collectionName : "",
+    ] as const,
+};
+
 export function LibraryView() {
-  const [allDocuments, setAllDocuments] = useState<LibraryDocument[]>([]);
-  const [documents, setDocuments] = useState<LibraryDocument[]>([]);
-  const [collections, setCollections] = useState<LibraryCollection[]>([]);
-  const [availableTags, setAvailableTags] = useState<SubjectTag[]>([]);
-  const [trashCount, setTrashCount] = useState(0);
+  const queryClient = useQueryClient();
   const [activeRoute, setActiveRoute] = useState<LibraryRoute>({ type: "all" });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -51,107 +74,116 @@ export function LibraryView() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
-  const [editingCollectionDescriptionId, setEditingCollectionDescriptionId] = useState<string | null>(null);
-  const [collectionDescriptionDraft, setCollectionDescriptionDraft] = useState("");
-  const [collectionDescriptionError, setCollectionDescriptionError] = useState("");
-  const [isSavingCollectionDescription, setIsSavingCollectionDescription] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const hasAutoSelectedFirstDocumentRef = useRef(false);
 
   const isTrashRoute = activeRoute.type === "trash";
+  const activeDocumentsOptions = useMemo<ListDocumentsOptions>(
+    () => ({ searchTerm, statusFilter, sortMode, route: activeRoute }),
+    [activeRoute, searchTerm, sortMode, statusFilter],
+  );
 
-  const refreshLibrary = useCallback(async (routeOverride: LibraryRoute = activeRoute) => {
-    const snapshot = await loadLibrarySnapshot({ searchTerm, statusFilter, sortMode, route: routeOverride });
+  const collectionsQuery = useQuery({
+    queryKey: libraryQueryKeys.collections(),
+    queryFn: listCollections,
+  });
+  const availableTagsQuery = useQuery({
+    queryKey: libraryQueryKeys.tags(),
+    queryFn: listAvailableTags,
+  });
+  const trashCountQuery = useQuery({
+    queryKey: libraryQueryKeys.trashCount(),
+    queryFn: countTrashDocuments,
+  });
+  const allDocumentsQuery = useQuery({
+    queryKey: libraryQueryKeys.documents(allDocumentsOptions),
+    queryFn: () => listLibraryDocuments(allDocumentsOptions),
+    placeholderData: keepPreviousData,
+  });
+  const documentsQuery = useQuery({
+    queryKey: libraryQueryKeys.documents(activeDocumentsOptions),
+    queryFn: () => listLibraryDocuments(activeDocumentsOptions),
+    placeholderData: keepPreviousData,
+  });
 
-    setAllDocuments(snapshot.allDocuments);
-    setDocuments(snapshot.documents);
-    setCollections(snapshot.collections);
-    setAvailableTags(snapshot.availableTags);
-    setTrashCount(snapshot.trashCount);
+  const collections = collectionsQuery.data ?? [];
+  const allDocuments = allDocumentsQuery.data ?? [];
+  const documents = documentsQuery.data ?? [];
+  const availableTags = availableTagsQuery.data ?? [];
+  const trashCount = trashCountQuery.data ?? 0;
+  const isLoading =
+    collectionsQuery.isPending ||
+    availableTagsQuery.isPending ||
+    trashCountQuery.isPending ||
+    allDocumentsQuery.isPending ||
+    documentsQuery.isPending;
+  const hasLoadError =
+    collectionsQuery.isError ||
+    availableTagsQuery.isError ||
+    trashCountQuery.isError ||
+    allDocumentsQuery.isError ||
+    documentsQuery.isError;
+
+  useEffect(() => {
+    if (!documentsQuery.data || documentsQuery.isPlaceholderData) {
+      return;
+    }
+
     setSelectedDocumentId((currentDocumentId) => {
-      if (currentDocumentId && snapshot.documents.some((document) => document.id === currentDocumentId)) {
+      if (currentDocumentId && documentsQuery.data.some((document) => document.id === currentDocumentId)) {
         return currentDocumentId;
       }
 
-      return snapshot.documents[0]?.id ?? null;
-    });
-  }, [activeRoute, searchTerm, sortMode, statusFilter]);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadSnapshot() {
-      setIsLoading(true);
-      setLoadError("");
-
-      try {
-        const snapshot = await loadLibrarySnapshot({ searchTerm, statusFilter, sortMode, route: activeRoute });
-
-        if (isCancelled) {
-          return;
-        }
-
-        setAllDocuments(snapshot.allDocuments);
-        setDocuments(snapshot.documents);
-        setCollections(snapshot.collections);
-        setAvailableTags(snapshot.availableTags);
-        setTrashCount(snapshot.trashCount);
-        setSelectedDocumentId((currentDocumentId) => {
-          if (currentDocumentId && snapshot.documents.some((document) => document.id === currentDocumentId)) {
-            return currentDocumentId;
-          }
-
-          return snapshot.documents[0]?.id ?? null;
-        });
-      } catch (error) {
-        if (!isCancelled) {
-          console.error("Nao foi possivel carregar a biblioteca.", error);
-          setLoadError("Nao foi possivel carregar a biblioteca.");
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+      if (!hasAutoSelectedFirstDocumentRef.current) {
+        hasAutoSelectedFirstDocumentRef.current = true;
+        return documentsQuery.data[0]?.id ?? null;
       }
-    }
 
-    void loadSnapshot();
+      return null;
+    });
+  }, [documentsQuery.data, documentsQuery.isPlaceholderData]);
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [activeRoute, searchTerm, sortMode, statusFilter]);
+  const invalidateLibraryQueries = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: libraryQueryKeys.all }),
+    [queryClient],
+  );
+
+  const updateAvailableTags = useCallback(
+    (tags: SubjectTag[]) => {
+      queryClient.setQueryData(libraryQueryKeys.tags(), tags);
+    },
+    [queryClient],
+  );
+
+  const updateDocumentInCache = useCallback(
+    (documentId: string, updater: (document: LibraryDocument) => LibraryDocument) => {
+      queryClient.setQueriesData<LibraryDocument[]>({ queryKey: ["library", "documents"] }, (currentDocuments) =>
+        currentDocuments?.map((document) => (document.id === documentId ? updater(document) : document)),
+      );
+    },
+    [queryClient],
+  );
 
   const listClassName = viewMode === "grid" ? "grid grid-cols-2 gap-3" : "flex flex-col gap-3";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
-  const activeCollection =
-    activeRoute.type === "collection" ? collections.find((collection) => collection.name === activeRoute.collectionName) ?? null : null;
   const emptyMessage = isTrashRoute ? "Sua lixeira esta vazia" : "Nenhum documento encontrado";
   const emptyDescription = isTrashRoute ? "Itens movidos para a lixeira aparecem aqui por ate 30 dias." : "Ajuste a busca ou os filtros para ver a biblioteca novamente.";
-  const isEditingActiveCollectionDescription =
-    Boolean(activeCollection) && editingCollectionDescriptionId === activeCollection?.id;
 
   async function openForReading(documentToOpen: LibraryDocument) {
     await setDocumentReadingStarted(documentToOpen.id);
     setReaderDocumentId(documentToOpen.id);
-    await refreshLibrary();
+    await invalidateLibraryQueries();
   }
 
   async function saveDocumentNote(documentId: string, note: string) {
-    setDocuments((currentDocuments) =>
-      currentDocuments.map((document) => (document.id === documentId ? { ...document, notes: note } : document)),
-    );
-    setAllDocuments((currentDocuments) =>
-      currentDocuments.map((document) => (document.id === documentId ? { ...document, notes: note } : document)),
-    );
+    updateDocumentInCache(documentId, (document) => ({ ...document, notes: note }));
     await setDocumentNote(documentId, note);
   }
 
   async function updateDocumentMetadata(documentId: string, updates: DocumentMetadataUpdates) {
     await updatePersistedDocumentMetadata(documentId, updates);
-    setAvailableTags((currentTags) => mergeUniqueTags([...currentTags, ...updates.tags]));
-    await refreshLibrary();
+    updateAvailableTags(mergeUniqueTags([...availableTags, ...updates.tags]));
+    await invalidateLibraryQueries();
   }
 
   async function toggleFavorite(documentId: string) {
@@ -162,12 +194,12 @@ export function LibraryView() {
     }
 
     await setDocumentFavorite(documentId, !document.favorite);
-    await refreshLibrary();
+    await invalidateLibraryQueries();
   }
 
   async function moveToTrash(documentId: string) {
     await moveDocumentToTrash(documentId);
-    await refreshLibrary();
+    await invalidateLibraryQueries();
 
     if (readerDocumentId === documentId) {
       setReaderDocumentId(null);
@@ -176,7 +208,7 @@ export function LibraryView() {
 
   async function restoreFromTrash(documentId: string) {
     await restoreDocument(documentId);
-    await refreshLibrary();
+    await invalidateLibraryQueries();
   }
 
   async function closeReader(readingLocation: ReadingLocation) {
@@ -187,69 +219,30 @@ export function LibraryView() {
 
     await setDocumentReadingLocation(readerDocument, readingLocation);
     setReaderDocumentId(null);
-    await refreshLibrary();
+    await invalidateLibraryQueries();
   }
 
   async function addDocument(document: LibraryDocument) {
     await createDocument(document);
-    await refreshLibrary();
     setSelectedDocumentId(document.id);
+    await invalidateLibraryQueries();
   }
 
-  async function createCollection(name: string, description: string) {
-    const collection = await createPersistedCollection(name, description);
-    const nextRoute: LibraryRoute = { type: "collection", collectionName: collection.name };
-    setActiveRoute(nextRoute);
-    await refreshLibrary(nextRoute);
+  async function createCollection(name: string) {
+    const collection = await createPersistedCollection(name);
+    setActiveRoute({ type: "collection", collectionName: collection.name });
+    await invalidateLibraryQueries();
   }
 
-  async function renameCollection(collection: LibraryCollection, name: string, description: string) {
-    const renamedCollection = await renamePersistedCollection(collection.id, name, description);
+  async function renameCollection(collection: LibraryCollection, name: string) {
+    const renamedCollection = await renamePersistedCollection(collection.id, name);
     const nextRoute: LibraryRoute =
       activeRoute.type === "collection" && activeRoute.collectionName === collection.name
         ? { type: "collection", collectionName: renamedCollection.name }
         : activeRoute;
 
     setActiveRoute(nextRoute);
-    await refreshLibrary(nextRoute);
-  }
-
-  function startEditingCollectionDescription(collection: LibraryCollection) {
-    setEditingCollectionDescriptionId(collection.id);
-    setCollectionDescriptionDraft(collection.description);
-    setCollectionDescriptionError("");
-  }
-
-  function cancelEditingCollectionDescription() {
-    setEditingCollectionDescriptionId(null);
-    setCollectionDescriptionDraft("");
-    setCollectionDescriptionError("");
-  }
-
-  async function saveCollectionDescription(collection: LibraryCollection) {
-    if (isSavingCollectionDescription) {
-      return;
-    }
-
-    setIsSavingCollectionDescription(true);
-    setCollectionDescriptionError("");
-
-    try {
-      const updatedCollection = await updatePersistedCollectionDescription(collection.id, collectionDescriptionDraft);
-      setCollections((currentCollections) =>
-        currentCollections.map((currentCollection) =>
-          currentCollection.id === collection.id
-            ? { ...currentCollection, description: updatedCollection.description }
-            : currentCollection,
-        ),
-      );
-      setEditingCollectionDescriptionId(null);
-    } catch (error) {
-      console.error("Nao foi possivel atualizar a descricao da colecao.", error);
-      setCollectionDescriptionError("Nao foi possivel salvar a descricao.");
-    } finally {
-      setIsSavingCollectionDescription(false);
-    }
+    await invalidateLibraryQueries();
   }
 
   async function deleteCollection(collection: LibraryCollection) {
@@ -259,7 +252,7 @@ export function LibraryView() {
       activeRoute.type === "collection" && activeRoute.collectionName === collection.name ? { type: "all" } : activeRoute;
 
     setActiveRoute(nextRoute);
-    await refreshLibrary(nextRoute);
+    await invalidateLibraryQueries();
   }
 
   async function removeFiles(filePaths: string[]) {
@@ -282,7 +275,7 @@ export function LibraryView() {
       await removeFiles(filePaths);
       await permanentlyDeleteDocument(pendingConfirmation.document.id);
       setPendingConfirmation(null);
-      await refreshLibrary();
+      await invalidateLibraryQueries();
       return;
     }
 
@@ -290,7 +283,7 @@ export function LibraryView() {
     await removeFiles(filePaths);
     await emptyTrash();
     setPendingConfirmation(null);
-    await refreshLibrary();
+    await invalidateLibraryQueries();
   }
 
   return (
@@ -307,26 +300,7 @@ export function LibraryView() {
       onDeleteCollection={deleteCollection}
     >
       <header className="flex flex-wrap items-center gap-4 border-b border-border-subtle bg-surface-panel px-8 py-6">
-        <LibraryHeader
-          title={getRouteTitle(activeRoute)}
-          count={documents.length}
-          subtitle={getRouteSubtitle(activeRoute, allDocuments.length)}
-          subtitleContent={
-            activeCollection ? (
-              <CollectionDescriptionHeader
-                collection={activeCollection}
-                isEditing={isEditingActiveCollectionDescription}
-                draft={collectionDescriptionDraft}
-                error={collectionDescriptionError}
-                isSaving={isSavingCollectionDescription}
-                onStartEditing={() => startEditingCollectionDescription(activeCollection)}
-                onDraftChange={setCollectionDescriptionDraft}
-                onCancel={cancelEditingCollectionDescription}
-                onSave={() => void saveCollectionDescription(activeCollection)}
-              />
-            ) : undefined
-          }
-        />
+        <LibraryHeader title={getRouteTitle(activeRoute)} count={documents.length} />
         {isTrashRoute && trashCount > 0 ? (
           <button
             type="button"
@@ -362,9 +336,11 @@ export function LibraryView() {
                 Carregando biblioteca
               </div>
             </div>
-          ) : loadError ? (
+          ) : hasLoadError ? (
             <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-status-red px-4 py-2 text-sm font-semibold text-status-red-text">{loadError}</div>
+              <div className="rounded-full bg-status-red px-4 py-2 text-sm font-semibold text-status-red-text">
+                Nao foi possivel carregar a biblioteca.
+              </div>
             </div>
           ) : documents.length > 0 ? (
             <div className={listClassName}>
@@ -399,7 +375,7 @@ export function LibraryView() {
             onOpenReader={(document) => void openForReading(document)}
             onUpdateDocument={(documentId, updates) => void updateDocumentMetadata(documentId, updates)}
             onToggleFavorite={(documentId) => void toggleFavorite(documentId)}
-            onAvailableTagsChange={setAvailableTags}
+            onAvailableTagsChange={updateAvailableTags}
             onRestore={(documentId) => void restoreFromTrash(documentId)}
             onPermanentDelete={() => setPendingConfirmation({ type: "permanent-delete", document: selectedDocument })}
           />
@@ -412,7 +388,7 @@ export function LibraryView() {
           availableTags={availableTags}
           onClose={() => setIsAddPdfModalOpen(false)}
           onAddDocument={addDocument}
-          onAvailableTagsChange={setAvailableTags}
+          onAvailableTagsChange={updateAvailableTags}
         />
       ) : null}
 
@@ -446,80 +422,6 @@ export function LibraryView() {
   );
 }
 
-type CollectionDescriptionHeaderProps = {
-  collection: LibraryCollection;
-  isEditing: boolean;
-  draft: string;
-  error: string;
-  isSaving: boolean;
-  onStartEditing: () => void;
-  onDraftChange: (value: string) => void;
-  onCancel: () => void;
-  onSave: () => void;
-};
-
-function CollectionDescriptionHeader({
-  collection,
-  isEditing,
-  draft,
-  error,
-  isSaving,
-  onStartEditing,
-  onDraftChange,
-  onCancel,
-  onSave,
-}: CollectionDescriptionHeaderProps) {
-  if (isEditing) {
-    return (
-      <div className="mt-2 grid max-w-2xl gap-2">
-        <textarea
-          value={draft}
-          onChange={(event) => onDraftChange(event.target.value)}
-          maxLength={240}
-          rows={2}
-          className="resize-none rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
-          autoFocus
-        />
-        {error ? <p className="text-xs font-semibold text-status-red-text">{error}</p> : null}
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-text-inverse shadow-button hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
-            onClick={onSave}
-            disabled={isSaving}
-          >
-            {isSaving ? "Salvando..." : "Salvar"}
-          </button>
-          <button
-            type="button"
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={onCancel}
-            disabled={isSaving}
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <p
-      className="mt-1 max-w-2xl cursor-text text-sm leading-6 text-text-secondary"
-      onDoubleClick={onStartEditing}
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          onStartEditing();
-        }
-      }}
-    >
-      {collection.description.trim() || "Sem descricao"}
-    </p>
-  );
-}
-
 function getRouteTitle(route: LibraryRoute) {
   if (route.type === "trash") {
     return "Lixeira";
@@ -538,14 +440,6 @@ function getRouteTitle(route: LibraryRoute) {
   }
 
   return "Todos os itens";
-}
-
-function getRouteSubtitle(route: LibraryRoute, documentCount: number) {
-  if (route.type === "trash") {
-    return "";
-  }
-
-  return `${documentCount} documentos na biblioteca`;
 }
 
 function mergeUniqueTags(tags: SubjectTag[]) {

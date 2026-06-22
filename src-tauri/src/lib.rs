@@ -659,6 +659,60 @@ ALTER TABLE collections ADD COLUMN description TEXT NOT NULL DEFAULT '';
 "#,
       kind: MigrationKind::Up,
     },
+    Migration {
+      version: 5,
+      description: "remove_sample_library_items",
+      sql: r#"
+DELETE FROM documents
+WHERE id IN (
+  'attention-is-all-you-need',
+  'survey-large-language-models',
+  'designing-data-intensive-applications',
+  'imagenet-deep-cnns',
+  'concrete-problems-ai-safety',
+  'deep-learning',
+  'bert-pretraining',
+  'raft-reliable-distributed-systems',
+  'probabilistic-machine-learning',
+  'alignment-problem',
+  'damaged-import-transformers'
+);
+
+DELETE FROM collections
+WHERE id IN (
+  'machine-learning-papers',
+  'engineering-books',
+  'business-books',
+  'psychology',
+  'reading-queue',
+  'lixeira'
+)
+AND NOT EXISTS (
+  SELECT 1 FROM documents WHERE documents.collection_id = collections.id
+);
+"#,
+      kind: MigrationKind::Up,
+    },
+    Migration {
+      version: 6,
+      description: "drop_collection_descriptions",
+      sql: r#"
+ALTER TABLE collections DROP COLUMN description;
+"#,
+      kind: MigrationKind::Up,
+    },
+    Migration {
+      version: 7,
+      description: "create_default_collection",
+      sql: r#"
+INSERT OR IGNORE INTO collections (id, name, is_system)
+SELECT 'sem-titulo', 'Sem título', 0
+WHERE NOT EXISTS (
+  SELECT 1 FROM collections WHERE is_system = 0
+);
+"#,
+      kind: MigrationKind::Up,
+    },
   ]
 }
 

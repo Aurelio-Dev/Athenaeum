@@ -10,8 +10,8 @@ type SidebarProps = {
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
   onRouteChange: (route: LibraryRoute) => void;
-  onCreateCollection: (name: string, description: string) => Promise<void>;
-  onRenameCollection: (collection: LibraryCollection, name: string, description: string) => Promise<void>;
+  onCreateCollection: (name: string) => Promise<void>;
+  onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
 };
 
@@ -175,7 +175,6 @@ export function Sidebar({
 }: SidebarProps) {
   const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
   const [collectionName, setCollectionName] = useState("");
-  const [collectionDescription, setCollectionDescription] = useState("");
   const [collectionError, setCollectionError] = useState("");
   const [isSubmittingCollection, setIsSubmittingCollection] = useState(false);
   const [collectionContextMenu, setCollectionContextMenu] = useState<CollectionContextMenuState>(null);
@@ -187,7 +186,6 @@ export function Sidebar({
   function openCreateCollectionDialog() {
     setCollectionContextMenu(null);
     setCollectionName("");
-    setCollectionDescription("");
     setCollectionError("");
     setCollectionDialog({ type: "create" });
   }
@@ -195,7 +193,6 @@ export function Sidebar({
   function openEditCollectionDialog(collection: LibraryCollection) {
     setCollectionContextMenu(null);
     setCollectionName(collection.name);
-    setCollectionDescription(collection.description);
     setCollectionError("");
     setCollectionDialog({ type: "edit", collection });
   }
@@ -203,7 +200,6 @@ export function Sidebar({
   function openDeleteCollectionDialog(collection: LibraryCollection) {
     setCollectionContextMenu(null);
     setCollectionName(collection.name);
-    setCollectionDescription(collection.description);
     setCollectionError("");
     setCollectionDialog({ type: "delete", collection, count: collectionCounts.get(collection.name) ?? 0 });
   }
@@ -236,9 +232,9 @@ export function Sidebar({
 
     try {
       if (collectionDialog.type === "create") {
-        await onCreateCollection(collectionName, collectionDescription);
+        await onCreateCollection(collectionName);
       } else if (collectionDialog.type === "edit") {
-        await onRenameCollection(collectionDialog.collection, collectionName, collectionDescription);
+        await onRenameCollection(collectionDialog.collection, collectionName);
       } else {
         await onDeleteCollection(collectionDialog.collection);
       }
@@ -422,33 +418,21 @@ export function Sidebar({
                   {collectionDialog.collection.name}
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  <label className="grid gap-2">
-                    <span className="text-sm font-semibold text-text-primary">Nome</span>
-                    <input
-                      value={collectionName}
-                      onChange={(event) => setCollectionName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void submitCollectionDialog();
-                        }
-                      }}
-                      className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary"
-                      autoFocus
-                    />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="text-sm font-semibold text-text-primary">Descricao</span>
-                    <textarea
-                      value={collectionDescription}
-                      onChange={(event) => setCollectionDescription(event.target.value)}
-                      maxLength={240}
-                      rows={3}
-                      className="resize-none rounded-lg border border-border-muted px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
-                    />
-                  </label>
-                </div>
+                <label className="grid gap-2">
+                  <span className="text-sm font-semibold text-text-primary">Nome</span>
+                  <input
+                    value={collectionName}
+                    onChange={(event) => setCollectionName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void submitCollectionDialog();
+                      }
+                    }}
+                    className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary"
+                    autoFocus
+                  />
+                </label>
               )}
 
               {collectionError ? (

@@ -300,11 +300,11 @@ export function AddPdfModal({ collections, availableTags, onClose, onAddDocument
 
     try {
       await onAddDocument(document);
+      setIsSubmitting(false);
       onClose();
     } catch (error) {
       console.error("Nao foi possivel adicionar o PDF.", error);
       setValidationMessage(`Nao foi possivel adicionar o PDF. ${getErrorMessage(error)}`);
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -422,23 +422,23 @@ export function AddPdfModal({ collections, availableTags, onClose, onAddDocument
             </label>
 
             <div className="grid grid-cols-[1fr_120px] gap-3">
-              <label className="grid gap-1.5">
+              <label className="grid min-w-0 gap-1.5">
                 <span className="text-sm font-semibold text-text-primary">Fonte</span>
                 <input
                   value={metadata.source}
                   onChange={(event) => updateMetadataField("source", event.target.value)}
-                  className="rounded-lg border border-border-muted px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                  className="w-full min-w-0 rounded-lg border border-border-muted px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
                   placeholder="Conferência, periódico ou editora"
                 />
               </label>
 
-              <label className="grid gap-1.5">
+              <label className="grid min-w-0 gap-1.5">
                 <span className="text-sm font-semibold text-text-primary">Ano</span>
                 <input
                   value={metadata.year}
                   inputMode="numeric"
                   onChange={(event) => updateMetadataField("year", event.target.value)}
-                  className="rounded-lg border border-border-muted px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                  className="w-full min-w-0 rounded-lg border border-border-muted px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
                   placeholder="2026"
                 />
               </label>

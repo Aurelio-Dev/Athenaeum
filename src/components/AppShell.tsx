@@ -10,8 +10,8 @@ type AppShellProps = {
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
   onRouteChange: (route: LibraryRoute) => void;
-  onCreateCollection: (name: string, description: string) => Promise<void>;
-  onRenameCollection: (collection: LibraryCollection, name: string, description: string) => Promise<void>;
+  onCreateCollection: (name: string) => Promise<void>;
+  onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
   children: ReactNode;
 };

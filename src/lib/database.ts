@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
-import { availableSubjectTags, mockCollections, mockDocuments } from "../data/mockDocuments";
+import { availableSubjectTags } from "../data/subjectTags";
 import { getSubjectTagTone } from "../styles/designTokens";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../types/library";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
+const defaultCollectionName = "Sem título";
 
 let databasePromise: Promise<Database> | null = null;
 
@@ -32,7 +33,6 @@ type DocumentRow = {
 type CollectionRow = {
   id: string;
   name: string;
-  description: string | null;
 };
 
 type TagRow = {
@@ -50,7 +50,6 @@ type FilePathRow = {
 type CollectionLookupRow = {
   id: string;
   name: string;
-  description: string | null;
 };
 
 type AnnotationRow = {
@@ -86,7 +85,7 @@ export type LibrarySnapshot = {
 
 export type DocumentMetadataUpdates = Pick<LibraryDocument, "title" | "authors" | "source" | "year" | "collection" | "tags">;
 
-type ListDocumentsOptions = {
+export type ListDocumentsOptions = {
   searchTerm: string;
   statusFilter: StatusFilter;
   sortMode: SortMode;
@@ -178,43 +177,30 @@ async function getDatabase() {
 }
 
 async function seedInitialData(database: Database) {
-  const [row] = await database.select<CountRow[]>("SELECT COUNT(*) AS count FROM documents");
+  await ensureDefaultCollection(database);
+
+  const [row] = await database.select<CountRow[]>("SELECT COUNT(*) AS count FROM tags");
 
   if (row && row.count > 0) {
     return;
   }
 
-  for (const collection of mockCollections) {
-    await database.execute(
-      "INSERT INTO collections (id, name, description, is_system) VALUES ($1, $2, $3, 0) ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description",
-      [collection.id, collection.name, collection.description],
-    );
-  }
-
-  const seededCollectionNames = new Set(mockCollections.map((collection) => collection.name));
-  const referencedCollections = new Set(mockDocuments.map((document) => document.collection));
-
-  for (const collectionName of referencedCollections) {
-    if (!seededCollectionNames.has(collectionName)) {
-      await database.execute(
-        "INSERT INTO collections (id, name, is_system) VALUES ($1, $2, 1) ON CONFLICT(id) DO UPDATE SET name = excluded.name",
-        [slugify(collectionName), collectionName],
-      );
-    }
-  }
-
-  for (const tag of [...availableSubjectTags, ...mockDocuments.flatMap((document) => document.tags)]) {
+  for (const tag of availableSubjectTags) {
     await upsertTag(database, tag);
   }
+}
 
-  for (const document of mockDocuments) {
-    try {
-      await insertDocument(database, document);
-    } catch (error) {
-      await deletePartialDocument(database, document.id);
-      throw error;
-    }
+async function ensureDefaultCollection(database: Database) {
+  const [row] = await database.select<CountRow[]>("SELECT COUNT(*) AS count FROM collections WHERE is_system = 0");
+
+  if (row && row.count > 0) {
+    return;
   }
+
+  await database.execute("INSERT OR IGNORE INTO collections (id, name, is_system) VALUES ($1, $2, 0)", [
+    await createUniqueCollectionId(database, defaultCollectionName),
+    defaultCollectionName,
+  ]);
 }
 
 async function upsertTag(database: Database, tag: SubjectTag) {
@@ -238,7 +224,7 @@ async function findCollectionId(database: Database, collectionName: string) {
 
 async function findCollectionByName(database: Database, collectionName: string) {
   const rows = await database.select<CollectionLookupRow[]>(
-    "SELECT id, name, description FROM collections WHERE name = $1 COLLATE NOCASE LIMIT 1",
+    "SELECT id, name FROM collections WHERE name = $1 COLLATE NOCASE LIMIT 1",
     [collectionName],
   );
 
@@ -259,7 +245,7 @@ async function createUniqueCollectionId(database: Database, collectionName: stri
 }
 
 async function ensureFallbackCollection(database: Database, ignoredCollectionId: string) {
-  const fallbackName = "Sem colecao";
+  const fallbackName = defaultCollectionName;
   const existingFallback = await findCollectionByName(database, fallbackName);
 
   if (existingFallback && existingFallback.id !== ignoredCollectionId) {
@@ -273,7 +259,7 @@ async function ensureFallbackCollection(database: Database, ignoredCollectionId:
   }
 
   const [otherCollection] = await database.select<CollectionLookupRow[]>(
-    "SELECT id, name, description FROM collections WHERE id != $1 ORDER BY is_system ASC, created_at ASC, name ASC LIMIT 1",
+    "SELECT id, name FROM collections WHERE id != $1 ORDER BY is_system ASC, created_at ASC, name ASC LIMIT 1",
     [ignoredCollectionId],
   );
 
@@ -447,7 +433,7 @@ function buildFtsQuery(searchTerm: string) {
 export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promise<LibrarySnapshot> {
   const database = await getDatabase();
   const [collections, availableTags, allDocuments, documents, trashCountRows] = await Promise.all([
-    database.select<CollectionRow[]>("SELECT id, name, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
+    database.select<CollectionRow[]>("SELECT id, name FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
     database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC"),
     listDocuments(database, { searchTerm: "", statusFilter: "all", sortMode: "recentes", route: { type: "all" } }),
     listDocuments(database, options),
@@ -455,16 +441,34 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
   ]);
 
   return {
-    collections: collections.map((collection) => ({
-      id: collection.id,
-      name: collection.name,
-      description: collection.description ?? "",
-    })),
+    collections,
     allDocuments,
     availableTags: availableTags.map((tag) => tag.name),
     documents,
     trashCount: trashCountRows[0]?.count ?? 0,
   };
+}
+
+export async function listCollections(): Promise<LibraryCollection[]> {
+  const database = await getDatabase();
+  return database.select<CollectionRow[]>("SELECT id, name FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC");
+}
+
+export async function listAvailableTags(): Promise<SubjectTag[]> {
+  const database = await getDatabase();
+  const rows = await database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC");
+  return rows.map((tag) => tag.name);
+}
+
+export async function countTrashDocuments(): Promise<number> {
+  const database = await getDatabase();
+  const rows = await database.select<CountRow[]>("SELECT COUNT(*) AS count FROM documents WHERE deleted_at IS NOT NULL");
+  return rows[0]?.count ?? 0;
+}
+
+export async function listLibraryDocuments(options: ListDocumentsOptions): Promise<LibraryDocument[]> {
+  const database = await getDatabase();
+  return listDocuments(database, options);
 }
 
 export async function listDocuments(database: Database, options: ListDocumentsOptions) {
@@ -477,14 +481,9 @@ function normalizeCollectionName(collectionName: string) {
   return collectionName.trim().replace(/\s+/g, " ");
 }
 
-function normalizeCollectionDescription(collectionDescription: string) {
-  return collectionDescription.trim().replace(/\s+/g, " ").slice(0, 240);
-}
-
-export async function createCollection(collectionName: string, collectionDescription = "") {
+export async function createCollection(collectionName: string) {
   const database = await getDatabase();
   const name = normalizeCollectionName(collectionName);
-  const description = normalizeCollectionDescription(collectionDescription);
 
   if (name.length === 0) {
     throw new Error("Informe um nome para a colecao.");
@@ -495,15 +494,14 @@ export async function createCollection(collectionName: string, collectionDescrip
   }
 
   const id = await createUniqueCollectionId(database, name);
-  await database.execute("INSERT INTO collections (id, name, description, is_system) VALUES ($1, $2, $3, 0)", [id, name, description]);
+  await database.execute("INSERT INTO collections (id, name, is_system) VALUES ($1, $2, 0)", [id, name]);
 
-  return { id, name, description };
+  return { id, name };
 }
 
-export async function renameCollection(collectionId: string, collectionName: string, collectionDescription = "") {
+export async function renameCollection(collectionId: string, collectionName: string) {
   const database = await getDatabase();
   const name = normalizeCollectionName(collectionName);
-  const description = normalizeCollectionDescription(collectionDescription);
 
   if (name.length === 0) {
     throw new Error("Informe um nome para a colecao.");
@@ -514,18 +512,9 @@ export async function renameCollection(collectionId: string, collectionName: str
     throw new Error("Ja existe uma colecao com esse nome.");
   }
 
-  await database.execute("UPDATE collections SET name = $1, description = $2 WHERE id = $3", [name, description, collectionId]);
+  await database.execute("UPDATE collections SET name = $1 WHERE id = $2", [name, collectionId]);
 
-  return { id: collectionId, name, description };
-}
-
-export async function updateCollectionDescription(collectionId: string, collectionDescription: string) {
-  const database = await getDatabase();
-  const description = normalizeCollectionDescription(collectionDescription);
-
-  await database.execute("UPDATE collections SET description = $1 WHERE id = $2", [description, collectionId]);
-
-  return { id: collectionId, description };
+  return { id: collectionId, name };
 }
 
 export async function deleteCollection(collectionId: string) {
