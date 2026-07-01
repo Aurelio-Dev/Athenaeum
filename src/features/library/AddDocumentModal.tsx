@@ -683,7 +683,7 @@ export function AddDocumentModal({
                 </div>
 
                 {phase === "review" ? renderDuplicateBanner(item) : null}
-                {renderDetailFields(item, false)}
+                {phase === "importing" && allResolved ? null : renderDetailFields(item, false)}
 
                 {phase === "review" ? (
                   <div>
