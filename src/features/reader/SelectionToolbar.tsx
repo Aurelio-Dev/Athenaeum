@@ -1,11 +1,16 @@
+import { useEffect, useRef, useState } from "react";
+import { highlightColors, isHighlightColor, type HighlightColor } from "../../types/annotation";
 import type { SelectionAnchor } from "./anchor";
+import { highlightPalette } from "./highlightPalette";
 
 type SelectionToolbarProps = {
   anchor: SelectionAnchor;
-  onHighlight: () => void;
-  onComment: () => void;
+  onHighlight: (color: HighlightColor) => void;
+  onComment: (color: HighlightColor) => void;
   onCopy: () => void;
 };
+
+const highlightStorageKey = "athenaeum:last-highlight-color";
 
 const iconProps = {
   width: 18,
@@ -18,16 +23,6 @@ const iconProps = {
   strokeLinejoin: "round" as const,
   "aria-hidden": true,
 };
-
-function HighlighterIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="m9 11-6 6v3h3l6-6" />
-      <path d="m13 7 4 4" />
-      <path d="m21 3-5 5-8 8 4 4 8-8 5-5a2.83 2.83 0 0 0-4-4z" />
-    </svg>
-  );
-}
 
 function CommentIcon() {
   return (
@@ -48,20 +43,36 @@ function CopyIcon() {
   );
 }
 
-function SparkleIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
-    </svg>
-  );
-}
-
 // Toolbar flutuante que aparece sobre o texto selecionado. Posicao `fixed`
 // usando coordenadas de viewport vindas do bounding rect da selecao.
 export function SelectionToolbar({ anchor, onHighlight, onComment, onCopy }: SelectionToolbarProps) {
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [activeColor, setActiveColor] = useState<HighlightColor>(() => {
+    const storedColor = window.localStorage.getItem(highlightStorageKey);
+    return storedColor && isHighlightColor(storedColor) ? storedColor : "amber";
+  });
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!toolbarRef.current?.contains(event.target as Node)) {
+        return;
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  function selectHighlightColor(color: HighlightColor) {
+    setActiveColor(color);
+    window.localStorage.setItem(highlightStorageKey, color);
+    onHighlight(color);
+  }
+
   return (
     <div
-      className="fixed z-[60] flex items-center gap-1 rounded-xl bg-surface-elevated p-1.5 shadow-2xl ring-1 ring-sidebar-border"
+      ref={toolbarRef}
+      className="fixed z-[60] flex items-center gap-3 rounded-xl bg-[var(--surface-elevated)] px-3 py-2 shadow-2xl ring-1 ring-white/10"
       style={{
         top: anchor.top,
         left: anchor.left + anchor.width / 2,
@@ -70,44 +81,44 @@ export function SelectionToolbar({ anchor, onHighlight, onComment, onCopy }: Sel
       // Impede que clicar na toolbar limpe a selecao antes da acao rodar.
       onMouseDown={(event) => event.preventDefault()}
     >
-      <button
-        type="button"
-        aria-label="Marcar"
-        title="Marcar"
-        className="rounded-lg p-1.5 text-accent-icon-amber hover:bg-sidebar-raised"
-        onClick={onHighlight}
-      >
-        <HighlighterIcon />
-      </button>
-      <button
-        type="button"
-        aria-label="Comentar"
-        title="Comentar"
-        className="rounded-lg p-1.5 text-sidebar-text hover:bg-sidebar-raised"
-        onClick={onComment}
-      >
-        <CommentIcon />
-      </button>
+      <div className="flex items-center gap-2">
+        {highlightColors.map((color) => {
+          const palette = highlightPalette[color];
+          const isActive = color === activeColor;
+
+          return (
+            <button
+              key={color}
+              type="button"
+              aria-label={`Marcar com ${palette.label}`}
+              title={palette.label}
+              className={`h-5 w-5 rounded-full transition ${isActive ? "ring-2 ring-white ring-offset-2 ring-offset-[var(--surface-elevated)]" : "hover:scale-110"}`}
+              style={{ backgroundColor: palette.bg }}
+              onClick={() => selectHighlightColor(color)}
+            />
+          );
+        })}
+      </div>
+
+      <div className="h-6 w-px bg-white/10" />
+
       <button
         type="button"
         aria-label="Copiar"
         title="Copiar"
-        className="rounded-lg p-1.5 text-sidebar-text hover:bg-sidebar-raised"
+        className="rounded-lg p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
         onClick={onCopy}
       >
         <CopyIcon />
       </button>
-
-      <div className="mx-0.5 h-6 w-px bg-sidebar-border" />
-
       <button
         type="button"
-        aria-label="Perguntar a IA (em breve)"
-        title="Perguntar a IA (em breve)"
-        className="cursor-not-allowed rounded-lg p-1.5 text-sidebar-muted"
-        disabled
+        aria-label="Criar anotacao"
+        title="Criar anotacao"
+        className="rounded-lg p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+        onClick={() => onComment(activeColor)}
       >
-        <SparkleIcon />
+        <CommentIcon />
       </button>
     </div>
   );

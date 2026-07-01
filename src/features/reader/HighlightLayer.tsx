@@ -1,4 +1,5 @@
 import type { Annotation, AnnotationSaveState } from "../../types/annotation";
+import { highlightPalette } from "./highlightPalette";
 
 type HighlightLayerProps = {
   // Anotacoes desta pagina.
@@ -42,6 +43,7 @@ export function HighlightLayer({ annotations, saveStates, onRetry, onSelect }: H
       {annotations.map((annotation) => {
         const isUnsaved = (saveStates.get(annotation.id) ?? "saved") === "unsaved";
         const firstRect = annotation.rects[0];
+        const palette = highlightPalette[annotation.color];
 
         return (
           <div key={annotation.id}>
@@ -52,7 +54,7 @@ export function HighlightLayer({ annotations, saveStates, onRetry, onSelect }: H
                 key={index}
                 type="button"
                 aria-label="Abrir anotacao"
-                className={`pointer-events-auto absolute cursor-pointer mix-blend-multiply bg-highlight-amber ${
+                className={`pointer-events-auto absolute cursor-pointer ${
                   isUnsaved ? "outline-dashed outline-2 outline-status-red-text" : ""
                 }`}
                 style={{
@@ -60,6 +62,8 @@ export function HighlightLayer({ annotations, saveStates, onRetry, onSelect }: H
                   top: `${rect.y * 100}%`,
                   width: `${rect.w * 100}%`,
                   height: `${rect.h * 100}%`,
+                  backgroundColor: palette.bg,
+                  opacity: 0.3,
                 }}
                 onClick={() => onSelect(annotation)}
               />
