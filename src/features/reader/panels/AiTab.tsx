@@ -1,13 +1,10 @@
-// Aba "IA": APENAS placeholder visual — cartao com texto + input desabilitado,
-// em tom Slate. Sem nenhuma logica de IA / nenhuma integracao real.
+import { useState } from "react";
 
-function SparkleIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
-    </svg>
-  );
-}
+type Message = {
+  id: string;
+  role: "user" | "ai";
+  text: string;
+};
 
 function SendIcon() {
   return (
@@ -19,29 +16,72 @@ function SendIcon() {
 }
 
 export function AiTab() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      role: "ai",
+      text: "Funcionalidade de AI em desenvolvimento.",
+    },
+  ]);
+  const [prompt, setPrompt] = useState("");
+
+  function submitPrompt() {
+    const question = prompt.trim();
+    if (question.length === 0) {
+      return;
+    }
+
+    setMessages((current) => [
+      ...current,
+      { id: crypto.randomUUID(), role: "user", text: question },
+      { id: crypto.randomUUID(), role: "ai", text: "Funcionalidade de AI em desenvolvimento." },
+    ]);
+    setPrompt("");
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-status-slate text-status-slate-text">
-          <SparkleIcon />
-        </div>
-        <h3 className="mt-4 text-base font-semibold text-text-primary">Perguntar a IA</h3>
-        <p className="mt-2 max-w-[260px] text-sm text-text-secondary">
-          Em breve voce podera fazer perguntas sobre este documento e receber respostas com base no conteudo.
-        </p>
-        <span className="mt-4 rounded-full bg-status-slate px-3 py-1 text-xs font-bold text-status-slate-text">Em breve</span>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
+        {messages.map((message) =>
+          message.role === "user" ? (
+            <div key={message.id} className="flex justify-end">
+              <div className="max-w-[82%] rounded-2xl rounded-tr-md bg-primary px-4 py-3 text-sm leading-6 text-white">
+                {message.text}
+              </div>
+            </div>
+          ) : (
+            <div key={message.id} className="max-w-[86%]">
+              <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">ATHENAEUM AI</div>
+              <div className="rounded-2xl rounded-tl-md bg-card px-4 py-3 text-sm leading-6 text-foreground shadow-sm ring-1 ring-border-subtle">
+                {message.text}
+              </div>
+            </div>
+          ),
+        )}
       </div>
 
-      {/* Input puramente decorativo e desabilitado. */}
       <div className="border-t border-border-subtle p-4">
-        <div className="flex items-center gap-2 rounded-lg border border-border-muted bg-surface-muted px-3 py-2">
+        <div className="flex items-center gap-2 rounded-full border border-border-subtle bg-background px-4 py-2">
           <input
             type="text"
-            disabled
-            placeholder="Pergunte algo sobre o documento..."
-            className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-status-slate-text placeholder:text-text-subtle outline-none"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitPrompt();
+              }
+            }}
+            placeholder="Pergunte algo sobre este documento..."
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <button type="button" disabled aria-label="Enviar (em breve)" className="cursor-not-allowed rounded-md p-1.5 text-status-slate-text">
+          <button
+            type="button"
+            aria-label="Enviar pergunta"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={prompt.trim().length === 0}
+            onClick={submitPrompt}
+          >
             <SendIcon />
           </button>
         </div>
