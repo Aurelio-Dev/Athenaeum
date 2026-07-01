@@ -1,59 +1,106 @@
-import { TagBadge } from "../../../components/TagBadge";
-import type { LibraryDocument } from "../../../types/library";
+import { useRef, useState } from "react";
 
 type NotesTabProps = {
-  document: LibraryDocument;
   notesText: string;
   onNotesChange: (notes: string) => void;
-  progress: number;
+  onBlur: () => void;
 };
 
-function formatAuthors(authors: string[]) {
-  return authors.length > 4 ? `${authors.slice(0, 4).join(", ")} et al.` : authors.join(", ");
+type FormatAction = "bold" | "italic" | "underline" | "strike" | "sub" | "sup" | "code";
+
+const formatButtons: Array<{ action: FormatAction; label: string; title: string }> = [
+  { action: "bold", label: "B", title: "Negrito" },
+  { action: "italic", label: "I", title: "Italico" },
+  { action: "underline", label: "U", title: "Sublinhado" },
+  { action: "strike", label: "S", title: "Tachado" },
+  { action: "sub", label: "T1", title: "Subscrito" },
+  { action: "sup", label: "T2", title: "Sobrescrito" },
+  { action: "code", label: "</>", title: "Codigo inline" },
+];
+
+function wrapSelection(action: FormatAction, selectedText: string) {
+  if (action === "bold") {
+    return `**${selectedText}**`;
+  }
+  if (action === "italic") {
+    return `_${selectedText}_`;
+  }
+  if (action === "underline") {
+    return `<u>${selectedText}</u>`;
+  }
+  if (action === "strike") {
+    return `~~${selectedText}~~`;
+  }
+  if (action === "sub") {
+    return `<sub>${selectedText}</sub>`;
+  }
+  if (action === "sup") {
+    return `<sup>${selectedText}</sup>`;
+  }
+  return `\`${selectedText}\``;
 }
 
-// Aba "Notas": informacoes do documento + notas livres (campo unico do
-// documento, persistido em documents.notes) + progresso.
-export function NotesTab({ document, notesText, onNotesChange, progress }: NotesTabProps) {
-  return (
-    <div className="px-5 py-5">
-      <div className="rounded-lg border border-border-subtle bg-surface-card p-4">
-        <h3 className="font-semibold text-text-primary">{document.title}</h3>
-        <p className="mt-2 text-sm text-text-secondary">
-          {formatAuthors(document.authors)} - {document.year}
-        </p>
-      </div>
+export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [hasSelection, setHasSelection] = useState(false);
 
-      {document.tags.length > 0 ? (
-        <div className="mt-5">
-          <p className="text-xs font-bold uppercase tracking-wider text-text-subtle">Tags</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {document.tags.map((tag) => (
-              <TagBadge key={tag} tag={tag} />
-            ))}
-          </div>
+  function syncSelectionState() {
+    const textarea = textareaRef.current;
+    setHasSelection(Boolean(textarea && textarea.selectionStart !== textarea.selectionEnd));
+  }
+
+  function applyFormat(action: FormatAction) {
+    const textarea = textareaRef.current;
+    if (!textarea || textarea.selectionStart === textarea.selectionEnd) {
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = notesText.slice(start, end);
+    const replacement = wrapSelection(action, selectedText);
+    const nextNotes = `${notesText.slice(0, start)}${replacement}${notesText.slice(end)}`;
+    onNotesChange(nextNotes);
+
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + replacement.length);
+      syncSelectionState();
+    });
+  }
+
+  return (
+    <div className="relative h-full">
+      {hasSelection ? (
+        <div className="absolute right-5 top-20 z-10 flex items-center gap-1 rounded-xl bg-[var(--surface-elevated)] px-3 py-2 text-sm font-bold shadow-2xl ring-1 ring-white/10">
+          {formatButtons.map((button, index) => (
+            <div key={button.action} className="flex items-center gap-1">
+              {(index === 4 || index === 6) ? <span className="mx-1 h-6 w-px bg-white/10" /> : null}
+              <button
+                type="button"
+                className="min-w-7 rounded-md px-2 py-1 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+                title={button.title}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat(button.action)}
+              >
+                {button.label}
+              </button>
+            </div>
+          ))}
         </div>
       ) : null}
 
-      <label className="mt-6 block">
-        <span className="text-xs font-bold uppercase tracking-wider text-text-subtle">Notas</span>
-        <textarea
-          className="mt-3 h-64 w-full resize-none rounded-lg border border-border-muted bg-surface-panel px-4 py-3 text-sm leading-6 text-text-primary outline-none focus:border-primary"
-          value={notesText}
-          placeholder="Escreva suas anotacoes sobre este PDF. Elas serao salvas automaticamente."
-          onChange={(event) => onNotesChange(event.target.value)}
-        />
-      </label>
-
-      <div className="mt-6">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">Progresso geral</span>
-          <span className="font-bold text-primary">{progress}%</span>
-        </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
-        </div>
-      </div>
+      <textarea
+        ref={textareaRef}
+        value={notesText}
+        onChange={(event) => onNotesChange(event.target.value)}
+        onBlur={onBlur}
+        onMouseUp={syncSelectionState}
+        onKeyUp={syncSelectionState}
+        onSelect={syncSelectionState}
+        placeholder="Anotações gerais sobre este documento..."
+        className="h-full w-full resize-none border-0 bg-transparent px-5 py-6 text-sm leading-7 text-foreground outline-none placeholder:text-muted-foreground"
+      />
     </div>
   );
 }
