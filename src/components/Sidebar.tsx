@@ -1,5 +1,6 @@
 import { type MouseEvent, useState } from "react";
 import { IconButton } from "./IconButton";
+import { deriveCollectionColor } from "../lib/documentColor";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
 type SidebarProps = {
@@ -248,12 +249,12 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-black bg-sidebar text-sidebar-text">
+    <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar text-sidebar-text">
       <div className="flex items-center gap-3 px-5 pb-2 pt-5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-text-inverse">
           <Icon name="brand" />
         </div>
-        <span className="text-lg font-bold text-text-inverse">Athenaeum</span>
+        <span className="text-lg font-bold text-sidebar-text">Athenaeum</span>
       </div>
 
       <div className="px-4 py-3">
@@ -271,66 +272,78 @@ export function Sidebar({
 
       <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2">
         <div className="space-y-1">
-          {navItems(documents, trashCount).map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => onRouteChange(item.route)}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-                isRouteActive(activeRoute, item.route) ? "bg-sidebar-active text-text-inverse" : "text-sidebar-text hover:bg-sidebar-raised"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                <Icon name={item.icon} />
-                <span className="truncate">{item.label}</span>
-              </span>
-              {typeof item.count === "number" ? (
-                <span className="rounded-full bg-sidebar-raised px-2 py-0.5 text-xs text-sidebar-text">{item.count}</span>
-              ) : null}
-            </button>
-          ))}
+          {navItems(documents, trashCount).map((item) => {
+            const active = isRouteActive(activeRoute, item.route);
+
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => onRouteChange(item.route)}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-text transition ${
+                  active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className={active ? "text-primary" : "text-sidebar-muted"}>
+                    <Icon name={item.icon} />
+                  </span>
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {typeof item.count === "number" ? (
+                  <span className="text-xs tabular-nums text-sidebar-muted">{item.count}</span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
 
         <div className="mt-6 flex items-center justify-between px-3 pb-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-sidebar-muted">Coleções</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-sidebar-muted">Minha biblioteca</span>
           <IconButton label="Nova colecao" variant="ghost" onClick={openCreateCollectionDialog}>
             <Icon name="plus" />
           </IconButton>
         </div>
 
         <div className="space-y-1">
-          {collections.map((collection) => (
-            <div
-              key={collection.id}
-              onContextMenu={(event) => openCollectionContextMenu(event, collection)}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-                isRouteActive(activeRoute, { type: "collection", collectionName: collection.name })
-                  ? "bg-sidebar-active text-text-inverse"
-                  : "text-sidebar-text hover:bg-sidebar-raised"
-              }`}
-            >
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                onClick={() => {
-                  setCollectionContextMenu(null);
-                  onRouteChange({ type: "collection", collectionName: collection.name });
-                }}
+          {collections.map((collection) => {
+            const active = isRouteActive(activeRoute, { type: "collection", collectionName: collection.name });
+
+            return (
+              <div
+                key={collection.id}
+                onContextMenu={(event) => openCollectionContextMenu(event, collection)}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-text transition ${
+                  active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
+                }`}
               >
-                <Icon name="folder" />
-                <span className="truncate">{collection.name}</span>
-              </button>
-              <span className="ml-2 rounded-full bg-sidebar-raised px-2 py-0.5 text-xs text-sidebar-text">
-                {collectionCounts.get(collection.name) ?? 0}
-              </span>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  onClick={() => {
+                    setCollectionContextMenu(null);
+                    onRouteChange({ type: "collection", collectionName: collection.name });
+                  }}
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: deriveCollectionColor(collection.name) }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{collection.name}</span>
+                </button>
+                <span className="ml-2 text-xs tabular-nums text-sidebar-muted">
+                  {collectionCounts.get(collection.name) ?? 0}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <button
           type="button"
           onClick={openCreateCollectionDialog}
-          className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-sidebar-raised"
+          className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
         >
           <Icon name="plus" />
           Nova coleção
