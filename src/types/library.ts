@@ -38,6 +38,7 @@ export type LibraryDocument = {
   fileUrl?: string;
   readingLocation?: ReadingLocation;
   notes?: string;
+  timeSpentSeconds: number;
 };
 
 export type LibraryCollection = {

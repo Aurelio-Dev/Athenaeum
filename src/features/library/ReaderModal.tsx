@@ -5,15 +5,17 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { createAnnotation, deleteAnnotation, listAnnotations, setDocumentReadingLocation, updateAnnotationNote } from "../../lib/database";
 import type { NewAnnotation } from "../../lib/database";
-import type { Annotation, AnnotationSaveState } from "../../types/annotation";
-import type { LibraryDocument, ReadingLocation } from "../../types/library";
+import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
+import type { LibraryDocument, ReadingLocation, SubjectTag } from "../../types/library";
 import { captureSelection, type CapturedSelection, type PageElement } from "../reader/anchor";
 import { HighlightLayer } from "../reader/HighlightLayer";
 import { NotePopover } from "../reader/NotePopover";
 import { PdfTextLayer } from "../reader/PdfTextLayer";
+import { readerPanelPopoutStorageKey } from "../reader/ReaderPanelPopout";
 import { ReaderSidePanel } from "../reader/ReaderSidePanel";
 import { SelectionToolbar } from "../reader/SelectionToolbar";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
+import { useReadingTimer } from "../reader/useReadingTimer";
 
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
 type PageSize = {
@@ -26,6 +28,9 @@ type PdfOutlineItem = {
 
 type ReaderModalProps = {
   document: LibraryDocument;
+  availableTags: SubjectTag[];
+  onAvailableTagsChange: (tags: SubjectTag[]) => void;
+  onUpdateDocumentTags: (documentId: string, tags: SubjectTag[]) => void;
   onClose: (readingLocation: ReadingLocation) => void;
   onSaveNotes: (documentId: string, notes: string) => void;
 };
@@ -36,7 +41,7 @@ const maxZoom = 140;
 const zoomStep = 10;
 // Escala base do PDF: o canvas e a camada de texto usam a MESMA escala para o
 // texto transparente cair exatamente sobre as letras.
-const pdfBaseScale = 1.35;
+const pdfBaseScale = 1.1;
 
 function pageScale(zoom: number) {
   return (zoom / 100) * pdfBaseScale;
@@ -44,7 +49,7 @@ function pageScale(zoom: number) {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev" | "next" | "minus" | "plus" | "search" }) {
+function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev" | "next" | "minus" | "plus" | "search" | "pen" | "split" }) {
   const commonProps = {
     width: 18,
     height: 18,
@@ -89,6 +94,25 @@ function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev
       <svg {...commonProps}>
         <rect x="4" y="5" width="16" height="14" rx="2" />
         <path d="M15 5v14" />
+      </svg>
+    );
+  }
+
+  if (name === "pen") {
+    return (
+      <svg {...commonProps}>
+        <path d="m15 5 4 4" />
+        <path d="M14 6 4 16v4h4L18 10" />
+        <path d="M13 20h7" />
+      </svg>
+    );
+  }
+
+  if (name === "split") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4" y="5" width="16" height="14" rx="2" />
+        <path d="M14 5v14" />
       </svg>
     );
   }
@@ -464,7 +488,7 @@ function FallbackThumbnail({ page, active, onClick }: { page: number; active: bo
   );
 }
 
-export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps) {
+export function ReaderModal({ document, availableTags, onAvailableTagsChange, onUpdateDocumentTags, onClose, onSaveNotes }: ReaderModalProps) {
   const fallbackPageNumbers = useMemo(buildFallbackPageNumbers, []);
   const readerSurfaceRef = useRef<HTMLElement | null>(null);
   const pageRefs = useRef<Array<HTMLElement | null>>([]);
@@ -479,7 +503,14 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [leftPanelTab, setLeftPanelTab] = useState<"pages" | "summary">("pages");
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [sidePanelFloating, setSidePanelFloating] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [documentSearchTerm, setDocumentSearchTerm] = useState("");
+  const [isHighlightModeEnabled, setIsHighlightModeEnabled] = useState(false);
   const [notesText, setNotesText] = useState(document.notes ?? "");
+  const notesSaveTimerRef = useRef<number | null>(null);
+  const latestNotesRef = useRef(document.notes ?? "");
+  const [documentTags, setDocumentTags] = useState<SubjectTag[]>(document.tags);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [saveStates, setSaveStates] = useState<Map<string, AnnotationSaveState>>(new Map());
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
@@ -488,6 +519,10 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
 
   const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
+  const readerDocument = useMemo(
+    () => ({ ...document, tags: documentTags, notes: notesText, timeSpentSeconds: document.timeSpentSeconds }),
+    [document, documentTags, notesText],
+  );
   const defaultPageSize = useMemo(() => estimatedPageSize(zoom), [zoom]);
   const annotationsByPage = useMemo(() => {
     const grouped = new Map<number, Annotation[]>();
@@ -518,6 +553,26 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
       return next;
     });
   }, []);
+  const { timeSpentSeconds, flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds);
+
+  const flushNotes = useCallback(() => {
+    if (notesSaveTimerRef.current !== null) {
+      window.clearTimeout(notesSaveTimerRef.current);
+      notesSaveTimerRef.current = null;
+    }
+
+    onSaveNotes(document.id, latestNotesRef.current);
+  }, [document.id, onSaveNotes]);
+
+  useEffect(() => {
+    return () => {
+      if (notesSaveTimerRef.current !== null) {
+        window.clearTimeout(notesSaveTimerRef.current);
+        notesSaveTimerRef.current = null;
+        onSaveNotes(document.id, latestNotesRef.current);
+      }
+    };
+  }, [document.id, onSaveNotes]);
 
   useEffect(() => {
     if (!hasPdfSource(document)) {
@@ -584,7 +639,12 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
 
   useEffect(() => {
     setNotesText(document.notes ?? "");
+    latestNotesRef.current = document.notes ?? "";
   }, [document.id, document.notes]);
+
+  useEffect(() => {
+    setDocumentTags(document.tags);
+  }, [document.id, document.tags]);
 
   // Carrega as anotacoes salvas ao abrir/trocar de documento.
   useEffect(() => {
@@ -672,19 +732,19 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
     [persistNewAnnotation],
   );
 
-  function buildPayload(page: number, text: string, rects: NewAnnotation["rects"]): NewAnnotation {
-    return { documentId: document.id, page, color: "amber", selectedText: text, note: "", rects };
+  function buildPayload(page: number, text: string, rects: NewAnnotation["rects"], color: HighlightColor): NewAnnotation {
+    return { documentId: document.id, page, color, selectedText: text, note: "", rects };
   }
 
   // Cria um highlight por pagina tocada pela selecao (regra "uma anotacao por
   // pagina"). Cada pagina vira uma anotacao independente.
-  const highlightSelection = useCallback(() => {
+  const highlightSelection = useCallback((color: HighlightColor) => {
     if (!pendingSelection) {
       return;
     }
 
     for (const pageRects of pendingSelection.pages) {
-      addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects));
+      addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, color));
     }
 
     window.getSelection()?.removeAllRanges();
@@ -694,13 +754,15 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
 
   // Como "Marcar", mas abre o editor de nota da anotacao da primeira pagina assim
   // que ela for persistida (precisamos do id real para salvar a nota depois).
-  const commentSelection = useCallback(() => {
+  const commentSelection = useCallback((color: HighlightColor) => {
     if (!pendingSelection) {
       return;
     }
 
+    setSidePanelOpen(true);
+
     pendingSelection.pages.forEach((pageRects, index) => {
-      const { persisted } = addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects));
+      const { persisted } = addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, color));
       if (index === 0) {
         void persisted.then((saved) => {
           if (saved) {
@@ -761,9 +823,42 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   const handleNotesChange = useCallback(
     (nextNotes: string) => {
       setNotesText(nextNotes);
-      onSaveNotes(document.id, nextNotes);
+      latestNotesRef.current = nextNotes;
+
+      if (notesSaveTimerRef.current !== null) {
+        window.clearTimeout(notesSaveTimerRef.current);
+      }
+
+      notesSaveTimerRef.current = window.setTimeout(() => {
+        notesSaveTimerRef.current = null;
+        onSaveNotes(document.id, latestNotesRef.current);
+      }, 500);
     },
     [document.id, onSaveNotes],
+  );
+
+  const updateTags = useCallback(
+    (nextTags: SubjectTag[]) => {
+      const uniqueTags = mergeUniqueTags(nextTags);
+      setDocumentTags(uniqueTags);
+      onAvailableTagsChange(mergeUniqueTags([...availableTags, ...uniqueTags]));
+      onUpdateDocumentTags(document.id, uniqueTags);
+    },
+    [availableTags, document.id, onAvailableTagsChange, onUpdateDocumentTags],
+  );
+
+  const addDocumentTag = useCallback(
+    (tag: SubjectTag) => {
+      updateTags([...documentTags, tag]);
+    },
+    [documentTags, updateTags],
+  );
+
+  const removeDocumentTag = useCallback(
+    (tag: SubjectTag) => {
+      updateTags(documentTags.filter((currentTag) => currentTag !== tag));
+    },
+    [documentTags, updateTags],
   );
 
   // Remocao pela lista do painel: a falha so mantem o item (sem perda de dado).
@@ -775,6 +870,23 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
     },
     [removeAnnotation],
   );
+
+  const openPanelPopout = useCallback(() => {
+    window.localStorage.setItem(
+      readerPanelPopoutStorageKey,
+      JSON.stringify({
+        documentTitle: document.title,
+        notesText,
+        annotations,
+      }),
+    );
+
+    setSidePanelFloating(false);
+    setSidePanelOpen(false);
+    void invoke("open_reader_panel_window", { documentTitle: document.title }).catch((error) => {
+      console.warn("Nao foi possivel abrir o painel em janela separada.", error);
+    });
+  }, [annotations, document.title, notesText]);
 
   const copySelection = useCallback(() => {
     if (!pendingSelection) {
@@ -853,8 +965,10 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   }, [currentPage, document.readingLocation?.pageOffset, document.readingLocation?.scrollRatio, totalPages, zoom]);
 
   const closeAndSave = useCallback(() => {
-    onClose(getCurrentReadingLocation());
-  }, [getCurrentReadingLocation, onClose]);
+    const readingLocation = getCurrentReadingLocation();
+    flushNotes();
+    void flushReadingTime().finally(() => onClose(readingLocation));
+  }, [flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
 
   // Autosave da posicao de leitura DURANTE a leitura. Escrita imediata de 1
   // statement (reading_location_json/progress), agendada com debounce para nao
@@ -945,119 +1059,83 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
   }
 
   const progress = Math.round((currentPage / totalPages) * 100);
+  const scrollProgress = getCurrentReadingLocation().canMeasure ? Math.round(getCurrentReadingLocation().scrollRatio * 100) : progress;
   const summaryItems = pdfOutline.length > 0 ? pdfOutline : ["Resumo", "Arquitetura", "Treinamento", "Resultados", "Conclusoes"].map((title) => ({ title }));
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#11131d] text-slate-200" role="dialog" aria-modal="true" aria-labelledby="reader-title">
-      <header className="flex h-[70px] shrink-0 items-center border-b border-slate-800 bg-[#11131d]">
-        <div className="flex min-w-0 flex-1 items-center gap-5 px-6">
-          <button type="button" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white" onClick={closeAndSave}>
+    <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-labelledby="reader-title">
+      <header className="flex h-11 shrink-0 items-center border-b border-[#2A1A12] bg-[var(--surface-header)] text-[#9E8878]">
+        <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
+          <button type="button" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" aria-label="Voltar para biblioteca" onClick={closeAndSave}>
             <Icon name="back" />
-            Biblioteca
           </button>
-          <div className="h-7 w-px bg-slate-800" />
-          <h1 id="reader-title" className="truncate text-sm font-bold text-white">
-            {document.title}
+          <h1 id="reader-title" className="min-w-0 truncate text-sm">
+            <span>Minha Biblioteca</span>
+            <span className="px-1.5">/</span>
+            <span>{document.collection}</span>
+            <span className="px-1.5">/</span>
+            <span className="font-bold text-white">{document.title}</span>
           </h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 px-5">
-          <button
-            type="button"
-            aria-label="Miniaturas e sumario"
-            title="Miniaturas e sumario"
-            className={`rounded-lg p-2 transition ${leftPanelOpen ? "bg-primary text-white ring-1 ring-indigo-200" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-            onClick={() => setLeftPanelOpen((isOpen) => !isOpen)}
-          >
-            <Icon name="leftPanel" />
-          </button>
-          <button
-            type="button"
-            aria-label="Notas e anotacoes"
-            title="Notas e anotacoes"
-            className={`rounded-lg p-2 transition ${sidePanelOpen ? "bg-primary text-white ring-1 ring-indigo-200" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
-            onClick={() => setSidePanelOpen((isOpen) => !isOpen)}
-          >
-            <Icon name="notes" />
-          </button>
-          <div className="h-7 w-px bg-slate-800" />
-          <button type="button" aria-label="Pagina anterior" className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={() => scrollToPage(Math.max(1, currentPage - 1))}>
-            <Icon name="prev" />
-          </button>
-          <span className="min-w-14 text-center text-sm font-semibold text-blue-200">
-            {currentPage} / {totalPages}
-          </span>
-          <button type="button" aria-label="Proxima pagina" className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={() => scrollToPage(Math.min(totalPages, currentPage + 1))}>
-            <Icon name="next" />
-          </button>
-          <div className="h-7 w-px bg-slate-800" />
-          <button type="button" aria-label="Reduzir zoom" className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={() => changeZoom(zoom - zoomStep)}>
+        <div className="flex shrink-0 items-center gap-2 px-5">
+          <button type="button" aria-label="Reduzir zoom" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(zoom - zoomStep)}>
             <Icon name="minus" />
           </button>
-          <span className="min-w-16 text-center text-sm font-semibold text-blue-200">{zoom}%</span>
-          <button type="button" aria-label="Aumentar zoom" className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={() => changeZoom(zoom + zoomStep)}>
+          <button type="button" className="min-w-14 rounded-md px-2 py-1 text-sm font-medium text-[#C7B5A6] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(100)}>
+            {zoom}%
+          </button>
+          <button type="button" aria-label="Aumentar zoom" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(zoom + zoomStep)}>
             <Icon name="plus" />
           </button>
-          <div className="h-7 w-px bg-slate-800" />
-          <button type="button" aria-label="Buscar no documento" className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-white">
-            <Icon name="search" />
+          <div className="mx-2 h-6 w-px bg-white/10" />
+          <span className="min-w-16 text-center text-sm font-medium text-[#C7B5A6]">
+            {currentPage} / {totalPages}
+          </span>
+          <div className="mx-2 h-6 w-px bg-white/10" />
+          {isSearchOpen ? (
+            <input
+              value={documentSearchTerm}
+              onChange={(event) => setDocumentSearchTerm(event.target.value)}
+              onBlur={() => {
+                if (documentSearchTerm.trim().length === 0) {
+                  setIsSearchOpen(false);
+                }
+              }}
+              className="h-8 w-52 rounded-md border border-white/10 bg-white/5 px-3 text-sm text-white outline-none placeholder:text-[#9E8878] focus:border-primary"
+              placeholder="Buscar no documento..."
+              autoFocus
+            />
+          ) : (
+            <button type="button" aria-label="Buscar no documento" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => setIsSearchOpen(true)}>
+              <Icon name="search" />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Modo marca-texto"
+            className={`rounded-md p-1.5 transition ${isHighlightModeEnabled ? "text-primary" : "text-[#9E8878] hover:bg-white/5 hover:text-white"}`}
+            onClick={() => setIsHighlightModeEnabled((isEnabled) => !isEnabled)}
+          >
+            <Icon name="pen" />
+          </button>
+          <button
+            type="button"
+            aria-label={sidePanelOpen ? "Fechar painel" : "Abrir painel"}
+            className={`rounded-md p-1.5 transition ${sidePanelOpen ? "bg-primary/20 text-primary" : "text-[#9E8878] hover:bg-white/5 hover:text-white"}`}
+            onClick={() => setSidePanelOpen((isOpen) => !isOpen)}
+          >
+            <Icon name="split" />
           </button>
         </div>
       </header>
 
-      <div className="h-1 shrink-0 bg-primary" style={{ width: `${progress}%` }} />
-
-      <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[#dfe1e7]">
-        {leftPanelOpen ? (
-          <aside className="absolute inset-y-0 left-0 z-20 flex w-60 shrink-0 flex-col border-r border-slate-300 bg-surface-panel shadow-2xl md:relative md:shadow-none">
-            <div className="grid grid-cols-2 border-b border-border-subtle text-sm font-semibold">
-              <button
-                type="button"
-                className={`px-4 py-4 ${leftPanelTab === "pages" ? "border-b-2 border-primary text-primary" : "text-text-subtle"}`}
-                onClick={() => setLeftPanelTab("pages")}
-              >
-                Paginas
-              </button>
-              <button
-                type="button"
-                className={`px-4 py-4 ${leftPanelTab === "summary" ? "border-b-2 border-primary text-primary" : "text-text-subtle"}`}
-                onClick={() => setLeftPanelTab("summary")}
-              >
-                Sumario
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
-              {leftPanelTab === "pages" ? (
-                <div className="space-y-7">
-                  {pageNumbers.map((page) =>
-                    pdfDocument ? (
-                      <LazyPdfThumbnail key={page} pdfDocument={pdfDocument} page={page} active={page === currentPage} onClick={() => scrollToPage(page)} />
-                    ) : (
-                      <FallbackThumbnail key={page} page={page} active={page === currentPage} onClick={() => scrollToPage(page)} />
-                    ),
-                  )}
-                </div>
-              ) : (
-                <nav className="space-y-2 text-sm">
-                  {summaryItems.map((item, index) => (
-                    <button
-                      key={`${item.title}-${index}`}
-                      type="button"
-                      className={`block w-full rounded-lg px-3 py-2 text-left ${index + 1 === currentPage ? "bg-primary-soft text-primary" : "text-text-secondary hover:bg-surface-muted"}`}
-                      onClick={() => scrollToPage(clamp(index * 2 + 1, 1, totalPages))}
-                    >
-                      {item.title}
-                    </button>
-                  ))}
-                </nav>
-              )}
-            </div>
-          </aside>
-        ) : null}
-
-        <main ref={readerSurfaceRef} className="min-w-0 flex-1 overflow-y-auto px-5 py-8" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
+      <div className="relative min-h-0 flex flex-1 overflow-hidden bg-background">
+        <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-y-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
+          <div className="sticky top-0 z-10 -mx-5 -mt-10 mb-8 h-0.5 bg-transparent">
+            <div className="h-full bg-primary" style={{ width: `${scrollProgress}%` }} />
+          </div>
           {isPdfLoading ? (
             <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
               Carregando PDF...
@@ -1074,7 +1152,7 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
                   ref={(element) => {
                     pageRefs.current[page - 1] = element;
                   }}
-                  className="mx-auto w-fit"
+                  className="mx-auto w-fit max-w-[700px]"
                 >
                   {pdfDocument ? (
                     <VirtualPdfCanvasPage
@@ -1099,14 +1177,25 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
 
         {sidePanelOpen ? (
           <ReaderSidePanel
-            document={document}
+            document={readerDocument}
             notesText={notesText}
             onNotesChange={handleNotesChange}
+            onNotesBlur={flushNotes}
+            availableTags={availableTags}
+            onAddTag={addDocumentTag}
+            onRemoveTag={removeDocumentTag}
             annotations={annotations}
             progress={progress}
+            timeSpentSeconds={timeSpentSeconds}
+            isFloating={sidePanelFloating}
+            onFloat={openPanelPopout}
+            onDock={() => setSidePanelFloating(false)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}
-            onClose={() => setSidePanelOpen(false)}
+            onClose={() => {
+              setSidePanelFloating(false);
+              setSidePanelOpen(false);
+            }}
           />
         ) : null}
       </div>
@@ -1131,4 +1220,25 @@ export function ReaderModal({ document, onClose, onSaveNotes }: ReaderModalProps
       ) : null}
     </div>
   );
+}
+
+function mergeUniqueTags(tags: SubjectTag[]) {
+  const seenTags = new Set<string>();
+
+  return tags
+    .map((tag) => tag.trim().replace(/\s+/g, " "))
+    .filter((tag) => {
+      if (tag.length === 0) {
+        return false;
+      }
+
+      const key = tag.toLocaleLowerCase("pt-BR");
+
+      if (seenTags.has(key)) {
+        return false;
+      }
+
+      seenTags.add(key);
+      return true;
+    });
 }

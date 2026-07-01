@@ -3,6 +3,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { availableSubjectTags } from "../data/subjectTags";
 import { TAG_COLOR_TOKENS } from "./tagColors";
 import { getSubjectTagTone } from "../styles/designTokens";
+import { isHighlightColor } from "../types/annotation";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../types/library";
 
@@ -28,6 +29,7 @@ type DocumentRow = {
   filePath: string | null;
   notes: string | null;
   readingLocationJson: string | null;
+  timeSpentSeconds: number;
   authors: string | null;
   tags: string | null;
 };
@@ -166,6 +168,7 @@ function mapDocumentRow(row: DocumentRow): LibraryDocument {
     filePath: row.filePath ?? undefined,
     readingLocation: parseReadingLocation(row.readingLocationJson),
     notes: row.notes ?? "",
+    timeSpentSeconds: row.timeSpentSeconds ?? 0,
   };
 }
 
@@ -414,6 +417,7 @@ function buildDocumentListQuery({ searchTerm, statusFilter, sortMode, route }: L
         documents.file_path AS filePath,
         documents.notes,
         documents.reading_location_json AS readingLocationJson,
+        documents.time_spent_seconds AS timeSpentSeconds,
         document_author_list.authors,
         document_tag_list.tags
       FROM documents
@@ -656,6 +660,48 @@ export async function setDocumentNote(documentId: string, note: string) {
   await database.execute("UPDATE documents SET notes = $1 WHERE id = $2", [note, documentId]);
 }
 
+export async function incrementDocumentReadingTime(documentId: string, seconds: number) {
+  if (seconds <= 0) {
+    return;
+  }
+
+  const database = await getDatabase();
+  await database.execute("UPDATE documents SET time_spent_seconds = time_spent_seconds + $1 WHERE id = $2", [Math.floor(seconds), documentId]);
+}
+
+export async function addDocumentTag(documentId: string, tag: SubjectTag) {
+  const normalizedTag = tag.trim().replace(/\s+/g, " ");
+
+  if (normalizedTag.length === 0) {
+    return;
+  }
+
+  const database = await getDatabase();
+  await upsertTag(database, normalizedTag);
+
+  const tagId = slugify(normalizedTag);
+  const [position] = await database.select<Array<{ nextOrder: number }>>(
+    "SELECT COALESCE(MAX(tag_order) + 1, 0) AS nextOrder FROM document_tags WHERE document_id = $1",
+    [documentId],
+  );
+
+  await database.execute("INSERT OR IGNORE INTO document_tags (document_id, tag_id, tag_order) VALUES ($1, $2, $3)", [
+    documentId,
+    tagId,
+    position?.nextOrder ?? 0,
+  ]);
+}
+
+export async function removeDocumentTag(documentId: string, tag: SubjectTag) {
+  const database = await getDatabase();
+  await database.execute(
+    `DELETE FROM document_tags
+     WHERE document_id = $1
+       AND tag_id = (SELECT id FROM tags WHERE name = $2 COLLATE NOCASE LIMIT 1)`,
+    [documentId, tag],
+  );
+}
+
 export async function setDocumentReadingStarted(documentId: string) {
   const database = await getDatabase();
   await database.execute(
@@ -749,7 +795,7 @@ function mapAnnotationRow(row: AnnotationRow): Annotation {
     id: row.id,
     documentId: row.documentId,
     page: row.page,
-    color: row.color,
+    color: isHighlightColor(row.color) ? row.color : "amber",
     selectedText: row.selectedText,
     note: row.note,
     rects: parseRects(row.rectsJson),

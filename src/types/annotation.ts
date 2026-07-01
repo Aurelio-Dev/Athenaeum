@@ -4,7 +4,13 @@
 // Se no futuro abrirmos para mais cores, a extensao natural sao os tons ja
 // validados em WCAG AA (violet/indigo/blue/teal/rose) — nunca cores novas sem
 // validar contraste, e nunca green (reservado a status "concluido").
-export type HighlightColor = "amber";
+export const highlightColors = ["amber", "violet", "indigo", "blue", "teal", "rose"] as const;
+
+export type HighlightColor = (typeof highlightColors)[number];
+
+export function isHighlightColor(value: string): value is HighlightColor {
+  return (highlightColors as readonly string[]).includes(value);
+}
 
 // Retangulo normalizado em fracoes 0..1 do tamanho da pagina renderizada.
 // Independente de zoom/DPR/tamanho de janela: para desenhar, basta multiplicar

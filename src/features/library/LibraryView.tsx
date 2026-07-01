@@ -207,6 +207,23 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
+  async function updateDocumentTags(documentId: string, tags: SubjectTag[]) {
+    const document = allDocuments.find((currentDocument) => currentDocument.id === documentId);
+
+    if (!document) {
+      return;
+    }
+
+    await updateDocumentMetadata(documentId, {
+      title: document.title,
+      authors: document.authors,
+      source: document.source,
+      year: document.year,
+      collection: document.collection,
+      tags,
+    });
+  }
+
   async function toggleFavorite(documentId: string) {
     const document = allDocuments.find((currentDocument) => currentDocument.id === documentId);
 
@@ -441,7 +458,14 @@ export function LibraryView() {
             </div>
           }
         >
-          <ReaderModal document={readerDocument} onClose={(readingLocation) => void closeReader(readingLocation)} onSaveNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)} />
+          <ReaderModal
+            document={readerDocument}
+            availableTags={availableTags}
+            onAvailableTagsChange={updateAvailableTags}
+            onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}
+            onClose={(readingLocation) => void closeReader(readingLocation)}
+            onSaveNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)}
+          />
         </Suspense>
       ) : null}
 
