@@ -1059,7 +1059,6 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   }
 
   const progress = Math.round((currentPage / totalPages) * 100);
-  const scrollProgress = getCurrentReadingLocation().canMeasure ? Math.round(getCurrentReadingLocation().scrollRatio * 100) : progress;
   const summaryItems = pdfOutline.length > 0 ? pdfOutline : ["Resumo", "Arquitetura", "Treinamento", "Resultados", "Conclusoes"].map((title) => ({ title }));
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
 
@@ -1133,9 +1132,6 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
 
       <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[var(--background)]">
         <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-y-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
-          <div className="sticky top-0 z-10 -mx-5 -mt-10 mb-8 h-0.5 bg-transparent">
-            <div className="h-full bg-primary" style={{ width: `${scrollProgress}%` }} />
-          </div>
           {isPdfLoading ? (
             <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
               Carregando PDF...
