@@ -75,20 +75,20 @@ export function AnnotationsTab({ annotations, onJumpToPage, onDelete }: Annotati
         const palette = highlightPalette[annotation.color];
 
         return (
-          <article key={annotation.id} className="group relative rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
-            <button type="button" className="block w-full px-4 py-4 text-left" onClick={() => onJumpToPage(annotation.page)}>
+          <article key={annotation.id} className="group relative overflow-hidden rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
+            <button type="button" className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60" onClick={() => onJumpToPage(annotation.page)}>
               <blockquote
-                className="rounded-md border-l-[3px] px-3 py-3 text-sm italic leading-6 text-[var(--foreground)]"
+                className="border-l-[3px] px-4 py-4 text-sm italic leading-6 text-[var(--foreground)]"
                 style={{ borderLeftColor: palette.bg, backgroundColor: transparentColor(palette.bg) }}
               >
                 “{annotation.selectedText}”
               </blockquote>
 
               {annotation.note.trim().length > 0 ? (
-                <p className="mt-4 text-sm leading-6 text-[var(--foreground)]">{annotation.note}</p>
+                <p className="px-4 pt-4 text-sm leading-6 text-[var(--foreground)]">{annotation.note}</p>
               ) : null}
 
-              <footer className="mt-4 text-xs text-[var(--muted-foreground)]">
+              <footer className="px-4 pb-4 pt-4 text-xs text-[var(--muted-foreground)]">
                 Página {annotation.page} · {formatRelativeTime(annotation.updatedAt)}
               </footer>
             </button>

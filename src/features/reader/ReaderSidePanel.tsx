@@ -136,7 +136,7 @@ export function ReaderSidePanel({
             <button
               key={tab.id}
               type="button"
-              className={`px-5 py-[18px] text-sm font-semibold ${
+              className={`px-5 py-[18px] text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
               onMouseDown={(event) => event.stopPropagation()}

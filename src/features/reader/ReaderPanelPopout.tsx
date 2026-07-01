@@ -49,7 +49,7 @@ export function ReaderPanelPopout() {
   const [notesText, setNotesText] = useState(payload.notesText);
 
   return (
-    <main className="flex h-screen flex-col bg-[var(--card)] text-[var(--foreground)]">
+    <main className="dark flex h-screen flex-col bg-[var(--card)] text-[var(--foreground)]">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-subtle bg-[var(--surface-header)] px-4">
         <h1 className="min-w-0 truncate text-sm font-bold text-white">Anotações — {payload.documentTitle}</h1>
       </header>
@@ -60,7 +60,7 @@ export function ReaderPanelPopout() {
             <button
               key={tab.id}
               type="button"
-              className={`px-5 py-[18px] text-sm font-semibold ${
+              className={`px-5 py-[18px] text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
               onClick={() => setActiveTab(tab.id)}

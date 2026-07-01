@@ -1064,7 +1064,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--background)] text-[var(--foreground)]" role="dialog" aria-modal="true" aria-labelledby="reader-title">
+    <div className="dark fixed inset-0 z-50 flex flex-col bg-[var(--background)] text-[var(--foreground)]" role="dialog" aria-modal="true" aria-labelledby="reader-title">
       <header className="flex h-11 shrink-0 items-center border-b border-[#2A1A12] bg-[var(--surface-header)] text-[#9E8878]">
         <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
           <button type="button" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" aria-label="Voltar para biblioteca" onClick={closeAndSave}>
