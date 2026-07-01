@@ -9,7 +9,6 @@ type LibraryToolbarProps = {
   onStatusFilterChange: (value: StatusFilter) => void;
   onSortModeChange: (value: SortMode) => void;
   onViewModeChange: (value: ViewMode) => void;
-  onAddPdf: () => void;
 };
 
 function FilterIcon() {
@@ -43,15 +42,6 @@ function GridIcon() {
   );
 }
 
-function PlusIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-      <line x1="12" x2="12" y1="5" y2="19" />
-      <line x1="5" x2="19" y1="12" y2="12" />
-    </svg>
-  );
-}
-
 export function LibraryToolbar({
   statusFilter,
   sortMode,
@@ -60,7 +50,6 @@ export function LibraryToolbar({
   onStatusFilterChange,
   onSortModeChange,
   onViewModeChange,
-  onAddPdf,
 }: LibraryToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -97,24 +86,13 @@ export function LibraryToolbar({
       )}
 
       <div className="flex rounded-lg border border-border-muted bg-surface-muted p-1">
-        <IconButton label="Visualizacao em lista" variant={viewMode === "list" ? "selected" : "ghost"} onClick={() => onViewModeChange("list")}>
+        <IconButton label="Visualizacao em lista" variant={viewMode === "list" ? "primary" : "ghost"} onClick={() => onViewModeChange("list")}>
           <ListIcon />
         </IconButton>
-        <IconButton label="Visualizacao em grade" variant={viewMode === "grid" ? "selected" : "ghost"} onClick={() => onViewModeChange("grid")}>
+        <IconButton label="Visualizacao em grade" variant={viewMode === "grid" ? "primary" : "ghost"} onClick={() => onViewModeChange("grid")}>
           <GridIcon />
         </IconButton>
       </div>
-
-      {compact ? null : (
-        <button
-          type="button"
-          onClick={onAddPdf}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
-        >
-          <PlusIcon />
-          Adicionar PDF
-        </button>
-      )}
     </div>
   );
 }

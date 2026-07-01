@@ -63,6 +63,24 @@ const libraryQueryKeys = {
     ] as const,
 };
 
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="20.5" x2="16.5" y1="20.5" y2="16.5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <line x1="12" x2="12" y1="5" y2="19" />
+      <line x1="5" x2="19" y1="12" y2="12" />
+    </svg>
+  );
+}
+
 export function LibraryView() {
   const queryClient = useQueryClient();
   const [activeRoute, setActiveRoute] = useState<LibraryRoute>({ type: "all" });
@@ -295,14 +313,34 @@ export function LibraryView() {
       documents={allDocuments}
       trashCount={trashCount}
       activeRoute={activeRoute}
-      searchTerm={searchTerm}
-      onSearchTermChange={setSearchTerm}
       onRouteChange={setActiveRoute}
       onCreateCollection={createCollection}
       onRenameCollection={renameCollection}
       onDeleteCollection={deleteCollection}
     >
-      <header className="flex flex-wrap items-center gap-4 border-b border-border-subtle bg-surface-panel px-8 py-6">
+      <div className="flex items-center gap-3 bg-surface-app px-8 pb-2 pt-6">
+        <label className="ml-auto flex w-full max-w-sm items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
+          <SearchIcon />
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Pesquisar na biblioteca..."
+            className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-subtle"
+          />
+        </label>
+        {isTrashRoute ? null : (
+          <button
+            type="button"
+            onClick={() => setIsAddPdfModalOpen(true)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+          >
+            <PlusIcon />
+            Adicionar
+          </button>
+        )}
+      </div>
+
+      <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-2">
         <LibraryHeader title={getRouteTitle(activeRoute)} count={documents.length} />
         {isTrashRoute && trashCount > 0 ? (
           <button
@@ -321,7 +359,6 @@ export function LibraryView() {
           onStatusFilterChange={setStatusFilter}
           onSortModeChange={setSortMode}
           onViewModeChange={setViewMode}
-          onAddPdf={() => setIsAddPdfModalOpen(true)}
         />
       </header>
 

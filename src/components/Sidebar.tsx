@@ -8,8 +8,6 @@ type SidebarProps = {
   documents: LibraryDocument[];
   trashCount: number;
   activeRoute: LibraryRoute;
-  searchTerm: string;
-  onSearchTermChange: (value: string) => void;
   onRouteChange: (route: LibraryRoute) => void;
   onCreateCollection: (name: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
@@ -167,8 +165,6 @@ export function Sidebar({
   documents,
   trashCount,
   activeRoute,
-  searchTerm,
-  onSearchTermChange,
   onRouteChange,
   onCreateCollection,
   onRenameCollection,
@@ -257,20 +253,7 @@ export function Sidebar({
         <span className="text-lg font-bold text-sidebar-text">Athenaeum</span>
       </div>
 
-      <div className="px-4 py-3">
-        <label className="flex items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-raised px-3 py-2.5 text-sidebar-muted">
-          <Icon name="search" />
-          <input
-            value={searchTerm}
-            onChange={(event) => onSearchTermChange(event.target.value)}
-            placeholder="Buscar na biblioteca..."
-            className="min-w-0 flex-1 border-0 bg-transparent text-sm text-sidebar-text outline-none placeholder:text-sidebar-muted"
-          />
-          <span className="rounded border border-sidebar-border px-1.5 py-0.5 font-mono text-[11px] text-sidebar-muted">⌘K</span>
-        </label>
-      </div>
-
-      <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2">
+      <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2 pt-3">
         <div className="space-y-1">
           {navItems(documents, trashCount).map((item) => {
             const active = isRouteActive(activeRoute, item.route);

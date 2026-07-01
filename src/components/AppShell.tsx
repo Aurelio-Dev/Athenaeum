@@ -7,8 +7,6 @@ type AppShellProps = {
   documents: LibraryDocument[];
   trashCount: number;
   activeRoute: LibraryRoute;
-  searchTerm: string;
-  onSearchTermChange: (value: string) => void;
   onRouteChange: (route: LibraryRoute) => void;
   onCreateCollection: (name: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
@@ -21,8 +19,6 @@ export function AppShell({
   documents,
   trashCount,
   activeRoute,
-  searchTerm,
-  onSearchTermChange,
   onRouteChange,
   onCreateCollection,
   onRenameCollection,
@@ -36,8 +32,6 @@ export function AppShell({
         documents={documents}
         trashCount={trashCount}
         activeRoute={activeRoute}
-        searchTerm={searchTerm}
-        onSearchTermChange={onSearchTermChange}
         onRouteChange={onRouteChange}
         onCreateCollection={onCreateCollection}
         onRenameCollection={onRenameCollection}
