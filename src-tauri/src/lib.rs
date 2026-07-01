@@ -35,6 +35,47 @@ fn select_pdf_file() -> Result<Option<SelectedPdfFile>, String> {
   }))
 }
 
+// Referencia leve a um PDF escolhido: so nome + caminho. Os bytes NAO vem aqui
+// (diferente de select_pdf_file) — para um lote grande, embutir base64 de cada
+// arquivo seria pesado. Quando os bytes forem necessarios (extrair metadados ou
+// pre-visualizar), o frontend le sob demanda via read_pdf_file(caminho).
+#[derive(Serialize)]
+struct PickedPdfFile {
+  file_name: String,
+  file_path: String,
+}
+
+// Selecao MULTIPLA nativa (um unico dialogo, varios PDFs). Devolve lista vazia
+// se o usuario cancelar. Nao substitui select_pdf_file — este e o caminho de
+// lote do novo modal de adicionar documentos.
+#[tauri::command]
+fn select_pdf_files() -> Result<Vec<PickedPdfFile>, String> {
+  let Some(paths) = rfd::FileDialog::new()
+    .add_filter("PDF", &["pdf"])
+    .pick_files()
+  else {
+    return Ok(Vec::new());
+  };
+
+  Ok(
+    paths
+      .into_iter()
+      .map(|path| {
+        let file_name = path
+          .file_name()
+          .and_then(|name| name.to_str())
+          .unwrap_or("documento.pdf")
+          .to_string();
+
+        PickedPdfFile {
+          file_name,
+          file_path: path.to_string_lossy().to_string(),
+        }
+      })
+      .collect(),
+  )
+}
+
 #[tauri::command]
 fn read_pdf_file(file_path: String) -> Result<String, String> {
   let path = PathBuf::from(&file_path);
@@ -741,7 +782,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![import_document, open_file_location, read_pdf_file, select_pdf_file])
+    .invoke_handler(tauri::generate_handler![import_document, open_file_location, read_pdf_file, select_pdf_file, select_pdf_files])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
