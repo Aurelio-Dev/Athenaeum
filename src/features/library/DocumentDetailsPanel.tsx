@@ -541,3 +541,4 @@ export function DocumentDetailsPanel({
     </aside>
   );
 }
+

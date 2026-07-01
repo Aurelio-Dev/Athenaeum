@@ -33,7 +33,7 @@ type DraftItem = {
   error?: string;
   overrideDuplicate: boolean;
 };
-
+  
 type AddDocumentModalProps = {
   collections: LibraryCollection[];
   availableTags: SubjectTag[];
@@ -209,10 +209,10 @@ export function AddDocumentModal({
   const [batchCollection, setBatchCollection] = useState(defaultCollectionName);
   const [batchTags, setBatchTags] = useState<SubjectTag[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [showNotes, setShowNotes] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const modalRef = useRef<HTMLElement | null>(null);
   const extractionStartedRef = useRef<Set<string>>(new Set());
+  const autoImportedRef = useRef(false);
 
   const isBatch = items.length > 1;
   const isImporting = items.some((item) => item.status === "importing");
@@ -243,6 +243,12 @@ export function AddDocumentModal({
       });
     });
   }, [items]);
+
+  useEffect(() => {
+    if (items.length === 0) {
+      autoImportedRef.current = false;
+    }
+  }, [items.length]);
 
   function updateItem(key: string, updates: Partial<DraftItem>) {
     setItems((current) => current.map((item) => (item.key === key ? { ...item, ...updates } : item)));
@@ -683,7 +689,7 @@ export function AddDocumentModal({
                 </div>
 
                 {phase === "review" ? renderDuplicateBanner(item) : null}
-                {phase === "importing" && allResolved ? null : renderDetailFields(item, false)}
+                {renderDetailFields(item, false)}
 
                 {phase === "review" ? (
                   <div>
