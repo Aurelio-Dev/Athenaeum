@@ -26,7 +26,7 @@ import {
 } from "../../lib/database";
 import type { DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
 import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag, ViewMode } from "../../types/library";
-import { AddPdfModal } from "./AddPdfModal";
+import { AddDocumentModal } from "./AddDocumentModal";
 import { DocumentCard } from "./DocumentCard";
 import { DocumentDetailsPanel } from "./DocumentDetailsPanel";
 import { LibraryHeader } from "./LibraryHeader";
@@ -423,9 +423,10 @@ export function LibraryView() {
       </div>
 
       {isAddPdfModalOpen ? (
-        <AddPdfModal
+        <AddDocumentModal
           collections={collections}
           availableTags={availableTags}
+          existingDocuments={allDocuments}
           onClose={() => setIsAddPdfModalOpen(false)}
           onAddDocument={addDocument}
           onAvailableTagsChange={updateAvailableTags}
