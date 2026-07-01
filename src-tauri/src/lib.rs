@@ -2,7 +2,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::Manager;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
 #[derive(Serialize)]
@@ -295,6 +295,29 @@ fn open_file_location(file_path: String) -> Result<(), String> {
   }
 
   open_path_in_file_manager(&path)
+}
+
+#[tauri::command]
+fn open_reader_panel_window<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  document_title: String,
+) -> Result<(), String> {
+  let label = "reader-annotations-panel";
+
+  if let Some(window) = app.get_webview_window(label) {
+    window.set_focus().map_err(|error| error.to_string())?;
+    return Ok(());
+  }
+
+  WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html?readerPanel=1".into()))
+    .title(format!("Anotações — {document_title}"))
+    .inner_size(420.0, 720.0)
+    .min_inner_size(360.0, 520.0)
+    .resizable(true)
+    .build()
+    .map_err(|error| error.to_string())?;
+
+  Ok(())
 }
 
 #[cfg(target_os = "windows")]
@@ -755,6 +778,70 @@ WHERE NOT EXISTS (
       kind: MigrationKind::Up,
     },
     Migration {
+      version: 8,
+      description: "add_reader_info_fields_and_annotation_colors",
+      sql: r#"
+ALTER TABLE documents ADD COLUMN time_spent_seconds INTEGER NOT NULL DEFAULT 0;
+
+DROP TRIGGER IF EXISTS annotations_touch_updated_at;
+DROP INDEX IF EXISTS idx_annotations_document_id;
+DROP INDEX IF EXISTS idx_annotations_document_page;
+
+CREATE TABLE annotations_new (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  page INTEGER NOT NULL CHECK (page >= 1),
+  color TEXT NOT NULL DEFAULT 'amber',
+  selected_text TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  rects_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
+INSERT INTO annotations_new (
+  id,
+  document_id,
+  page,
+  color,
+  selected_text,
+  note,
+  rects_json,
+  created_at,
+  updated_at
+)
+SELECT
+  id,
+  document_id,
+  page,
+  color,
+  selected_text,
+  note,
+  rects_json,
+  created_at,
+  updated_at
+FROM annotations;
+
+DROP TABLE annotations;
+ALTER TABLE annotations_new RENAME TO annotations;
+
+CREATE INDEX idx_annotations_document_id ON annotations(document_id);
+CREATE INDEX idx_annotations_document_page ON annotations(document_id, page);
+
+CREATE TRIGGER annotations_touch_updated_at
+AFTER UPDATE ON annotations
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+  UPDATE annotations
+  SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = NEW.id;
+END;
+"#,
+      kind: MigrationKind::Up,
+    },
+    Migration {
       version: 9,
       description: "add_collection_color_and_description",
       sql: include_str!("../migrations/0009_add_collection_color_and_description.sql"),
@@ -782,7 +869,14 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![import_document, open_file_location, read_pdf_file, select_pdf_file, select_pdf_files])
+    .invoke_handler(tauri::generate_handler![
+      import_document,
+      open_file_location,
+      open_reader_panel_window,
+      read_pdf_file,
+      select_pdf_file,
+      select_pdf_files
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
