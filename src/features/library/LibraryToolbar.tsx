@@ -1,14 +1,11 @@
-import { IconButton } from "../../components/IconButton";
-import type { SortMode, StatusFilter, ViewMode } from "../../types/library";
+import type { SortMode, StatusFilter } from "../../types/library";
 
 type LibraryToolbarProps = {
   statusFilter: StatusFilter;
   sortMode: SortMode;
-  viewMode: ViewMode;
   compact?: boolean;
   onStatusFilterChange: (value: StatusFilter) => void;
   onSortModeChange: (value: SortMode) => void;
-  onViewModeChange: (value: ViewMode) => void;
 };
 
 function FilterIcon() {
@@ -21,35 +18,12 @@ function FilterIcon() {
   );
 }
 
-function ListIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <line x1="4" x2="20" y1="7" y2="7" />
-      <line x1="4" x2="20" y1="12" y2="12" />
-      <line x1="4" x2="20" y1="17" y2="17" />
-    </svg>
-  );
-}
-
-function GridIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <rect x="4" y="4" width="6.5" height="6.5" rx="1.2" />
-      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" />
-      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" />
-      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" />
-    </svg>
-  );
-}
-
 export function LibraryToolbar({
   statusFilter,
   sortMode,
-  viewMode,
   compact = false,
   onStatusFilterChange,
   onSortModeChange,
-  onViewModeChange,
 }: LibraryToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -84,15 +58,6 @@ export function LibraryToolbar({
           </label>
         </>
       )}
-
-      <div className="flex rounded-lg border border-border-muted bg-surface-muted p-1">
-        <IconButton label="Visualizacao em lista" variant={viewMode === "list" ? "primary" : "ghost"} onClick={() => onViewModeChange("list")}>
-          <ListIcon />
-        </IconButton>
-        <IconButton label="Visualizacao em grade" variant={viewMode === "grid" ? "primary" : "ghost"} onClick={() => onViewModeChange("grid")}>
-          <GridIcon />
-        </IconButton>
-      </div>
     </div>
   );
 }

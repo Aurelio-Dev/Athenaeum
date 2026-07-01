@@ -27,7 +27,7 @@ import {
   updateDocumentMetadata as updatePersistedDocumentMetadata,
 } from "../../lib/database";
 import type { DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
-import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag, ViewMode } from "../../types/library";
+import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../../types/library";
 import { AddDocumentModal } from "./AddDocumentModal";
 import { DocumentCard } from "./DocumentCard";
 import { DocumentDetailsPanel } from "./DocumentDetailsPanel";
@@ -130,7 +130,6 @@ export function LibraryView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("recentes");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [isAddPdfModalOpen, setIsAddPdfModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
@@ -224,10 +223,7 @@ export function LibraryView() {
     [queryClient],
   );
 
-  const listClassName =
-    viewMode === "grid"
-      ? "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
-      : "flex flex-col gap-3";
+  const listClassName = "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
   const activeCollection =
@@ -418,10 +414,8 @@ export function LibraryView() {
           compact={isTrashRoute}
           statusFilter={statusFilter}
           sortMode={sortMode}
-          viewMode={viewMode}
           onStatusFilterChange={setStatusFilter}
           onSortModeChange={setSortMode}
-          onViewModeChange={setViewMode}
         />
       </header>
 
@@ -451,7 +445,6 @@ export function LibraryView() {
                 <DocumentCard
                   key={document.id}
                   document={document}
-                  viewMode={viewMode}
                   mode={isTrashRoute ? "trash" : "library"}
                   isSelected={document.id === selectedDocumentId}
                   onSelect={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
