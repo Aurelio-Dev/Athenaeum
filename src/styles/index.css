@@ -3,55 +3,86 @@
 @tailwind utilities;
 
 :root {
-  --color-surface-app: #FAFAFA;
-  --color-surface-panel: #FFFFFF;
-  --color-surface-card: #FFFFFF;
-  --color-surface-muted: #F3F4F6;
-  --color-surface-subtle: #EEF0F3;
+  /* Backgrounds */
+  --background: #F5EDE4;
+  --card: #FAF5EF;
+  --sidebar: #EDE5DA;
+  --popover: #FAF5EF;
+
+  /* Texto */
+  --foreground: #1A1410;
+  --card-foreground: #1A1410;
+  --muted-foreground: #7A6558;
+
+  /* Accent */
+  --primary: #9C5A2E;
+  --primary-foreground: #FFFFFF;
+  --accent: #9C5A2E;
+  --accent-foreground: #FFFFFF;
+
+  /* Superficies de interface */
+  --surface-header: #14161F;
+  --surface-elevated: #1E2130;
+
+  /* Borda e input */
+  --border: #D9CBBF;
+  --input: #EDE5DA;
+  --ring: #9C5A2E;
+
+  /* Estados */
+  --destructive: #B91C1C;
+  --destructive-foreground: #FFFFFF;
+  --muted: #EDE5DA;
+
+  --color-surface-app: var(--background);
+  --color-surface-panel: var(--card);
+  --color-surface-card: var(--card);
+  --color-surface-muted: var(--muted);
+  --color-surface-subtle: var(--input);
   /* Fundo de elementos flutuantes escuros (toolbar de selecao do leitor). */
-  --color-surface-elevated: #1E2130;
+  --color-surface-elevated: var(--surface-elevated);
   --color-overlay-modal: rgba(24, 24, 27, 0.7);
 
-  --color-text-primary: #18181B;
-  --color-text-secondary: #6B7280;
-  --color-text-subtle: #9CA3AF;
-  --color-text-inverse: #FAFAFA;
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --color-text-subtle: var(--muted-foreground);
+  --color-text-inverse: var(--primary-foreground);
 
-  --color-sidebar: #18181B;
-  --color-sidebar-raised: #27272A;
-  --color-sidebar-active: #383A62;
-  --color-sidebar-border: #3F3F46;
-  --color-sidebar-text: #D4D4D8;
-  --color-sidebar-muted: #71717A;
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-raised: var(--card);
+  --color-sidebar-active: var(--primary);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-text: var(--foreground);
+  --color-sidebar-muted: var(--muted-foreground);
 
-  --color-border-subtle: #ECECEC;
-  --color-border-muted: #E4E4E7;
-  --color-border-strong: #D4D4D8;
+  --color-border-subtle: var(--border);
+  --color-border-muted: var(--border);
+  --color-border-strong: var(--border);
 
-  --color-primary: #4F46E5;
-  --color-primary-hover: #4338CA;
-  --color-primary-soft: #EEF2FF;
-  --color-primary-text: #3730A3;
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary);
+  --color-primary-soft: var(--muted);
+  --color-primary-text: var(--primary);
 
-  --color-tag-violet-bg: #EDE9FE;
-  --color-tag-violet-text: #5B21B6;
-  --color-tag-indigo-bg: #E0E7FF;
-  --color-tag-indigo-text: #3730A3;
-  --color-tag-blue-bg: #DBEAFE;
-  --color-tag-blue-text: #1D4ED8;
-  --color-tag-teal-bg: #CCFBF1;
-  --color-tag-teal-text: #0F766E;
-  --color-tag-rose-bg: #FFE4E6;
-  --color-tag-rose-text: #BE123C;
-  --color-tag-amber-bg: #FEF3C7;
-  --color-tag-amber-text: #B45309;
+  --color-tag-violet-bg: #5B21B6;
+  --color-tag-violet-text: #FFFFFF;
+  --color-tag-indigo-bg: #4338CA;
+  --color-tag-indigo-text: #FFFFFF;
+  --color-tag-blue-bg: #1D4ED8;
+  --color-tag-blue-text: #FFFFFF;
+  --color-tag-teal-bg: #0D5C54;
+  --color-tag-teal-text: #FFFFFF;
+  --color-tag-rose-bg: #9D174D;
+  --color-tag-rose-text: #FFFFFF;
+  --color-tag-amber-bg: #92400E;
+  --color-tag-amber-text: #FFFFFF;
 
-  --color-status-green-bg: #DCFCE7;
-  --color-status-green-text: #166534;
-  --color-status-slate-bg: #E5E7EB;
-  --color-status-slate-text: #475569;
-  --color-status-red-bg: #FEE2E2;
-  --color-status-red-text: #B91C1C;
+  --color-status-green-bg: #036B4D;
+  --color-status-green-text: #FFFFFF;
+  --color-status-slate-bg: #475569;
+  --color-status-slate-text: #FFFFFF;
+  --color-status-red-bg: var(--destructive);
+  --color-status-red-text: var(--destructive-foreground);
 
   /* Highlight da tela de leitura. Unica cor por ora (Amber, validada WCAG AA).
      bg e usado como marca-texto (mix-blend-multiply); text para acentos/lista. */
@@ -68,6 +99,33 @@
   --color-spine-teal: #0D9488;
   --color-spine-rose: #DB2777;
   --color-spine-amber: #D97706;
+}
+
+.dark {
+  --background: #1A1410;
+  --card: #231C16;
+  --sidebar: #140F0B;
+  --popover: #231C16;
+
+  --foreground: #F0E6DC;
+  --card-foreground: #F0E6DC;
+  --muted-foreground: #9E8878;
+
+  --primary: #9C5A2E;
+  --primary-foreground: #FFFFFF;
+  --accent: #9C5A2E;
+  --accent-foreground: #FFFFFF;
+
+  --surface-header: #14161F;
+  --surface-elevated: #1E2130;
+
+  --border: #3D2E22;
+  --input: #2E2018;
+  --ring: #9C5A2E;
+
+  --destructive: #B91C1C;
+  --destructive-foreground: #FFFFFF;
+  --muted: #2E2018;
 }
 
 * {
