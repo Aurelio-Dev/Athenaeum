@@ -23,6 +23,7 @@ type ReaderSidePanelProps = {
   onDock: () => void;
   onJumpToPage: (page: number) => void;
   onDeleteAnnotation: (annotationId: string) => void;
+  onUpdateAnnotationNote: (annotationId: string, note: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -79,6 +80,7 @@ export function ReaderSidePanel({
   onDock,
   onJumpToPage,
   onDeleteAnnotation,
+  onUpdateAnnotationNote,
   onClose,
 }: ReaderSidePanelProps) {
   const [activeTab, setActiveTab] = useState<ReaderTab>("ai");
@@ -165,7 +167,7 @@ export function ReaderSidePanel({
         {activeTab === "notes" ? (
           <NotesTab notesText={notesText} onNotesChange={onNotesChange} onBlur={onNotesBlur} />
         ) : activeTab === "annotations" ? (
-          <AnnotationsTab annotations={annotations} onJumpToPage={onJumpToPage} onDelete={onDeleteAnnotation} />
+          <AnnotationsTab annotations={annotations} onJumpToPage={onJumpToPage} onDelete={onDeleteAnnotation} onUpdateNote={onUpdateAnnotationNote} />
         ) : (
           <AiTab />
         )}

@@ -799,11 +799,18 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
       }
 
       await updateAnnotationNote(annotationId, note);
-      setAnnotations((current) => current.map((item) => (item.id === annotationId ? { ...item, note } : item)));
+      const updatedAt = new Date().toISOString();
+      setAnnotations((current) => current.map((item) => (item.id === annotationId ? { ...item, note, updatedAt } : item)));
       setEditingAnnotationId(null);
     },
     [editingAnnotationId],
   );
+
+  const saveAnnotationNoteById = useCallback(async (annotationId: string, note: string) => {
+    await updateAnnotationNote(annotationId, note);
+    const updatedAt = new Date().toISOString();
+    setAnnotations((current) => current.map((item) => (item.id === annotationId ? { ...item, note, updatedAt } : item)));
+  }, []);
 
   // Remove a anotacao (highlight + nota). LANCA em caso de falha para o popup
   // avisar; so atualiza o estado local apos o banco confirmar.
@@ -1188,6 +1195,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             onDock={() => setSidePanelFloating(false)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}
+            onUpdateAnnotationNote={saveAnnotationNoteById}
             onClose={() => {
               setSidePanelFloating(false);
               setSidePanelOpen(false);

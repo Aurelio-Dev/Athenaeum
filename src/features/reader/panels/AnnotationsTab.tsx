@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Annotation } from "../../../types/annotation";
 import { highlightPalette } from "../highlightPalette";
 
@@ -5,6 +6,14 @@ type AnnotationsTabProps = {
   annotations: Annotation[];
   onJumpToPage: (page: number) => void;
   onDelete: (annotationId: string) => void;
+  onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
+};
+
+type AnnotationCardProps = {
+  annotation: Annotation;
+  onJumpToPage: (page: number) => void;
+  onDelete: (annotationId: string) => void;
+  onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
 };
 
 function TrashIcon() {
@@ -53,7 +62,82 @@ function transparentColor(hex: string) {
   return `${hex}26`;
 }
 
-export function AnnotationsTab({ annotations, onJumpToPage, onDelete }: AnnotationsTabProps) {
+function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: AnnotationCardProps) {
+  const [note, setNote] = useState(annotation.note);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const palette = highlightPalette[annotation.color];
+  const canEdit = Boolean(onUpdateNote);
+
+  useEffect(() => {
+    setNote(annotation.note);
+  }, [annotation.note]);
+
+  async function saveNote() {
+    if (!onUpdateNote || note === annotation.note || isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage("");
+
+    try {
+      await onUpdateNote(annotation.id, note);
+    } catch (error) {
+      console.warn("Nao foi possivel salvar a nota.", error);
+      setErrorMessage("Nao foi possivel salvar a nota.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <article className="group relative overflow-hidden rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
+      <button type="button" className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60" onClick={() => onJumpToPage(annotation.page)}>
+        <blockquote
+          className="border-l-[3px] px-4 py-4 text-sm italic leading-6 text-[var(--foreground)]"
+          style={{ borderLeftColor: palette.bg, backgroundColor: transparentColor(palette.bg) }}
+        >
+          “{annotation.selectedText}”
+        </blockquote>
+      </button>
+
+      {canEdit ? (
+        <textarea
+          value={note}
+          rows={3}
+          placeholder="Escreva uma nota sobre este trecho..."
+          disabled={isSaving}
+          className="block w-full resize-none bg-transparent px-4 pt-4 text-sm leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:cursor-wait disabled:opacity-70"
+          onChange={(event) => setNote(event.target.value)}
+          onBlur={() => void saveNote()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        />
+      ) : annotation.note.trim().length > 0 ? (
+        <p className="px-4 pt-4 text-sm leading-6 text-[var(--foreground)]">{annotation.note}</p>
+      ) : null}
+
+      {errorMessage.length > 0 ? <p className="px-4 pt-2 text-xs font-semibold text-status-red-text">{errorMessage}</p> : null}
+
+      <footer className="px-4 pb-4 pt-4 text-xs text-[var(--muted-foreground)]">
+        Página {annotation.page} · {formatRelativeTime(annotation.updatedAt)}
+      </footer>
+
+      <button
+        type="button"
+        aria-label="Remover anotação"
+        title="Remover anotação"
+        className="absolute right-3 top-3 rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 transition hover:bg-status-red hover:text-status-red-text focus:opacity-100 group-hover:opacity-100"
+        onClick={() => onDelete(annotation.id)}
+      >
+        <TrashIcon />
+      </button>
+    </article>
+  );
+}
+
+export function AnnotationsTab({ annotations, onJumpToPage, onDelete, onUpdateNote }: AnnotationsTabProps) {
   if (annotations.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center text-[var(--muted-foreground)]">
@@ -71,40 +155,9 @@ export function AnnotationsTab({ annotations, onJumpToPage, onDelete }: Annotati
 
   return (
     <div className="space-y-4 px-4 py-5">
-      {sortedAnnotations.map((annotation) => {
-        const palette = highlightPalette[annotation.color];
-
-        return (
-          <article key={annotation.id} className="group relative overflow-hidden rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
-            <button type="button" className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60" onClick={() => onJumpToPage(annotation.page)}>
-              <blockquote
-                className="border-l-[3px] px-4 py-4 text-sm italic leading-6 text-[var(--foreground)]"
-                style={{ borderLeftColor: palette.bg, backgroundColor: transparentColor(palette.bg) }}
-              >
-                “{annotation.selectedText}”
-              </blockquote>
-
-              {annotation.note.trim().length > 0 ? (
-                <p className="px-4 pt-4 text-sm leading-6 text-[var(--foreground)]">{annotation.note}</p>
-              ) : null}
-
-              <footer className="px-4 pb-4 pt-4 text-xs text-[var(--muted-foreground)]">
-                Página {annotation.page} · {formatRelativeTime(annotation.updatedAt)}
-              </footer>
-            </button>
-
-            <button
-              type="button"
-              aria-label="Remover anotação"
-              title="Remover anotação"
-              className="absolute right-3 top-3 rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 transition hover:bg-status-red hover:text-status-red-text focus:opacity-100 group-hover:opacity-100"
-              onClick={() => onDelete(annotation.id)}
-            >
-              <TrashIcon />
-            </button>
-          </article>
-        );
-      })}
+      {sortedAnnotations.map((annotation) => (
+        <AnnotationCard key={annotation.id} annotation={annotation} onJumpToPage={onJumpToPage} onDelete={onDelete} onUpdateNote={onUpdateNote} />
+      ))}
     </div>
   );
 }

@@ -873,7 +873,7 @@ export async function createAnnotation(input: NewAnnotation): Promise<Annotation
 
 export async function updateAnnotationNote(annotationId: string, note: string): Promise<void> {
   const database = await getDatabase();
-  await database.execute("UPDATE annotations SET note = $1 WHERE id = $2", [note, annotationId]);
+  await database.execute("UPDATE annotations SET note = $1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $2", [note, annotationId]);
 }
 
 export async function deleteAnnotation(annotationId: string): Promise<void> {
