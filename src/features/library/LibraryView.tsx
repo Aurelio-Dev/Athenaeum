@@ -1,8 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SVGProps } from "react";
 import { remove } from "@tauri-apps/plugin-fs";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
+import { EmptyState } from "../../components/EmptyState";
 import {
   countTrashDocuments,
   createCollection as createPersistedCollection,
@@ -77,6 +79,47 @@ function PlusIcon() {
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
       <line x1="12" x2="12" y1="5" y2="19" />
       <line x1="5" x2="19" y1="12" y2="12" />
+    </svg>
+  );
+}
+
+// Icones de estado vazio (equivalentes inline a LibraryBig/FolderOpen/SearchX).
+// Aceitam props de SVG (className, size) para o EmptyState controlar cor/tamanho.
+const emptyStateIconProps = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function LibraryBigIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...emptyStateIconProps} {...props}>
+      <rect width="8" height="18" x="3" y="3" rx="1" />
+      <path d="M7 3v18" />
+      <path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z" />
+    </svg>
+  );
+}
+
+function FolderOpenIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...emptyStateIconProps} {...props}>
+      <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function SearchXIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...emptyStateIconProps} {...props}>
+      <path d="m13.5 8.5-5 5" />
+      <path d="m8.5 8.5 5 5" />
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
     </svg>
   );
 }
@@ -187,6 +230,9 @@ export function LibraryView() {
       : "flex flex-col gap-3";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
+  const activeCollection =
+    activeRoute.type === "collection" ? collections.find((collection) => collection.name === activeRoute.collectionName) : undefined;
+  const hasActiveSearch = searchTerm.trim().length > 0;
   const emptyMessage = isTrashRoute ? "Sua lixeira esta vazia" : "Nenhum documento encontrado";
   const emptyDescription = isTrashRoute ? "Itens movidos para a lixeira aparecem aqui por ate 30 dias." : "Ajuste a busca ou os filtros para ver a biblioteca novamente.";
 
@@ -414,6 +460,26 @@ export function LibraryView() {
                 />
               ))}
             </div>
+          ) : hasActiveSearch ? (
+            <EmptyState
+              icon={SearchXIcon}
+              title="Nenhum resultado"
+              description="Tente outros termos ou remova os filtros ativos."
+            />
+          ) : activeRoute.type === "collection" ? (
+            <EmptyState
+              icon={FolderOpenIcon}
+              title="Coleção vazia"
+              description="Nenhum documento nesta coleção ainda."
+              action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
+            />
+          ) : allDocuments.length === 0 && !isTrashRoute ? (
+            <EmptyState
+              icon={LibraryBigIcon}
+              title="Sua biblioteca está vazia"
+              description="Adicione seu primeiro documento para começar."
+              action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
+            />
           ) : (
             <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
               <div className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold text-text-secondary">{emptyMessage}</div>
@@ -444,6 +510,7 @@ export function LibraryView() {
           collections={collections}
           availableTags={availableTags}
           existingDocuments={allDocuments}
+          defaultCollectionId={activeCollection?.id}
           onClose={() => setIsAddPdfModalOpen(false)}
           onAddDocument={addDocument}
           onAvailableTagsChange={updateAvailableTags}

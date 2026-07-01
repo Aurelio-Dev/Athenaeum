@@ -38,6 +38,9 @@ type AddDocumentModalProps = {
   collections: LibraryCollection[];
   availableTags: SubjectTag[];
   existingDocuments: LibraryDocument[];
+  // Colecao pre-selecionada ao abrir (ex.: ao adicionar de dentro de uma
+  // colecao). Ausente => nenhuma selecao inicial.
+  defaultCollectionId?: string;
   onClose: () => void;
   onAddDocument: (document: LibraryDocument) => void | Promise<void>;
   onAvailableTagsChange: (tags: SubjectTag[]) => void;
@@ -166,7 +169,7 @@ function authorsKey(authors: string[]) {
     .join("|");
 }
 
-function createDraftItem(picked: PickedPdfFile): DraftItem {
+function createDraftItem(picked: PickedPdfFile, collection = ""): DraftItem {
   return {
     key: crypto.randomUUID(),
     fileName: picked.file_name,
@@ -175,7 +178,7 @@ function createDraftItem(picked: PickedPdfFile): DraftItem {
     authors: "",
     source: "",
     year: "",
-    collection: "",
+    collection,
     tags: [],
     notes: "",
     extractionState: "loading",
@@ -192,13 +195,18 @@ export function AddDocumentModal({
   collections,
   availableTags,
   existingDocuments,
+  defaultCollectionId,
   onClose,
   onAddDocument,
   onAvailableTagsChange,
 }: AddDocumentModalProps) {
+  // O seletor de colecao do modal e por NOME; convertemos o id recebido para o
+  // nome correspondente. Vazio quando nao ha default (ou id inexistente).
+  const defaultCollectionName = collections.find((collection) => collection.id === defaultCollectionId)?.name ?? "";
+
   const [items, setItems] = useState<DraftItem[]>([]);
   const [phase, setPhase] = useState<"review" | "importing">("review");
-  const [batchCollection, setBatchCollection] = useState("");
+  const [batchCollection, setBatchCollection] = useState(defaultCollectionName);
   const [batchTags, setBatchTags] = useState<SubjectTag[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [showNotes, setShowNotes] = useState(false);
@@ -245,7 +253,7 @@ export function AddDocumentModal({
       const existingPaths = new Set(current.map((item) => item.filePath));
       const additions = picked
         .filter((file) => isPdfFileName(file.file_name) && !existingPaths.has(file.file_path))
-        .map(createDraftItem);
+        .map((file) => createDraftItem(file, defaultCollectionName));
 
       return additions.length === 0 ? current : [...current, ...additions];
     });
