@@ -99,7 +99,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
         onKeyUp={syncSelectionState}
         onSelect={syncSelectionState}
         placeholder="Anotações gerais sobre este documento..."
-        className="h-full w-full resize-none border-0 bg-transparent px-5 py-6 text-sm leading-7 text-foreground outline-none placeholder:text-muted-foreground"
+        className="h-full w-full resize-none border-0 bg-transparent px-5 py-6 text-sm leading-7 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
     </div>
   );

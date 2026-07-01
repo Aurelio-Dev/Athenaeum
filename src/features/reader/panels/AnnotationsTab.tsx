@@ -56,7 +56,7 @@ function transparentColor(hex: string) {
 export function AnnotationsTab({ annotations, onJumpToPage, onDelete }: AnnotationsTabProps) {
   if (annotations.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center px-8 text-center text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center px-8 text-center text-[var(--muted-foreground)]">
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border-subtle">
           <EmptyIcon />
         </div>
@@ -75,20 +75,20 @@ export function AnnotationsTab({ annotations, onJumpToPage, onDelete }: Annotati
         const palette = highlightPalette[annotation.color];
 
         return (
-          <article key={annotation.id} className="group relative rounded-lg border border-border-subtle bg-background transition hover:border-primary/70">
+          <article key={annotation.id} className="group relative rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
             <button type="button" className="block w-full px-4 py-4 text-left" onClick={() => onJumpToPage(annotation.page)}>
               <blockquote
-                className="rounded-md border-l-[3px] px-3 py-3 text-sm italic leading-6 text-foreground"
+                className="rounded-md border-l-[3px] px-3 py-3 text-sm italic leading-6 text-[var(--foreground)]"
                 style={{ borderLeftColor: palette.bg, backgroundColor: transparentColor(palette.bg) }}
               >
                 “{annotation.selectedText}”
               </blockquote>
 
               {annotation.note.trim().length > 0 ? (
-                <p className="mt-4 text-sm leading-6 text-foreground">{annotation.note}</p>
+                <p className="mt-4 text-sm leading-6 text-[var(--foreground)]">{annotation.note}</p>
               ) : null}
 
-              <footer className="mt-4 text-xs text-muted-foreground">
+              <footer className="mt-4 text-xs text-[var(--muted-foreground)]">
                 Página {annotation.page} · {formatRelativeTime(annotation.updatedAt)}
               </footer>
             </button>
@@ -97,7 +97,7 @@ export function AnnotationsTab({ annotations, onJumpToPage, onDelete }: Annotati
               type="button"
               aria-label="Remover anotação"
               title="Remover anotação"
-              className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-status-red hover:text-status-red-text focus:opacity-100 group-hover:opacity-100"
+              className="absolute right-3 top-3 rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 transition hover:bg-status-red hover:text-status-red-text focus:opacity-100 group-hover:opacity-100"
               onClick={() => onDelete(annotation.id)}
             >
               <TrashIcon />

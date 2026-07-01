@@ -49,7 +49,7 @@ export function ReaderPanelPopout() {
   const [notesText, setNotesText] = useState(payload.notesText);
 
   return (
-    <main className="flex h-screen flex-col bg-card text-foreground">
+    <main className="flex h-screen flex-col bg-[var(--card)] text-[var(--foreground)]">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-subtle bg-[var(--surface-header)] px-4">
         <h1 className="min-w-0 truncate text-sm font-bold text-white">Anotações — {payload.documentTitle}</h1>
       </header>
@@ -61,7 +61,7 @@ export function ReaderPanelPopout() {
               key={tab.id}
               type="button"
               className={`px-5 py-[18px] text-sm font-semibold ${
-                activeTab === tab.id ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
+                activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
@@ -69,7 +69,7 @@ export function ReaderPanelPopout() {
             </button>
           ))}
         </div>
-        <button type="button" aria-label="Janela separada" title="Janela separada" className="rounded-md bg-muted p-2 text-muted-foreground">
+        <button type="button" aria-label="Janela separada" title="Janela separada" className="rounded-md bg-[var(--muted)] p-2 text-[var(--muted-foreground)]">
           <PopOutIcon />
         </button>
       </div>

@@ -115,8 +115,8 @@ export function ReaderSidePanel({
   }
 
   const panelClassName = isFloating
-    ? "fixed z-40 flex resize flex-col overflow-auto rounded-xl border border-border-subtle bg-card shadow-2xl"
-    : "relative z-20 flex w-[340px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-card";
+    ? "fixed z-40 flex resize flex-col overflow-auto rounded-xl border border-border-subtle bg-[var(--card)] shadow-2xl"
+    : "relative z-20 flex w-[340px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-[var(--card)]";
   const panelStyle = isFloating
     ? {
         left: floatingPosition.x,
@@ -137,7 +137,7 @@ export function ReaderSidePanel({
               key={tab.id}
               type="button"
               className={`px-5 py-[18px] text-sm font-semibold ${
-                activeTab === tab.id ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
+                activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => setActiveTab(tab.id)}
@@ -152,7 +152,7 @@ export function ReaderSidePanel({
             type="button"
             aria-label="Abrir em janela separada"
             title="Abrir em janela separada"
-            className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
             onMouseDown={(event) => event.stopPropagation()}
             onClick={isFloating ? onDock : floatPanel}
           >
