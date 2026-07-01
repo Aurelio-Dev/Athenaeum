@@ -43,6 +43,8 @@ export type LibraryDocument = {
 export type LibraryCollection = {
   id: string;
   name: string;
+  color: string;
+  description: string;
 };
 
 export type ExtractedPdfMetadata = {

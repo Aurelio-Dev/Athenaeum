@@ -713,6 +713,12 @@ WHERE NOT EXISTS (
 "#,
       kind: MigrationKind::Up,
     },
+    Migration {
+      version: 9,
+      description: "add_collection_color_and_description",
+      sql: include_str!("../migrations/0009_add_collection_color_and_description.sql"),
+      kind: MigrationKind::Up,
+    },
   ]
 }
 

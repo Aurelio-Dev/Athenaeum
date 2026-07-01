@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { availableSubjectTags } from "../data/subjectTags";
+import { TAG_COLOR_TOKENS } from "./tagColors";
 import { getSubjectTagTone } from "../styles/designTokens";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../types/library";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
+const defaultCollectionColor = TAG_COLOR_TOKENS.slate.bg;
 const defaultCollectionName = "Sem título";
 
 let databasePromise: Promise<Database> | null = null;
@@ -33,6 +35,8 @@ type DocumentRow = {
 type CollectionRow = {
   id: string;
   name: string;
+  color: string;
+  description: string;
 };
 
 type TagRow = {
@@ -433,7 +437,7 @@ function buildFtsQuery(searchTerm: string) {
 export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promise<LibrarySnapshot> {
   const database = await getDatabase();
   const [collections, availableTags, allDocuments, documents, trashCountRows] = await Promise.all([
-    database.select<CollectionRow[]>("SELECT id, name FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
+    database.select<CollectionRow[]>("SELECT id, name, color, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
     database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC"),
     listDocuments(database, { searchTerm: "", statusFilter: "all", sortMode: "recentes", route: { type: "all" } }),
     listDocuments(database, options),
@@ -451,7 +455,7 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
 
 export async function listCollections(): Promise<LibraryCollection[]> {
   const database = await getDatabase();
-  return database.select<CollectionRow[]>("SELECT id, name FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC");
+  return database.select<CollectionRow[]>("SELECT id, name, color, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC");
 }
 
 export async function listAvailableTags(): Promise<SubjectTag[]> {
@@ -481,9 +485,14 @@ function normalizeCollectionName(collectionName: string) {
   return collectionName.trim().replace(/\s+/g, " ");
 }
 
-export async function createCollection(collectionName: string) {
+function normalizeCollectionDescription(collectionDescription = "") {
+  return collectionDescription.trim().replace(/\s+/g, " ");
+}
+
+export async function createCollection(collectionName: string, collectionDescription = "", collectionColor = defaultCollectionColor) {
   const database = await getDatabase();
   const name = normalizeCollectionName(collectionName);
+  const description = normalizeCollectionDescription(collectionDescription);
 
   if (name.length === 0) {
     throw new Error("Informe um nome para a colecao.");
@@ -494,9 +503,14 @@ export async function createCollection(collectionName: string) {
   }
 
   const id = await createUniqueCollectionId(database, name);
-  await database.execute("INSERT INTO collections (id, name, is_system) VALUES ($1, $2, 0)", [id, name]);
+  await database.execute("INSERT INTO collections (id, name, color, description, is_system) VALUES ($1, $2, $3, $4, 0)", [
+    id,
+    name,
+    collectionColor,
+    description,
+  ]);
 
-  return { id, name };
+  return { id, name, color: collectionColor, description };
 }
 
 export async function renameCollection(collectionId: string, collectionName: string) {
