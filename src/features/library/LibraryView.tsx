@@ -489,9 +489,13 @@ export function LibraryView() {
             mode={isTrashRoute ? "trash" : "library"}
             onClose={() => setSelectedDocumentId(null)}
             onOpenReader={(document) => void openForReading(document)}
-            onUpdateDocument={(documentId, updates) => void updateDocumentMetadata(documentId, updates)}
+            onUpdateDocument={(documentId, updates) =>
+              void updateDocumentMetadata(documentId, { ...updates, tags: selectedDocument.tags })
+            }
             onToggleFavorite={(documentId) => void toggleFavorite(documentId)}
             onAvailableTagsChange={updateAvailableTags}
+            onUpdateNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)}
+            onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}
             onRestore={(documentId) => void restoreFromTrash(documentId)}
             onPermanentDelete={() => setPendingConfirmation({ type: "permanent-delete", document: selectedDocument })}
           />
