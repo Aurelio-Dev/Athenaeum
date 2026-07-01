@@ -163,7 +163,10 @@ export function LibraryView() {
     [queryClient],
   );
 
-  const listClassName = viewMode === "grid" ? "grid grid-cols-2 gap-3" : "flex flex-col gap-3";
+  const listClassName =
+    viewMode === "grid"
+      ? "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
+      : "flex flex-col gap-3";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
   const emptyMessage = isTrashRoute ? "Sua lixeira esta vazia" : "Nenhum documento encontrado";
