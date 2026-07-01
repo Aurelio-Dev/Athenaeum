@@ -1,6 +1,6 @@
 import { type MouseEvent, useState } from "react";
 import { IconButton } from "./IconButton";
-import { deriveCollectionColor } from "../lib/documentColor";
+import { NewCollectionModal } from "./NewCollectionModal";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
 type SidebarProps = {
@@ -9,7 +9,7 @@ type SidebarProps = {
   trashCount: number;
   activeRoute: LibraryRoute;
   onRouteChange: (route: LibraryRoute) => void;
-  onCreateCollection: (name: string) => Promise<void>;
+  onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
 };
@@ -22,7 +22,6 @@ type NavItem = {
 };
 
 type CollectionDialogState =
-  | { type: "create" }
   | { type: "edit"; collection: LibraryCollection }
   | { type: "delete"; collection: LibraryCollection; count: number }
   | null;
@@ -170,6 +169,7 @@ export function Sidebar({
   onRenameCollection,
   onDeleteCollection,
 }: SidebarProps) {
+  const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
   const [collectionName, setCollectionName] = useState("");
   const [collectionError, setCollectionError] = useState("");
@@ -182,9 +182,7 @@ export function Sidebar({
 
   function openCreateCollectionDialog() {
     setCollectionContextMenu(null);
-    setCollectionName("");
-    setCollectionError("");
-    setCollectionDialog({ type: "create" });
+    setIsNewCollectionModalOpen(true);
   }
 
   function openEditCollectionDialog(collection: LibraryCollection) {
@@ -228,9 +226,7 @@ export function Sidebar({
     setCollectionError("");
 
     try {
-      if (collectionDialog.type === "create") {
-        await onCreateCollection(collectionName);
-      } else if (collectionDialog.type === "edit") {
+      if (collectionDialog.type === "edit") {
         await onRenameCollection(collectionDialog.collection, collectionName);
       } else {
         await onDeleteCollection(collectionDialog.collection);
@@ -310,7 +306,7 @@ export function Sidebar({
                 >
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: deriveCollectionColor(collection.name) }}
+                    style={{ backgroundColor: collection.color }}
                     aria-hidden="true"
                   />
                   <span className="truncate">{collection.name}</span>
@@ -395,16 +391,12 @@ export function Sidebar({
           >
             <header className="border-b border-border-subtle px-6 py-5">
               <h2 id="collection-dialog-title" className="text-lg font-bold">
-                {collectionDialog.type === "create"
-                  ? "Nova colecao"
-                  : collectionDialog.type === "edit"
-                    ? "Editar colecao"
-                    : "Excluir colecao?"}
+                {collectionDialog.type === "edit" ? "Editar colecao" : "Excluir colecao?"}
               </h2>
               <p className="mt-2 text-sm leading-6 text-text-secondary">
                 {collectionDialog.type === "delete"
                   ? `Os ${collectionDialog.count} documentos desta colecao serao mantidos e movidos para outra colecao.`
-                  : "Organize sua biblioteca com uma colecao personalizada."}
+                  : "Renomeie a colecao para manter sua biblioteca organizada."}
               </p>
             </header>
 
@@ -457,15 +449,19 @@ export function Sidebar({
               >
                 {isSubmittingCollection
                   ? "Salvando..."
-                  : collectionDialog.type === "create"
-                    ? "Criar colecao"
-                    : collectionDialog.type === "edit"
-                      ? "Salvar"
-                      : "Excluir"}
+                  : collectionDialog.type === "edit"
+                    ? "Salvar"
+                    : "Excluir"}
               </button>
             </footer>
           </section>
         </div>
+      ) : null}
+      {isNewCollectionModalOpen ? (
+        <NewCollectionModal
+          onClose={() => setIsNewCollectionModalOpen(false)}
+          onCreateCollection={({ name, description, color }) => onCreateCollection(name, description, color)}
+        />
       ) : null}
     </aside>
   );

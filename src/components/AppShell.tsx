@@ -8,7 +8,7 @@ type AppShellProps = {
   trashCount: number;
   activeRoute: LibraryRoute;
   onRouteChange: (route: LibraryRoute) => void;
-  onCreateCollection: (name: string) => Promise<void>;
+  onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
   children: ReactNode;

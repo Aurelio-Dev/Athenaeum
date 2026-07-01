@@ -249,8 +249,8 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
-  async function createCollection(name: string) {
-    const collection = await createPersistedCollection(name);
+  async function createCollection(name: string, description: string, color: string) {
+    const collection = await createPersistedCollection(name, description, color);
     setActiveRoute({ type: "collection", collectionName: collection.name });
     await invalidateLibraryQueries();
   }
