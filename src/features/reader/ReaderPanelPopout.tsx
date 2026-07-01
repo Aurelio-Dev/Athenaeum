@@ -49,7 +49,7 @@ export function ReaderPanelPopout() {
   const [notesText, setNotesText] = useState(payload.notesText);
 
   return (
-    <main className="dark flex h-screen flex-col bg-[var(--card)] text-[var(--foreground)]">
+    <main className="flex h-screen flex-col bg-[var(--card)] text-[var(--foreground)]">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-subtle bg-[var(--surface-header)] px-4">
         <h1 className="min-w-0 truncate text-sm font-bold text-white">Anotações — {payload.documentTitle}</h1>
       </header>
