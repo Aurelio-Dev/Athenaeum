@@ -24,16 +24,6 @@ const iconProps = {
   "aria-hidden": true,
 };
 
-function CommentIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M12 8v4" />
-      <path d="M10 10h4" />
-    </svg>
-  );
-}
-
 function CopyIcon() {
   return (
     <svg {...iconProps}>
@@ -45,7 +35,7 @@ function CopyIcon() {
 
 // Toolbar flutuante que aparece sobre o texto selecionado. Posicao `fixed`
 // usando coordenadas de viewport vindas do bounding rect da selecao.
-export function SelectionToolbar({ anchor, onHighlight, onComment, onCopy }: SelectionToolbarProps) {
+export function SelectionToolbar({ anchor, onHighlight, onCopy }: SelectionToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [activeColor, setActiveColor] = useState<HighlightColor>(() => {
     const storedColor = window.localStorage.getItem(highlightStorageKey);
@@ -110,15 +100,6 @@ export function SelectionToolbar({ anchor, onHighlight, onComment, onCopy }: Sel
         onClick={onCopy}
       >
         <CopyIcon />
-      </button>
-      <button
-        type="button"
-        aria-label="Criar anotacao"
-        title="Criar anotacao"
-        className="rounded-lg p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
-        onClick={() => onComment(activeColor)}
-      >
-        <CommentIcon />
       </button>
     </div>
   );
