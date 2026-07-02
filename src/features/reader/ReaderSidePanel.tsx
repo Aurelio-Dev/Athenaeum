@@ -19,6 +19,7 @@ type ReaderSidePanelProps = {
   progress: number;
   timeSpentSeconds: number;
   isFloating: boolean;
+  initialTab?: ReaderTab;
   onFloat: () => void;
   onDock: () => void;
   onJumpToPage: (page: number) => void;
@@ -76,6 +77,7 @@ export function ReaderSidePanel({
   progress,
   timeSpentSeconds,
   isFloating,
+  initialTab,
   onFloat,
   onDock,
   onJumpToPage,
@@ -83,7 +85,7 @@ export function ReaderSidePanel({
   onUpdateAnnotationNote,
   onClose,
 }: ReaderSidePanelProps) {
-  const [activeTab, setActiveTab] = useState<ReaderTab>("ai");
+  const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "ai");
   const [floatingPosition, setFloatingPosition] = useState(getInitialFloatingPosition);
 
   function floatPanel() {

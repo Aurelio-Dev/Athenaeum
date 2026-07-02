@@ -502,6 +502,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [leftPanelTab, setLeftPanelTab] = useState<"pages" | "summary">("pages");
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [sidePanelInitialTab, setSidePanelInitialTab] = useState<"annotations" | undefined>(undefined);
   const [sidePanelFloating, setSidePanelFloating] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [documentSearchTerm, setDocumentSearchTerm] = useState("");
@@ -746,36 +747,12 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
       addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, color));
     }
 
-    window.getSelection()?.removeAllRanges();
-    setPendingSelection(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addAnnotationFromPayload, document.id, pendingSelection]);
-
-  // Como "Marcar", mas abre o editor de nota da anotacao da primeira pagina assim
-  // que ela for persistida (precisamos do id real para salvar a nota depois).
-  const commentSelection = useCallback((color: HighlightColor) => {
-    if (!pendingSelection) {
-      return;
-    }
-
+    setSidePanelInitialTab("annotations");
     setSidePanelOpen(true);
-
-    pendingSelection.pages.forEach((pageRects, index) => {
-      const { persisted } = addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, color));
-      if (index === 0) {
-        void persisted.then((saved) => {
-          if (saved) {
-            setEditingAnnotationId(saved.id);
-          }
-        });
-      }
-    });
-
     window.getSelection()?.removeAllRanges();
     setPendingSelection(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addAnnotationFromPayload, document.id, pendingSelection]);
-
   // Abre o editor ao clicar num highlight ja salvo. Highlights ainda nao
   // persistidos (saving/unsaved) nao abrem editor — o emblema de retry cuida deles.
   const openAnnotationEditor = useCallback(
@@ -1112,7 +1089,10 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             type="button"
             aria-label={sidePanelOpen ? "Fechar painel" : "Abrir painel"}
             className={`rounded-md p-1.5 transition ${sidePanelOpen ? "bg-primary/20 text-primary" : "text-[#9E8878] hover:bg-white/5 hover:text-white"}`}
-            onClick={() => setSidePanelOpen((isOpen) => !isOpen)}
+            onClick={() => {
+              setSidePanelInitialTab(undefined);
+              setSidePanelOpen((isOpen) => !isOpen);
+            }}
           >
             <Icon name="split" />
           </button>
@@ -1173,12 +1153,14 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             progress={progress}
             timeSpentSeconds={timeSpentSeconds}
             isFloating={sidePanelFloating}
+            initialTab={sidePanelInitialTab}
             onFloat={() => setSidePanelFloating(true)}
             onDock={() => setSidePanelFloating(false)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}
             onUpdateAnnotationNote={saveAnnotationNoteById}
             onClose={() => {
+              setSidePanelInitialTab(undefined);
               setSidePanelFloating(false);
               setSidePanelOpen(false);
             }}
@@ -1190,7 +1172,6 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
         <SelectionToolbar
           anchor={pendingSelection.anchor}
           onHighlight={highlightSelection}
-          onComment={commentSelection}
           onCopy={copySelection}
         />
       ) : null}

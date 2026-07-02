@@ -6,7 +6,6 @@ import { highlightPalette } from "./highlightPalette";
 type SelectionToolbarProps = {
   anchor: SelectionAnchor;
   onHighlight: (color: HighlightColor) => void;
-  onComment: (color: HighlightColor) => void;
   onCopy: () => void;
 };
 
