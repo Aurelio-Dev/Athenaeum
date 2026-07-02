@@ -87,11 +87,17 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
   };
 
   if (name === "brand") {
+    // Frontao (TempleIcon) — a marca do app. Icone preenchido (nao stroke),
+    // viewBox proprio 16x16; fill:currentColor herda o branco do badge.
     return (
-      <svg {...commonProps} strokeWidth={2.4}>
-        <path d="M3 11.5 12 4l9 7.5" />
-        <path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9" />
-        <path d="M9.5 20v-6h5v6" />
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M1.5 7.5H14.5L8 2.5L1.5 7.5Z" />
+        <path d="M14.5 7.5H1.5V9H14.5V7.5Z" />
+        <path d="M4.5 9H1.5V12.5H4.5V9Z" />
+        <path d="M9.5 9H6.5V12.5H9.5V9Z" />
+        <path d="M14.5 9H11.5V12.5H14.5V9Z" />
+        <path d="M14.5 12.5H1.5V13.5H14.5V12.5Z" />
+        <path d="M15.25 13.5H0.75V14.25H15.25V13.5Z" />
       </svg>
     );
   }
@@ -115,17 +121,46 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
   }
 
   if (name === "heart") {
+    // Favoritos (favorites-icon.svg da pasta de icones de referencia). viewBox
+    // proprio 14x14; strokeWidth 1.16667 = mesmo peso visual dos demais icones.
     return (
-      <svg {...commonProps}>
-        <path d="M12 20s-7-4.6-7-9.4A3.6 3.6 0 0 1 12 8a3.6 3.6 0 0 1 7 2.6C19 15.4 12 20 12 20z" />
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 14 14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.16667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M11.0833 8.16667C11.9525 7.315 12.8333 6.29417 12.8333 4.95833C12.8333 4.10743 12.4953 3.29138 11.8936 2.6897C11.292 2.08802 10.4759 1.75 9.625 1.75C8.59833 1.75 7.875 2.04167 7 2.91667C6.125 2.04167 5.40167 1.75 4.375 1.75C3.5241 1.75 2.70804 2.08802 2.10637 2.6897C1.50469 3.29138 1.16667 4.10743 1.16667 4.95833C1.16667 6.3 2.04167 7.32083 2.91667 8.16667L7 12.25L11.0833 8.16667Z" />
       </svg>
     );
   }
 
   if (name === "trash") {
+    // Lixeira (trash.svg da pasta de icones de referencia). viewBox proprio
+    // 14x14; strokeWidth 1.16667 nesse viewBox = mesmo peso visual do
+    // strokeWidth 2 no viewBox 24 dos demais icones.
     return (
-      <svg {...commonProps}>
-        <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 14 14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.16667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M1.75 3.5H12.25" />
+        <path d="M11.0833 3.5V11.6667C11.0833 12.25 10.5 12.8333 9.91667 12.8333H4.08333C3.5 12.8333 2.91667 12.25 2.91667 11.6667V3.5" />
+        <path d="M4.66667 3.5V2.33334C4.66667 1.75 5.25 1.16667 5.83333 1.16667H8.16667C8.75 1.16667 9.33333 1.75 9.33333 2.33334V3.5" />
+        <path d="M5.83333 6.41667V9.91667" />
+        <path d="M8.16667 6.41667V9.91667" />
       </svg>
     );
   }
@@ -294,7 +329,7 @@ export function Sidebar({
       </div>
 
       <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2 pt-3">
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {navItems.map((item) => {
             const active = isRouteActive(activeRoute, item.route);
 
@@ -303,8 +338,10 @@ export function Sidebar({
                 key={item.label}
                 type="button"
                 onClick={() => onRouteChange(item.route)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition ${
-                  active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] leading-[19.5px] transition ${
+                  active
+                    ? "bg-sidebar-raised font-medium text-[#2C1810] dark:text-sidebar-text"
+                    : "font-normal text-sidebar-muted hover:bg-sidebar-raised"
                 }`}
               >
                 <span className={active ? "text-primary" : "text-sidebar-muted"}>
@@ -316,11 +353,12 @@ export function Sidebar({
           })}
         </div>
 
-        <div className="mt-6 px-3 pb-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-sidebar-muted">Minha biblioteca</span>
+        <div className="mt-4 px-3 pb-2">
+          {/* Mantido no #9E8878 base (nao acompanha a escurecida dos demais itens). */}
+          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9E8878]">Minha biblioteca</span>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {collections.map((collection) => {
             const active = isRouteActive(activeRoute, { type: "collection", collectionName: collection.name });
 
@@ -328,8 +366,10 @@ export function Sidebar({
               <div
                 key={collection.id}
                 onContextMenu={(event) => openCollectionContextMenu(event, collection)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition ${
-                  active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] leading-[19.5px] transition ${
+                  active
+                    ? "bg-sidebar-raised font-medium text-[#2C1810] dark:text-sidebar-text"
+                    : "font-normal text-sidebar-muted hover:bg-sidebar-raised"
                 }`}
               >
                 <button
@@ -355,7 +395,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={openCreateCollectionDialog}
-          className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
+          className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-normal leading-[19.5px] text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
         >
           <Icon name="plus" />
           Nova coleção
@@ -366,7 +406,7 @@ export function Sidebar({
         {/* Tela de ajustes ainda nao existe; o botao marca o lugar dela no layout. */}
         <button
           type="button"
-          className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-medium text-sidebar-text transition hover:bg-sidebar-raised"
+          className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[13px] font-normal leading-[19.5px] text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
           title="Ajustes (em breve)"
         >
           <span className="text-sidebar-muted">

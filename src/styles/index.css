@@ -101,11 +101,19 @@
   --color-text-inverse: var(--primary-foreground);
 
   --color-sidebar: var(--sidebar);
-  --color-sidebar-raised: var(--card);
+  /* Fundo de hover/ativo dos itens da sidebar. No tema claro usa um bege
+     quente (nao o --card, que e quase branco e deixava o hover "esbranquicado");
+     o tema escuro mantem o --card via override no bloco .dark abaixo. */
+  --color-sidebar-raised: #D8CCBD;
   --color-sidebar-active: var(--primary);
   --color-sidebar-border: var(--border);
   --color-sidebar-text: var(--foreground);
-  --color-sidebar-muted: var(--muted-foreground);
+  /* Texto/icones muted da sidebar (itens de nav, colecoes, "Nova colecao",
+     "Ajustes"). No claro usa um tom levemente mais escuro que o #9E8878 base
+     para dar mais presenca; o cabecalho "MINHA BIBLIOTECA" e mantido em
+     #9E8878 via classe propria. No escuro fica #9E8878 (override no .dark),
+     onde escurecer sobre o fundo escuro pioraria a legibilidade. */
+  --color-sidebar-muted: #8B786A;
 
   --color-border-subtle: var(--border);
   --color-border-muted: var(--border);
@@ -158,6 +166,11 @@
   --card: #231C16;
   --sidebar: #140F0B;
   --popover: #231C16;
+
+  /* No escuro o hover/ativo continua sendo o --card (comportamento anterior). */
+  --color-sidebar-raised: var(--card);
+  /* No escuro o muted volta ao #9E8878 (a escurecida e so no tema claro). */
+  --color-sidebar-muted: #9E8878;
 
   --foreground: #F0E6DC;
   --card-foreground: #F0E6DC;

@@ -21,8 +21,16 @@ export function LibraryHeader({ title, count, description, onEdit }: LibraryHead
   return (
     <div className="min-w-64 flex-1">
       <div className="flex items-center gap-3">
-        {/* font-black usa o Segoe UI Black (900) bundlado — peso do titulo no Figma. */}
-        <h1 className="truncate text-[32px] font-black leading-tight tracking-tight text-text-primary">{title}</h1>
+        {/* Spec do Figma: Segoe UI Bold 42 / line-height 46.2 / spacing -1.26px /
+            #2C1810 (claro). No escuro mantem o text-primary (tom claro).
+            py-1.5: o leading 46.2 e mais apertado que a caixa de linha natural
+            da fonte a 42px, entao com o overflow:hidden do `truncate` os glifos
+            (topo de P/h/l, rabo de y/p) seriam cortados verticalmente.
+            pr-1: o letter-spacing negativo (-1.26px) e aplicado tambem apos o
+            ultimo glifo, puxando a borda direita da caixa para dentro da letra;
+            com o overflow:hidden isso recorta a ponta da ultima letra. O padding
+            a direita da a folga sem alterar o espacamento especificado. */}
+        <h1 className="truncate py-1.5 pr-1 text-[42px] font-bold leading-[46.2px] tracking-[-1.26px] text-[#2C1810] dark:text-text-primary">{title}</h1>
         {onEdit ? (
           <button
             type="button"
@@ -36,7 +44,7 @@ export function LibraryHeader({ title, count, description, onEdit }: LibraryHead
         ) : null}
       </div>
       {description ? <p className="mt-1 text-sm text-text-secondary">{description}</p> : null}
-      <p className="mt-2 text-sm text-text-secondary">
+      <p className="mt-2 text-[13px] font-semibold leading-[19.5px] text-text-secondary">
         {count} {count === 1 ? "item" : "itens"}
       </p>
     </div>

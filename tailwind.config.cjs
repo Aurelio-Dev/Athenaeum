@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // Tema por classe: o app alterna a classe `.dark` no <html> (ver Sidebar),
+  // entao as variantes `dark:` respondem a essa classe, nao a preferencia do SO.
+  darkMode: "class",
   theme: {
     extend: {
       colors: {

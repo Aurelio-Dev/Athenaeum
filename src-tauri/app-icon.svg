@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fonte dos icones do app, gerados por: npx tauri icon src-tauri/app-icon.svg
+       Replica o badge da marca in-app: quadrado marrom (primary #9C5A2E)
+       arredondado + frontao (TempleIcon) branco centralizado. -->
+  <rect x="96" y="96" width="832" height="832" rx="176" fill="#9C5A2E" />
+  <g transform="translate(288,278) scale(28)" fill="#FFFFFF">
+    <path d="M1.5 7.5H14.5L8 2.5L1.5 7.5Z" />
+    <path d="M14.5 7.5H1.5V9H14.5V7.5Z" />
+    <path d="M4.5 9H1.5V12.5H4.5V9Z" />
+    <path d="M9.5 9H6.5V12.5H9.5V9Z" />
+    <path d="M14.5 9H11.5V12.5H14.5V9Z" />
+    <path d="M14.5 12.5H1.5V13.5H14.5V12.5Z" />
+    <path d="M15.25 13.5H0.75V14.25H15.25V13.5Z" />
+  </g>
+</svg>

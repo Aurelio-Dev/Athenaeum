@@ -391,21 +391,21 @@ export function LibraryView() {
     >
       <div className="flex h-full min-h-0 flex-1 flex-col xl:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-3 bg-surface-app px-8 pb-2 pt-6">
+          <div className="flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
             <label className="ml-auto flex w-full max-w-sm items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
               <SearchIcon />
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Pesquisar na biblioteca..."
-                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-subtle"
+                className="min-w-0 flex-1 border-0 bg-transparent text-[12px] leading-[18px] text-text-primary outline-none placeholder:text-text-subtle"
               />
             </label>
             {isTrashRoute ? null : (
               <button
                 type="button"
                 onClick={() => setIsAddPdfModalOpen(true)}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-text-inverse shadow-button transition hover:bg-primary-hover"
               >
                 <PlusIcon />
                 Adicionar
@@ -413,7 +413,11 @@ export function LibraryView() {
             )}
           </div>
 
-          <header className="flex flex-wrap items-end gap-4 border-b border-border-subtle bg-surface-app px-8 pb-4 pt-2">
+          {/* Linha horizontal de largura total, logo acima do titulo da colecao
+              (diferente do divisor abaixo de "N itens", que e recuado). */}
+          <div className="border-t border-border-subtle" />
+
+          <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-5">
             <LibraryHeader
               title={getRouteTitle(activeRoute)}
               count={documents.length}
@@ -437,6 +441,12 @@ export function LibraryView() {
               onViewModeChange={setViewMode}
             />
           </header>
+
+          {/* Divisor com o mesmo recuo horizontal (px-8) da grade de cards, para
+              comecar/terminar alinhado com os cards em vez de atravessar a
+              largura toda. mx-8 acompanha o px-8 da secao, entao continua
+              alinhado em qualquer largura. */}
+          <div className="mx-8 border-t border-border-subtle" />
 
           {isTrashRoute ? (
             <div className="border-b border-border-subtle bg-surface-app px-8 py-4 text-sm text-text-secondary">

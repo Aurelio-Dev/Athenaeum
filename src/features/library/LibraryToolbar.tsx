@@ -39,9 +39,13 @@ function GridIcon() {
 function ListIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="4" x2="20" y1="6" y2="6" />
-      <line x1="4" x2="20" y1="12" y2="12" />
-      <line x1="4" x2="20" y1="18" y2="18" />
+      {/* Marcadores a esquerda de cada linha (estilo "list" do Figma). */}
+      <line x1="9" x2="20" y1="6" y2="6" />
+      <line x1="9" x2="20" y1="12" y2="12" />
+      <line x1="9" x2="20" y1="18" y2="18" />
+      <circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -85,7 +89,7 @@ export function LibraryToolbar({ sortMode, viewMode, compact = false, onSortMode
         <button
           type="button"
           onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
-          className="flex items-center gap-2 rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm font-semibold text-text-primary"
+          className="flex items-center gap-2 rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-[12px] font-normal leading-[18px] text-[#2C1810] dark:text-text-primary"
         >
           {sortModeLabels[sortMode]}
           <ChevronDownIcon />
