@@ -41,6 +41,8 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
 
 const queryClient = new QueryClient();
 
+document.addEventListener("contextmenu", (event) => event.preventDefault(), { capture: true });
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>

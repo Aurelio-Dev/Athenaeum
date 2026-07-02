@@ -1,6 +1,13 @@
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
+import { IconContextAbrir, IconContextMoverColecao, IconContextVerDetalhes } from "../../components/ui/ContextMenuIcons";
+import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
+import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
+import { HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
 import { TagPill } from "../../components/ui/TagPill";
 import { deriveCoverColor } from "../../lib/documentColor";
-import type { LibraryDocument, ViewMode } from "../../types/library";
+import { useContextMenu } from "../../hooks/useContextMenu";
+import type { LibraryCollection, LibraryDocument, ViewMode } from "../../types/library";
 
 const MAX_VISIBLE_TAGS = 2;
 
@@ -9,30 +16,14 @@ type DocumentCardProps = {
   isSelected: boolean;
   mode?: "library" | "trash";
   viewMode?: ViewMode;
+  collections: LibraryCollection[];
   onSelect: (document: LibraryDocument) => void;
+  onOpenReader: (document: LibraryDocument) => void;
+  onOpenDetails: (document: LibraryDocument) => void;
   onToggleFavorite: (documentId: string) => void;
+  onMoveToCollection: (documentId: string, collectionId: string) => void;
   onDelete: (documentId: string) => void;
 };
-
-function HeartIcon({ filled }: { filled: boolean }) {
-  // Coracao de favorito (favorites-icon.svg). fill controla o estado ativo:
-  // preenchido quando favoritado, so contorno caso contrario.
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 14 14"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="1.16667"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M11.0833 8.16667C11.9525 7.315 12.8333 6.29417 12.8333 4.95833C12.8333 4.10743 12.4953 3.29138 11.8936 2.6897C11.292 2.08802 10.4759 1.75 9.625 1.75C8.59833 1.75 7.875 2.04167 7 2.91667C6.125 2.04167 5.40167 1.75 4.375 1.75C3.5241 1.75 2.70804 2.08802 2.10637 2.6897C1.50469 3.29138 1.16667 4.10743 1.16667 4.95833C1.16667 6.3 2.04167 7.32083 2.91667 8.16667L7 12.25L11.0833 8.16667Z" />
-    </svg>
-  );
-}
 
 // Anel de progresso circular exibido no canto inferior direito da thumbnail.
 function CircularProgress({ value }: { value: number }) {
@@ -83,8 +74,81 @@ export function DocumentCard(props: DocumentCardProps) {
   return <DocumentGridCard {...props} />;
 }
 
+type DocumentCardContextMenuProps = Pick<
+  DocumentCardProps,
+  "collections" | "document" | "onDelete" | "onMoveToCollection" | "onOpenDetails" | "onOpenReader" | "onToggleFavorite"
+> & {
+  contextMenu: ReturnType<typeof useContextMenu>;
+};
+
+function DocumentCardContextMenu({
+  collections,
+  contextMenu,
+  document,
+  onDelete,
+  onMoveToCollection,
+  onOpenDetails,
+  onOpenReader,
+  onToggleFavorite,
+}: DocumentCardContextMenuProps) {
+  return (
+    <ContextMenu isOpen={contextMenu.isOpen} x={contextMenu.x} y={contextMenu.y} onClose={contextMenu.close}>
+      <ContextMenuItem
+        icon={<IconContextAbrir />}
+        label="Abrir"
+        onSelect={() => {
+          onOpenReader(document);
+          contextMenu.close();
+        }}
+      />
+      <ContextMenuItem
+        icon={<IconContextVerDetalhes />}
+        label="Ver detalhes"
+        onSelect={() => {
+          onOpenDetails(document);
+          contextMenu.close();
+        }}
+      />
+
+      <ContextMenuDivider />
+
+      <ContextMenuItem
+        icon={<HeartIcon filled={document.favorite} size={16} />}
+        label={document.favorite ? "Desfavoritar" : "Favoritar"}
+        onSelect={() => {
+          onToggleFavorite(document.id);
+          contextMenu.close();
+        }}
+      />
+
+      <ContextMenuDivider />
+
+      <ContextMenuSubmenu
+        icon={<IconContextMoverColecao />}
+        label="Mover para coleção"
+        collections={collections}
+        onSelect={(collectionId) => onMoveToCollection(document.id, collectionId)}
+        onClose={contextMenu.close}
+      />
+
+      <ContextMenuDivider />
+
+      <ContextMenuItem
+        icon={<TrashIcon size={16} />}
+        label="Mover para lixeira"
+        variant="danger"
+        onSelect={() => {
+          onDelete(document.id);
+          contextMenu.close();
+        }}
+      />
+    </ContextMenu>
+  );
+}
+
 // Linha horizontal (lista): thumb pequena + metadados + tags + favorito.
-function DocumentListRow({ document, isSelected, mode = "library", onSelect, onToggleFavorite }: DocumentCardProps) {
+function DocumentListRow({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
+  const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const coverColor = deriveCoverColor(document.id);
   const publisherLine = `${document.year} · ${document.source}`;
@@ -93,85 +157,99 @@ function DocumentListRow({ document, isSelected, mode = "library", onSelect, onT
   const expirationDays = document.deletedAt ? getExpirationDays(document.deletedAt) : 0;
 
   return (
-    <article
-      className={`group flex cursor-pointer items-center gap-4 rounded-xl border bg-surface-card p-3 shadow-card transition hover:-translate-y-1 ${
-        isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
-      }`}
-      role="button"
-      tabIndex={0}
-      aria-pressed={isSelected}
-      onClick={() => onSelect(document)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(document);
-        }
-      }}
-    >
-      <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={{ backgroundColor: coverColor }}>
-        {!isTrashMode && document.status === "in-progress" ? (
-          <div
-            className="absolute inset-x-0 bottom-0 h-[3px] bg-primary"
-            style={{ width: `${Math.min(100, Math.max(0, document.progress))}%` }}
-            aria-hidden="true"
-          />
-        ) : null}
-      </div>
+    <>
+      <article
+        className={`group flex cursor-pointer items-center gap-4 rounded-xl border bg-surface-card p-3 shadow-card transition hover:-translate-y-1 ${
+          isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
+        }`}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
+        onClick={() => onSelect(document)}
+        onContextMenu={contextMenu.open}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect(document);
+          }
+        }}
+      >
+        <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={{ backgroundColor: coverColor }}>
+          {!isTrashMode && document.status === "in-progress" ? (
+            <div
+              className="absolute inset-x-0 bottom-0 h-[3px] bg-primary"
+              style={{ width: `${Math.min(100, Math.max(0, document.progress))}%` }}
+              aria-hidden="true"
+            />
+          ) : null}
+        </div>
 
-      <div className="min-w-0 flex-1">
-        <h2 className="truncate text-[13px] font-semibold leading-[17.5px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
-        <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
-        <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
-      </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[13px] font-semibold leading-[17.5px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
+          <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
+          <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
+        </div>
 
-      {isTrashMode ? (
-        <span
-          className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs font-semibold ${
-            expirationDays <= 7 ? "bg-status-red text-status-red-text" : "bg-status-slate text-status-slate-text"
-          }`}
-        >
-          Expira em {expirationDays} {expirationDays === 1 ? "dia" : "dias"}
-        </span>
-      ) : (
-        <>
-          <div className="hidden shrink-0 items-center gap-1.5 md:flex">
-            {visibleTags.map((tag) => (
-              <TagPill key={tag} label={tag} />
-            ))}
-            {extraTagCount > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-text-secondary">
-                +{extraTagCount}
-              </span>
-            ) : null}
-          </div>
-
-          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-text-primary">
-            <CircularProgress value={document.progress} />
-          </span>
-
-          <button
-            type="button"
-            aria-label={document.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-            title={document.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition ${
-              document.favorite ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+        {isTrashMode ? (
+          <span
+            className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs font-semibold ${
+              expirationDays <= 7 ? "bg-status-red text-status-red-text" : "bg-status-slate text-status-slate-text"
             }`}
-            style={{ color: "#EF4444" }}
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleFavorite(document.id);
-            }}
           >
-            <HeartIcon filled={document.favorite} />
-          </button>
-        </>
-      )}
-    </article>
+            Expira em {expirationDays} {expirationDays === 1 ? "dia" : "dias"}
+          </span>
+        ) : (
+          <>
+            <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+              {visibleTags.map((tag) => (
+                <TagPill key={tag} label={tag} />
+              ))}
+              {extraTagCount > 0 ? (
+                <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-text-secondary">
+                  +{extraTagCount}
+                </span>
+              ) : null}
+            </div>
+
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-text-primary">
+              <CircularProgress value={document.progress} />
+            </span>
+
+            <button
+              type="button"
+              aria-label={document.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+              title={document.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+              className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition ${
+                document.favorite ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+              }`}
+              style={{ color: "#EF4444" }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleFavorite(document.id);
+              }}
+            >
+              <HeartIcon filled={document.favorite} />
+            </button>
+          </>
+        )}
+      </article>
+      <DocumentCardContextMenu
+        collections={collections}
+        contextMenu={contextMenu}
+        document={document}
+        onDelete={onDelete}
+        onMoveToCollection={onMoveToCollection}
+        onOpenDetails={onOpenDetails}
+        onOpenReader={onOpenReader}
+        onToggleFavorite={onToggleFavorite}
+      />
+    </>
   );
 }
 
 // Card vertical (grid): thumbnail com cor derivada + area de texto abaixo.
-function DocumentGridCard({ document, isSelected, mode = "library", onSelect, onToggleFavorite }: DocumentCardProps) {
+function DocumentGridCard({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
+  const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const isReading = document.status === "in-progress";
   const coverColor = deriveCoverColor(document.id);
@@ -181,21 +259,23 @@ function DocumentGridCard({ document, isSelected, mode = "library", onSelect, on
   const expirationDays = document.deletedAt ? getExpirationDays(document.deletedAt) : 0;
 
   return (
-    <article
-      className={`group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:-translate-y-1 ${
-        isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
-      }`}
-      role="button"
-      tabIndex={0}
-      aria-pressed={isSelected}
-      onClick={() => onSelect(document)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(document);
-        }
-      }}
-    >
+    <>
+      <article
+        className={`group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:-translate-y-1 ${
+          isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
+        }`}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
+        onClick={() => onSelect(document)}
+        onContextMenu={contextMenu.open}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect(document);
+          }
+        }}
+      >
       <div className="relative aspect-[3/4] w-full" style={{ backgroundColor: coverColor }}>
         {/* Linhas decorativas que imitam o topo de uma pagina. */}
         <div className="absolute inset-0 p-4" aria-hidden="true">
@@ -280,6 +360,17 @@ function DocumentGridCard({ document, isSelected, mode = "library", onSelect, on
           </div>
         )}
       </div>
-    </article>
+      </article>
+      <DocumentCardContextMenu
+        collections={collections}
+        contextMenu={contextMenu}
+        document={document}
+        onDelete={onDelete}
+        onMoveToCollection={onMoveToCollection}
+        onOpenDetails={onOpenDetails}
+        onOpenReader={onOpenReader}
+        onToggleFavorite={onToggleFavorite}
+      />
+    </>
   );
 }

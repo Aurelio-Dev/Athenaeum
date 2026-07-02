@@ -288,6 +288,24 @@ export function LibraryView() {
     }
   }
 
+  async function moveDocumentToCollection(documentId: string, collectionId: string) {
+    const document = allDocuments.find((currentDocument) => currentDocument.id === documentId);
+    const collection = collections.find((currentCollection) => currentCollection.id === collectionId);
+
+    if (!document || !collection || document.collection === collection.name) {
+      return;
+    }
+
+    await updateDocumentMetadata(documentId, {
+      title: document.title,
+      authors: document.authors,
+      source: document.source,
+      year: document.year,
+      collection: collection.name,
+      tags: document.tags,
+    });
+  }
+
   async function restoreFromTrash(documentId: string) {
     await restoreDocument(documentId);
     await invalidateLibraryQueries();
@@ -473,11 +491,15 @@ export function LibraryView() {
                   <DocumentCard
                     key={document.id}
                     document={document}
+                    collections={collections}
                     mode={isTrashRoute ? "trash" : "library"}
                     viewMode={viewMode}
                     isSelected={document.id === selectedDocumentId}
                     onSelect={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
+                    onOpenReader={(documentToOpen) => void openForReading(documentToOpen)}
+                    onOpenDetails={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
                     onToggleFavorite={(nextDocumentId) => void toggleFavorite(nextDocumentId)}
+                    onMoveToCollection={(nextDocumentId, collectionId) => void moveDocumentToCollection(nextDocumentId, collectionId)}
                     onDelete={(nextDocumentId) => void moveToTrash(nextDocumentId)}
                   />
                 ))}

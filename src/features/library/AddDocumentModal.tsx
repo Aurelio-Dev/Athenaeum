@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { ChevronRightIcon } from "../../components/ui/SharedIcons";
 import { TagInput } from "../../components/ui/TagInput";
 import { extractPdfMetadata } from "../../lib/pdfMetadata";
 import type { LibraryCollection, LibraryDocument, SubjectTag } from "../../types/library";
@@ -70,25 +71,6 @@ function FileIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <path d="M14 3v5h5" />
       <path d="M7 3h7l5 5v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`transition-transform ${open ? "rotate-90" : ""}`}
-      aria-hidden="true"
-    >
-      <path d="m9 6 6 6-6 6" />
     </svg>
   );
 }
@@ -656,7 +638,7 @@ export function AddDocumentModal({
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-subtle transition hover:bg-surface-muted hover:text-text-primary"
                               onClick={() => setExpandedKey(isExpanded ? null : item.key)}
                             >
-                              <ChevronIcon open={isExpanded} />
+                              <ChevronRightIcon className={`transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                             </button>
                           </>
                         )}
@@ -694,7 +676,7 @@ export function AddDocumentModal({
                 {phase === "review" ? (
                   <div>
                     <button type="button" className="flex items-center gap-1.5 text-sm font-semibold text-text-secondary transition hover:text-text-primary" onClick={() => setShowNotes((current) => !current)}>
-                      <ChevronIcon open={showNotes} />
+                      <ChevronRightIcon className={`transition-transform ${showNotes ? "rotate-90" : ""}`} />
                       Notas (opcional)
                     </button>
                     {showNotes ? (
