@@ -21,7 +21,8 @@ export function LibraryHeader({ title, count, description, onEdit }: LibraryHead
   return (
     <div className="min-w-64 flex-1">
       <div className="flex items-center gap-3">
-        <h1 className="truncate text-[32px] font-bold leading-tight tracking-tight text-text-primary">{title}</h1>
+        {/* font-black usa o Segoe UI Black (900) bundlado — peso do titulo no Figma. */}
+        <h1 className="truncate text-[32px] font-black leading-tight tracking-tight text-text-primary">{title}</h1>
         {onEdit ? (
           <button
             type="button"

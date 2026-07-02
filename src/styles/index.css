@@ -2,6 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fonte bundlada no app (nao depende do SO ter Segoe UI instalada).
+   Um @font-face por peso/estilo: sem os arquivos reais o browser sintetiza
+   negrito/italico engrossando o contorno do peso 400, visivelmente mais fino
+   que o Segoe UI Bold/Black verdadeiros usados no Figma. */
+@font-face {
+  font-family: "Segoe UI";
+  src: url("../assets/fonts/segoeui.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Segoe UI";
+  src: url("../assets/fonts/segoeui-italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Segoe UI";
+  src: url("../assets/fonts/segoeui-semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Segoe UI";
+  src: url("../assets/fonts/segoeui-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Segoe UI";
+  src: url("../assets/fonts/segoeui-bold-italic.ttf") format("truetype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Segoe UI";
+  src: url("../assets/fonts/segoeui-black.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* Backgrounds */
   --background: #F5EDE4;
@@ -144,7 +196,7 @@ body,
 body {
   background: var(--color-surface-app);
   color: var(--color-text-primary);
-  font-family: Inter, "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", Inter, "IBM Plex Sans", system-ui, sans-serif;
 }
 
 button,

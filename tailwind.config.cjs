@@ -79,7 +79,7 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ["Inter", "IBM Plex Sans", "Segoe UI", "system-ui", "sans-serif"],
+        sans: ["Segoe UI", "Inter", "IBM Plex Sans", "system-ui", "sans-serif"],
         mono: ["IBM Plex Mono", "Consolas", "monospace"],
       },
       boxShadow: {

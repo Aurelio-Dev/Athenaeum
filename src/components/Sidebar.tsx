@@ -303,7 +303,7 @@ export function Sidebar({
                 key={item.label}
                 type="button"
                 onClick={() => onRouteChange(item.route)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-text transition ${
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition ${
                   active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
                 }`}
               >
@@ -328,7 +328,7 @@ export function Sidebar({
               <div
                 key={collection.id}
                 onContextMenu={(event) => openCollectionContextMenu(event, collection)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-text transition ${
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition ${
                   active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
                 }`}
               >
@@ -355,7 +355,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={openCreateCollectionDialog}
-          className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
+          className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
         >
           <Icon name="plus" />
           Nova coleção
@@ -366,7 +366,7 @@ export function Sidebar({
         {/* Tela de ajustes ainda nao existe; o botao marca o lugar dela no layout. */}
         <button
           type="button"
-          className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-semibold text-sidebar-text transition hover:bg-sidebar-raised"
+          className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-medium text-sidebar-text transition hover:bg-sidebar-raised"
           title="Ajustes (em breve)"
         >
           <span className="text-sidebar-muted">
