@@ -209,7 +209,7 @@ export function AddDocumentModal({
   const [batchCollection, setBatchCollection] = useState(defaultCollectionName);
   const [batchTags, setBatchTags] = useState<SubjectTag[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);  const [showNotes, setShowNotes] = useState(false);
   const modalRef = useRef<HTMLElement | null>(null);
   const extractionStartedRef = useRef<Set<string>>(new Set());
   const autoImportedRef = useRef(false);
@@ -712,3 +712,4 @@ export function AddDocumentModal({
     </div>
   );
 }
+

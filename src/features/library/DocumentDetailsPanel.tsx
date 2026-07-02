@@ -361,7 +361,7 @@ export function DocumentDetailsPanel({
   }
 
   return (
-    <aside className="min-h-0 w-full shrink-0 border-t border-border-subtle bg-surface-panel xl:w-[432px] xl:border-l xl:border-t-0">
+    <aside className="min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel xl:w-[432px] xl:border-l xl:border-t-0">
       <header className="flex items-center border-b border-border-subtle px-6 py-4">
         <span className={sectionLabelClassName}>Detalhes</span>
         <button type="button" aria-label="Fechar detalhes" className="ml-auto rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={onClose}>
@@ -369,7 +369,7 @@ export function DocumentDetailsPanel({
         </button>
       </header>
 
-      <div className="max-h-[42rem] overflow-y-auto px-6 py-6 xl:max-h-none xl:h-[calc(100vh-145px)]">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
         <DocumentPreview documentId={document.id} filePath={document.filePath} year={document.year} />
 
         <section className="mt-6">
@@ -541,4 +541,7 @@ export function DocumentDetailsPanel({
     </aside>
   );
 }
+
+
+
 
