@@ -57,9 +57,13 @@ export type ExtractedPdfMetadata = {
 
 export type SortMode = "recentes" | "titulo" | "progresso";
 
+// Layout da listagem de documentos: grade de cards ou linhas horizontais.
+export type ViewMode = "grid" | "list";
+
 export type LibraryRoute =
   | { type: "all" }
   | { type: "recent" }
+  | { type: "reading-list" }
   | { type: "favorites" }
   | { type: "collection"; collectionName: string }
   | { type: "trash" };

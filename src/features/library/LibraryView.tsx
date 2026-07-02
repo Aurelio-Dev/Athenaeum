@@ -24,10 +24,12 @@ import {
   setDocumentNote,
   setDocumentReadingLocation,
   setDocumentReadingStarted,
+  updateCollection as updatePersistedCollection,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
 } from "../../lib/database";
-import type { DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
-import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, SubjectTag } from "../../types/library";
+import type { CollectionUpdates, DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
+import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, SubjectTag, ViewMode } from "../../types/library";
+import { NewCollectionModal } from "../../components/NewCollectionModal";
 import { AddDocumentModal } from "./AddDocumentModal";
 import { DocumentCard } from "./DocumentCard";
 import { DocumentDetailsPanel } from "./DocumentDetailsPanel";
@@ -127,7 +129,9 @@ export function LibraryView() {
   const [activeRoute, setActiveRoute] = useState<LibraryRoute>({ type: "all" });
   const [searchTerm, setSearchTerm] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recentes");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [isAddPdfModalOpen, setIsAddPdfModalOpen] = useState(false);
+  const [isEditCollectionModalOpen, setIsEditCollectionModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
@@ -220,7 +224,8 @@ export function LibraryView() {
     [queryClient],
   );
 
-  const listClassName = "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]";
+  const listClassName =
+    viewMode === "list" ? "flex flex-col gap-3" : "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
   const activeCollection =
@@ -311,6 +316,17 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
+  // Edicao completa (nome/descricao/cor) via lapis no cabecalho da colecao.
+  async function editActiveCollection(collection: LibraryCollection, updates: CollectionUpdates) {
+    const updatedCollection = await updatePersistedCollection(collection.id, updates);
+
+    if (activeRoute.type === "collection" && activeRoute.collectionName === collection.name) {
+      setActiveRoute({ type: "collection", collectionName: updatedCollection.name });
+    }
+
+    await invalidateLibraryQueries();
+  }
+
   async function renameCollection(collection: LibraryCollection, name: string) {
     const renamedCollection = await renamePersistedCollection(collection.id, name);
     const nextRoute: LibraryRoute =
@@ -367,7 +383,6 @@ export function LibraryView() {
     <AppShell
       collections={collections}
       documents={allDocuments}
-      trashCount={trashCount}
       activeRoute={activeRoute}
       onRouteChange={setActiveRoute}
       onCreateCollection={createCollection}
@@ -398,8 +413,13 @@ export function LibraryView() {
             )}
           </div>
 
-          <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-2">
-            <LibraryHeader title={getRouteTitle(activeRoute)} count={documents.length} />
+          <header className="flex flex-wrap items-end gap-4 border-b border-border-subtle bg-surface-app px-8 pb-4 pt-2">
+            <LibraryHeader
+              title={getRouteTitle(activeRoute)}
+              count={documents.length}
+              description={activeCollection?.description || undefined}
+              onEdit={activeCollection ? () => setIsEditCollectionModalOpen(true) : undefined}
+            />
             {isTrashRoute && trashCount > 0 ? (
               <button
                 type="button"
@@ -409,7 +429,13 @@ export function LibraryView() {
                 Esvaziar lixeira
               </button>
             ) : null}
-            <LibraryToolbar compact={isTrashRoute} sortMode={sortMode} onSortModeChange={setSortMode} />
+            <LibraryToolbar
+              compact={isTrashRoute}
+              sortMode={sortMode}
+              viewMode={viewMode}
+              onSortModeChange={setSortMode}
+              onViewModeChange={setViewMode}
+            />
           </header>
 
           {isTrashRoute ? (
@@ -438,6 +464,7 @@ export function LibraryView() {
                     key={document.id}
                     document={document}
                     mode={isTrashRoute ? "trash" : "library"}
+                    viewMode={viewMode}
                     isSelected={document.id === selectedDocumentId}
                     onSelect={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
                     onToggleFavorite={(nextDocumentId) => void toggleFavorite(nextDocumentId)}
@@ -494,6 +521,16 @@ export function LibraryView() {
           />
         ) : null}
       </div>
+
+      {isEditCollectionModalOpen && activeCollection ? (
+        <NewCollectionModal
+          collection={activeCollection}
+          onClose={() => setIsEditCollectionModalOpen(false)}
+          onCreateCollection={({ name, description, color }) =>
+            editActiveCollection(activeCollection, { name, description, color })
+          }
+        />
+      ) : null}
 
       {isAddPdfModalOpen ? (
         <AddDocumentModal
@@ -555,6 +592,10 @@ function getRouteTitle(route: LibraryRoute) {
 
   if (route.type === "recent") {
     return "Recentes";
+  }
+
+  if (route.type === "reading-list") {
+    return "Reading List";
   }
 
   if (route.type === "collection") {

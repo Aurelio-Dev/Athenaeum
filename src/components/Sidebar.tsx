@@ -1,12 +1,10 @@
-import { type MouseEvent, useState } from "react";
-import { IconButton } from "./IconButton";
+import { type MouseEvent, useEffect, useState } from "react";
 import { NewCollectionModal } from "./NewCollectionModal";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
 type SidebarProps = {
   collections: LibraryCollection[];
   documents: LibraryDocument[];
-  trashCount: number;
   activeRoute: LibraryRoute;
   onRouteChange: (route: LibraryRoute) => void;
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
@@ -16,8 +14,7 @@ type SidebarProps = {
 
 type NavItem = {
   label: string;
-  icon: "list" | "clock" | "heart" | "trash";
-  count?: number;
+  icon: "list" | "clock" | "bookmark" | "heart" | "trash";
   route: LibraryRoute;
 };
 
@@ -33,12 +30,24 @@ type CollectionContextMenuState = {
   y: number;
 } | null;
 
-const navItems = (documents: LibraryDocument[], trashCount: number): NavItem[] => [
-  { label: "Todos os itens", icon: "list", count: documents.length, route: { type: "all" } },
+// Sem contadores numericos, seguindo o layout do Figma. "Todos os itens" nao
+// existe no Figma mas e mantido: sem ele nao ha rota para ver a biblioteca
+// inteira de uma vez.
+const navItems: NavItem[] = [
+  { label: "Todos os itens", icon: "list", route: { type: "all" } },
   { label: "Recentes", icon: "clock", route: { type: "recent" } },
-  { label: "Favoritos", icon: "heart", count: documents.filter((document) => document.favorite).length, route: { type: "favorites" } },
-  { label: "Lixeira", icon: "trash", count: trashCount, route: { type: "trash" } },
+  { label: "Reading List", icon: "bookmark", route: { type: "reading-list" } },
+  { label: "Favoritos", icon: "heart", route: { type: "favorites" } },
+  { label: "Lixeira", icon: "trash", route: { type: "trash" } },
 ];
+
+// Persistencia da escolha de tema entre sessoes. A classe .dark no <html>
+// ativa as variaveis CSS do tema escuro (ver styles/index.css).
+const themeStorageKey = "athenaeum-theme";
+
+function readStoredTheme(): "light" | "dark" {
+  return window.localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
+}
 
 function isRouteActive(activeRoute: LibraryRoute, route: LibraryRoute) {
   if (activeRoute.type !== route.type) {
@@ -64,7 +73,7 @@ function getErrorMessage(error: unknown) {
   return "Erro desconhecido.";
 }
 
-function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" | "plus" | "edit" }) {
+function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" | "plus" | "edit" | "gear" | "contrast" }) {
   const commonProps = {
     width: 16,
     height: 16,
@@ -121,6 +130,32 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
     );
   }
 
+  if (name === "bookmark") {
+    return (
+      <svg {...commonProps}>
+        <path d="M6 4.5h12A0.5 0.5 0 0 1 18.5 5v15.5L12 16l-6.5 4.5V5A0.5 0.5 0 0 1 6 4.5z" />
+      </svg>
+    );
+  }
+
+  if (name === "gear") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    );
+  }
+
+  if (name === "contrast") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 3.5v17A8.5 8.5 0 0 0 12 3.5z" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
   if (name === "folder") {
     return (
       <svg {...commonProps}>
@@ -162,7 +197,6 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
 export function Sidebar({
   collections,
   documents,
-  trashCount,
   activeRoute,
   onRouteChange,
   onCreateCollection,
@@ -170,15 +204,25 @@ export function Sidebar({
   onDeleteCollection,
 }: SidebarProps) {
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(readStoredTheme);
   const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
   const [collectionName, setCollectionName] = useState("");
   const [collectionError, setCollectionError] = useState("");
   const [isSubmittingCollection, setIsSubmittingCollection] = useState(false);
   const [collectionContextMenu, setCollectionContextMenu] = useState<CollectionContextMenuState>(null);
+  // Contagem por colecao usada apenas nos dialogos de contexto/exclusao
+  // (a listagem da sidebar nao exibe contadores, seguindo o Figma).
   const collectionCounts = new Map<string, number>();
   documents.forEach((document) => {
     collectionCounts.set(document.collection, (collectionCounts.get(document.collection) ?? 0) + 1);
   });
+
+  // Aplica o tema no elemento raiz e persiste a escolha. Roda no mount (para
+  // restaurar a preferencia salva) e a cada troca pelo botao do rodape.
+  useEffect(() => {
+    window.document.documentElement.classList.toggle("dark", theme === "dark");
+    window.localStorage.setItem(themeStorageKey, theme);
+  }, [theme]);
 
   function openCreateCollectionDialog() {
     setCollectionContextMenu(null);
@@ -251,7 +295,7 @@ export function Sidebar({
 
       <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2 pt-3">
         <div className="space-y-1">
-          {navItems(documents, trashCount).map((item) => {
+          {navItems.map((item) => {
             const active = isRouteActive(activeRoute, item.route);
 
             return (
@@ -259,29 +303,21 @@ export function Sidebar({
                 key={item.label}
                 type="button"
                 onClick={() => onRouteChange(item.route)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-text transition ${
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-text transition ${
                   active ? "bg-sidebar-raised" : "hover:bg-sidebar-raised"
                 }`}
               >
-                <span className="flex min-w-0 items-center gap-3">
-                  <span className={active ? "text-primary" : "text-sidebar-muted"}>
-                    <Icon name={item.icon} />
-                  </span>
-                  <span className="truncate">{item.label}</span>
+                <span className={active ? "text-primary" : "text-sidebar-muted"}>
+                  <Icon name={item.icon} />
                 </span>
-                {typeof item.count === "number" ? (
-                  <span className="text-xs tabular-nums text-sidebar-muted">{item.count}</span>
-                ) : null}
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
         </div>
 
-        <div className="mt-6 flex items-center justify-between px-3 pb-2">
+        <div className="mt-6 px-3 pb-2">
           <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-sidebar-muted">Minha biblioteca</span>
-          <IconButton label="Nova colecao" variant="ghost" onClick={openCreateCollectionDialog}>
-            <Icon name="plus" />
-          </IconButton>
         </div>
 
         <div className="space-y-1">
@@ -311,9 +347,6 @@ export function Sidebar({
                   />
                   <span className="truncate">{collection.name}</span>
                 </button>
-                <span className="ml-2 text-xs tabular-nums text-sidebar-muted">
-                  {collectionCounts.get(collection.name) ?? 0}
-                </span>
               </div>
             );
           })}
@@ -329,9 +362,28 @@ export function Sidebar({
         </button>
       </nav>
 
-      <div className="flex items-center gap-3 border-t border-sidebar-raised px-5 py-4">
-        <span className="h-2.5 w-2.5 rounded-full bg-status-green-text ring-4 ring-status-green" />
-        <span className="text-xs text-sidebar-muted">Sincronizado · há instantes</span>
+      <div className="flex items-center justify-between border-t border-sidebar-raised px-5 py-4">
+        {/* Tela de ajustes ainda nao existe; o botao marca o lugar dela no layout. */}
+        <button
+          type="button"
+          className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-semibold text-sidebar-text transition hover:bg-sidebar-raised"
+          title="Ajustes (em breve)"
+        >
+          <span className="text-sidebar-muted">
+            <Icon name="gear" />
+          </span>
+          Ajustes
+        </button>
+        <button
+          type="button"
+          onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-raised text-sidebar-text transition hover:brightness-110"
+          aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
+          title={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
+          aria-pressed={theme === "dark"}
+        >
+          <Icon name="contrast" />
+        </button>
       </div>
       {collectionContextMenu ? (
         <div

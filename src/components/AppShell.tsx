@@ -5,7 +5,6 @@ import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/
 type AppShellProps = {
   collections: LibraryCollection[];
   documents: LibraryDocument[];
-  trashCount: number;
   activeRoute: LibraryRoute;
   onRouteChange: (route: LibraryRoute) => void;
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
@@ -17,7 +16,6 @@ type AppShellProps = {
 export function AppShell({
   collections,
   documents,
-  trashCount,
   activeRoute,
   onRouteChange,
   onCreateCollection,
@@ -30,7 +28,6 @@ export function AppShell({
       <Sidebar
         collections={collections}
         documents={documents}
-        trashCount={trashCount}
         activeRoute={activeRoute}
         onRouteChange={onRouteChange}
         onCreateCollection={onCreateCollection}

@@ -368,6 +368,10 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
     whereClauses.push("documents.favorite = 1");
   }
 
+  if (route.type === "reading-list") {
+    whereClauses.push("documents.status = 'in-progress'");
+  }
+
   if (route.type === "collection") {
     bindValues.push(route.collectionName);
     whereClauses.push(`collections.name = $${bindValues.length}`);
@@ -527,6 +531,39 @@ export async function renameCollection(collectionId: string, collectionName: str
   await database.execute("UPDATE collections SET name = $1 WHERE id = $2", [name, collectionId]);
 
   return { id: collectionId, name };
+}
+
+export type CollectionUpdates = {
+  name: string;
+  description: string;
+  color: string;
+};
+
+// Edicao completa da colecao (nome, descricao e cor) — usada pelo lapis de
+// editar no cabecalho da colecao. renameCollection cobre so o nome (menu de
+// contexto da sidebar).
+export async function updateCollection(collectionId: string, updates: CollectionUpdates) {
+  const database = await getDatabase();
+  const name = normalizeCollectionName(updates.name);
+  const description = normalizeCollectionDescription(updates.description);
+
+  if (name.length === 0) {
+    throw new Error("Informe um nome para a colecao.");
+  }
+
+  const existingCollection = await findCollectionByName(database, name);
+  if (existingCollection && existingCollection.id !== collectionId) {
+    throw new Error("Ja existe uma colecao com esse nome.");
+  }
+
+  await database.execute("UPDATE collections SET name = $1, description = $2, color = $3 WHERE id = $4", [
+    name,
+    description,
+    updates.color,
+    collectionId,
+  ]);
+
+  return { id: collectionId, name, description, color: updates.color };
 }
 
 export async function deleteCollection(collectionId: string) {

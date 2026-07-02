@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { TAG_COLOR_TOKENS, type TagColorToken } from "../lib/tagColors";
+import type { LibraryCollection } from "../types/library";
 
 type NewCollectionPayload = {
   name: string;
@@ -8,12 +9,22 @@ type NewCollectionPayload = {
 };
 
 type NewCollectionModalProps = {
+  // Colecao existente => modo edicao (campos preenchidos, textos "Salvar").
+  // Ausente => modo criacao.
+  collection?: LibraryCollection;
   onClose: () => void;
   onCreateCollection: (collection: NewCollectionPayload) => Promise<void>;
 };
 
 const colorOrder: TagColorToken[] = ["violet", "indigo", "blue", "teal", "green", "amber", "rose", "red", "slate"];
 const defaultColorToken: TagColorToken = "violet";
+
+// A cor da colecao e persistida como hex (ex.: "#7C3AED"); mapeia de volta
+// para o token da paleta ao editar, caindo no padrao se nao encontrar.
+function findColorToken(color: string): TagColorToken {
+  const match = colorOrder.find((token) => TAG_COLOR_TOKENS[token].bg.toLowerCase() === color.toLowerCase());
+  return match ?? defaultColorToken;
+}
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -44,10 +55,13 @@ function CloseIcon() {
   );
 }
 
-export function NewCollectionModal({ onClose, onCreateCollection }: NewCollectionModalProps) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [selectedColorToken, setSelectedColorToken] = useState<TagColorToken>(defaultColorToken);
+export function NewCollectionModal({ collection, onClose, onCreateCollection }: NewCollectionModalProps) {
+  const isEditing = Boolean(collection);
+  const [name, setName] = useState(collection?.name ?? "");
+  const [description, setDescription] = useState(collection?.description ?? "");
+  const [selectedColorToken, setSelectedColorToken] = useState<TagColorToken>(
+    collection ? findColorToken(collection.color) : defaultColorToken,
+  );
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const trimmedName = name.trim();
@@ -112,7 +126,7 @@ export function NewCollectionModal({ onClose, onCreateCollection }: NewCollectio
       >
         <header className="flex items-center justify-between border-b border-border-subtle px-6 py-5">
           <h2 id="new-collection-title" className="text-lg font-bold">
-            Nova coleção
+            {isEditing ? "Editar coleção" : "Nova coleção"}
           </h2>
           <button
             type="button"
@@ -195,7 +209,7 @@ export function NewCollectionModal({ onClose, onCreateCollection }: NewCollectio
             onClick={() => void submitCollection()}
             disabled={!canCreate}
           >
-            {isSubmitting ? "Criando..." : "Criar coleção"}
+            {isSubmitting ? "Salvando..." : isEditing ? "Salvar" : "Criar coleção"}
           </button>
         </footer>
       </section>
