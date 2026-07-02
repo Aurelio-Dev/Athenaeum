@@ -11,7 +11,6 @@ import { captureSelection, type CapturedSelection, type PageElement } from "../r
 import { HighlightLayer } from "../reader/HighlightLayer";
 import { NotePopover } from "../reader/NotePopover";
 import { PdfTextLayer } from "../reader/PdfTextLayer";
-import { readerPanelPopoutStorageKey } from "../reader/ReaderPanelPopout";
 import { ReaderSidePanel } from "../reader/ReaderSidePanel";
 import { SelectionToolbar } from "../reader/SelectionToolbar";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
@@ -878,23 +877,6 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
     [removeAnnotation],
   );
 
-  const openPanelPopout = useCallback(() => {
-    window.localStorage.setItem(
-      readerPanelPopoutStorageKey,
-      JSON.stringify({
-        documentTitle: document.title,
-        notesText,
-        annotations,
-      }),
-    );
-
-    setSidePanelFloating(false);
-    setSidePanelOpen(false);
-    void invoke("open_reader_panel_window", { documentTitle: document.title }).catch((error) => {
-      console.warn("Nao foi possivel abrir o painel em janela separada.", error);
-    });
-  }, [annotations, document.title, notesText]);
-
   const copySelection = useCallback(() => {
     if (!pendingSelection) {
       return;
@@ -1191,7 +1173,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             progress={progress}
             timeSpentSeconds={timeSpentSeconds}
             isFloating={sidePanelFloating}
-            onFloat={openPanelPopout}
+            onFloat={() => setSidePanelFloating(true)}
             onDock={() => setSidePanelFloating(false)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}

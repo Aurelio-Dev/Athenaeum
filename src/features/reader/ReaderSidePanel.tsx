@@ -117,7 +117,7 @@ export function ReaderSidePanel({
   }
 
   const panelClassName = isFloating
-    ? "fixed z-40 flex resize flex-col overflow-auto rounded-xl border border-border-subtle bg-[var(--card)] shadow-2xl"
+    ? "fixed z-40 flex resize flex-col overflow-hidden rounded-xl border border-border-subtle bg-[var(--card)] shadow-2xl"
     : "relative z-20 flex w-[340px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-[var(--card)]";
   const panelStyle = isFloating
     ? {
@@ -132,7 +132,28 @@ export function ReaderSidePanel({
 
   return (
     <aside className={panelClassName} style={panelStyle}>
-      <header className={`flex h-[56px] items-center justify-between border-b border-border-subtle pr-4 ${isFloating ? "cursor-move" : ""}`} onMouseDown={startDragging}>
+      {isFloating ? (
+        <div
+          className="flex h-11 shrink-0 items-center justify-between rounded-t-xl bg-[var(--surface-header)] px-4 cursor-move"
+          onMouseDown={startDragging}
+        >
+          <h2 className="min-w-0 truncate text-sm font-bold text-white">
+            Anotações — {document.title}
+          </h2>
+          <button
+            type="button"
+            aria-label="Fechar painel"
+            title="Fechar painel"
+            className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={onClose}
+          >
+            <CloseIcon />
+          </button>
+        </div>
+      ) : null}
+
+      <header className="flex h-[56px] items-center justify-between border-b border-border-subtle pr-4">
         <div className="flex">
           {tabs.map((tab) => (
             <button
@@ -141,7 +162,6 @@ export function ReaderSidePanel({
               className={`px-5 py-[18px] text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
-              onMouseDown={(event) => event.stopPropagation()}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -155,7 +175,6 @@ export function ReaderSidePanel({
             aria-label="Abrir em janela separada"
             title="Abrir em janela separada"
             className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-            onMouseDown={(event) => event.stopPropagation()}
             onClick={isFloating ? onDock : floatPanel}
           >
             <PopOutIcon />

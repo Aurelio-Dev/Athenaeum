@@ -2,7 +2,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::Manager;
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
 #[derive(Serialize)]
@@ -295,29 +295,6 @@ fn open_file_location(file_path: String) -> Result<(), String> {
   }
 
   open_path_in_file_manager(&path)
-}
-
-#[tauri::command]
-fn open_reader_panel_window<R: tauri::Runtime>(
-  app: tauri::AppHandle<R>,
-  document_title: String,
-) -> Result<(), String> {
-  let label = "reader-annotations-panel";
-
-  if let Some(window) = app.get_webview_window(label) {
-    window.set_focus().map_err(|error| error.to_string())?;
-    return Ok(());
-  }
-
-  WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html?readerPanel=1".into()))
-    .title(format!("Anotações — {document_title}"))
-    .inner_size(420.0, 720.0)
-    .min_inner_size(360.0, 520.0)
-    .resizable(true)
-    .build()
-    .map_err(|error| error.to_string())?;
-
-  Ok(())
 }
 
 #[cfg(target_os = "windows")]
@@ -872,7 +849,6 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       import_document,
       open_file_location,
-      open_reader_panel_window,
       read_pdf_file,
       select_pdf_file,
       select_pdf_files
