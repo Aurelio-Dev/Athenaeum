@@ -27,7 +27,7 @@ import {
   updateDocumentMetadata as updatePersistedDocumentMetadata,
 } from "../../lib/database";
 import type { DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
-import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../../types/library";
+import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, SubjectTag } from "../../types/library";
 import { AddDocumentModal } from "./AddDocumentModal";
 import { DocumentCard } from "./DocumentCard";
 import { DocumentDetailsPanel } from "./DocumentDetailsPanel";
@@ -43,7 +43,6 @@ type PendingConfirmation =
 
 const allDocumentsOptions: ListDocumentsOptions = {
   searchTerm: "",
-  statusFilter: "all",
   sortMode: "recentes",
   route: { type: "all" },
 };
@@ -53,12 +52,11 @@ const libraryQueryKeys = {
   collections: () => ["library", "collections"] as const,
   tags: () => ["library", "tags"] as const,
   trashCount: () => ["library", "trashCount"] as const,
-  documents: ({ searchTerm, statusFilter, sortMode, route }: ListDocumentsOptions) =>
+  documents: ({ searchTerm, sortMode, route }: ListDocumentsOptions) =>
     [
       "library",
       "documents",
       searchTerm,
-      statusFilter,
       sortMode,
       route.type,
       route.type === "collection" ? route.collectionName : "",
@@ -128,7 +126,6 @@ export function LibraryView() {
   const queryClient = useQueryClient();
   const [activeRoute, setActiveRoute] = useState<LibraryRoute>({ type: "all" });
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("recentes");
   const [isAddPdfModalOpen, setIsAddPdfModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -138,8 +135,8 @@ export function LibraryView() {
 
   const isTrashRoute = activeRoute.type === "trash";
   const activeDocumentsOptions = useMemo<ListDocumentsOptions>(
-    () => ({ searchTerm, statusFilter, sortMode, route: activeRoute }),
-    [activeRoute, searchTerm, sortMode, statusFilter],
+    () => ({ searchTerm, sortMode, route: activeRoute }),
+    [activeRoute, searchTerm, sortMode],
   );
 
   const collectionsQuery = useQuery({
@@ -410,13 +407,7 @@ export function LibraryView() {
             Esvaziar lixeira
           </button>
         ) : null}
-        <LibraryToolbar
-          compact={isTrashRoute}
-          statusFilter={statusFilter}
-          sortMode={sortMode}
-          onStatusFilterChange={setStatusFilter}
-          onSortModeChange={setSortMode}
-        />
+        <LibraryToolbar compact={isTrashRoute} sortMode={sortMode} onSortModeChange={setSortMode} />
       </header>
 
       {isTrashRoute ? (

@@ -5,7 +5,7 @@ import { TAG_COLOR_TOKENS } from "./tagColors";
 import { getSubjectTagTone } from "../styles/designTokens";
 import { isHighlightColor } from "../types/annotation";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
-import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, StatusFilter, SubjectTag } from "../types/library";
+import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, SubjectTag } from "../types/library";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
@@ -93,7 +93,6 @@ export type DocumentMetadataUpdates = Pick<LibraryDocument, "title" | "authors" 
 
 export type ListDocumentsOptions = {
   searchTerm: string;
-  statusFilter: StatusFilter;
   sortMode: SortMode;
   route: LibraryRoute;
 };
@@ -336,7 +335,7 @@ async function insertDocument(database: Database, document: LibraryDocument) {
   }
 }
 
-function buildDocumentListQuery({ searchTerm, statusFilter, sortMode, route }: ListDocumentsOptions) {
+function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOptions) {
   const joins = [
     "JOIN collections ON collections.id = documents.collection_id",
     `LEFT JOIN (
@@ -372,11 +371,6 @@ function buildDocumentListQuery({ searchTerm, statusFilter, sortMode, route }: L
   if (route.type === "collection") {
     bindValues.push(route.collectionName);
     whereClauses.push(`collections.name = $${bindValues.length}`);
-  }
-
-  if (route.type !== "trash" && statusFilter !== "all") {
-    bindValues.push(statusFilter);
-    whereClauses.push(`documents.status = $${bindValues.length}`);
   }
 
   if (normalizedSearchTerm.length > 0) {
@@ -443,7 +437,7 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
   const [collections, availableTags, allDocuments, documents, trashCountRows] = await Promise.all([
     database.select<CollectionRow[]>("SELECT id, name, color, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
     database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC"),
-    listDocuments(database, { searchTerm: "", statusFilter: "all", sortMode: "recentes", route: { type: "all" } }),
+    listDocuments(database, { searchTerm: "", sortMode: "recentes", route: { type: "all" } }),
     listDocuments(database, options),
     database.select<CountRow[]>("SELECT COUNT(*) AS count FROM documents WHERE deleted_at IS NOT NULL"),
   ]);

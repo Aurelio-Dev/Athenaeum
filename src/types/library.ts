@@ -56,7 +56,6 @@ export type ExtractedPdfMetadata = {
 };
 
 export type SortMode = "recentes" | "titulo" | "progresso";
-export type StatusFilter = "all" | DocumentStatus;
 
 export type LibraryRoute =
   | { type: "all" }
