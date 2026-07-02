@@ -80,9 +80,9 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
   if (name === "brand") {
     return (
       <svg {...commonProps} strokeWidth={2.4}>
-        <line x1="4" x2="20" y1="7" y2="7" />
-        <line x1="7" x2="17" y1="12" y2="12" />
-        <line x1="10" x2="14" y1="17" y2="17" />
+        <path d="M3 11.5 12 4l9 7.5" />
+        <path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9" />
+        <path d="M9.5 20v-6h5v6" />
       </svg>
     );
   }

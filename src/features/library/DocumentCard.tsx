@@ -157,7 +157,7 @@ function DocumentGridCard({ document, isSelected, mode = "library", onSelect, on
 
       <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
         <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
-        <h2 className="line-clamp-2 text-sm font-semibold text-text-primary">{document.title}</h2>
+        <h2 className="line-clamp-2 text-sm font-bold text-text-primary">{document.title}</h2>
         <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
 
         {isTrashMode ? (

@@ -220,7 +220,7 @@ export function LibraryView() {
     [queryClient],
   );
 
-  const listClassName = "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]";
+  const listClassName = "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
   const activeCollection =
@@ -374,103 +374,105 @@ export function LibraryView() {
       onRenameCollection={renameCollection}
       onDeleteCollection={deleteCollection}
     >
-      <div className="flex items-center gap-3 bg-surface-app px-8 pb-2 pt-6">
-        <label className="ml-auto flex w-full max-w-sm items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
-          <SearchIcon />
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Pesquisar na biblioteca..."
-            className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-subtle"
-          />
-        </label>
-        {isTrashRoute ? null : (
-          <button
-            type="button"
-            onClick={() => setIsAddPdfModalOpen(true)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
-          >
-            <PlusIcon />
-            Adicionar
-          </button>
-        )}
-      </div>
+      <div className="flex h-full min-h-0 flex-1 flex-col xl:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-3 bg-surface-app px-8 pb-2 pt-6">
+            <label className="ml-auto flex w-full max-w-sm items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
+              <SearchIcon />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Pesquisar na biblioteca..."
+                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-subtle"
+              />
+            </label>
+            {isTrashRoute ? null : (
+              <button
+                type="button"
+                onClick={() => setIsAddPdfModalOpen(true)}
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+              >
+                <PlusIcon />
+                Adicionar
+              </button>
+            )}
+          </div>
 
-      <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-2">
-        <LibraryHeader title={getRouteTitle(activeRoute)} count={documents.length} />
-        {isTrashRoute && trashCount > 0 ? (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-status-red px-4 py-2.5 text-sm font-bold text-status-red-text transition hover:brightness-95"
-            onClick={() => setPendingConfirmation({ type: "empty-trash" })}
-          >
-            Esvaziar lixeira
-          </button>
-        ) : null}
-        <LibraryToolbar compact={isTrashRoute} sortMode={sortMode} onSortModeChange={setSortMode} />
-      </header>
+          <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-2">
+            <LibraryHeader title={getRouteTitle(activeRoute)} count={documents.length} />
+            {isTrashRoute && trashCount > 0 ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg bg-status-red px-4 py-2.5 text-sm font-bold text-status-red-text transition hover:brightness-95"
+                onClick={() => setPendingConfirmation({ type: "empty-trash" })}
+              >
+                Esvaziar lixeira
+              </button>
+            ) : null}
+            <LibraryToolbar compact={isTrashRoute} sortMode={sortMode} onSortModeChange={setSortMode} />
+          </header>
 
-      {isTrashRoute ? (
-        <div className="border-b border-border-subtle bg-surface-app px-8 py-4 text-sm text-text-secondary">
-          Itens na lixeira sao excluidos permanentemente apos 30 dias.
+          {isTrashRoute ? (
+            <div className="border-b border-border-subtle bg-surface-app px-8 py-4 text-sm text-text-secondary">
+              Itens na lixeira sao excluidos permanentemente apos 30 dias.
+            </div>
+          ) : null}
+
+          <section className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+            {isLoading ? (
+              <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
+                <div className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold text-text-secondary">
+                  Carregando biblioteca
+                </div>
+              </div>
+            ) : hasLoadError ? (
+              <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
+                <div className="rounded-full bg-status-red px-4 py-2 text-sm font-semibold text-status-red-text">
+                  Nao foi possivel carregar a biblioteca.
+                </div>
+              </div>
+            ) : documents.length > 0 ? (
+              <div className={listClassName}>
+                {documents.map((document) => (
+                  <DocumentCard
+                    key={document.id}
+                    document={document}
+                    mode={isTrashRoute ? "trash" : "library"}
+                    isSelected={document.id === selectedDocumentId}
+                    onSelect={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
+                    onToggleFavorite={(nextDocumentId) => void toggleFavorite(nextDocumentId)}
+                    onDelete={(nextDocumentId) => void moveToTrash(nextDocumentId)}
+                  />
+                ))}
+              </div>
+            ) : hasActiveSearch ? (
+              <EmptyState
+                icon={SearchXIcon}
+                title="Nenhum resultado"
+                description="Tente outros termos ou remova os filtros ativos."
+              />
+            ) : activeRoute.type === "collection" ? (
+              <EmptyState
+                icon={FolderOpenIcon}
+                title="Coleção vazia"
+                description="Nenhum documento nesta coleção ainda."
+                action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
+              />
+            ) : allDocuments.length === 0 && !isTrashRoute ? (
+              <EmptyState
+                icon={LibraryBigIcon}
+                title="Sua biblioteca está vazia"
+                description="Adicione seu primeiro documento para começar."
+                action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
+              />
+            ) : (
+              <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
+                <div className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold text-text-secondary">{emptyMessage}</div>
+                <p className="mt-3 text-sm text-text-secondary">{emptyDescription}</p>
+              </div>
+            )}
+          </section>
         </div>
-      ) : null}
-
-      <div className="min-h-0 flex flex-1 flex-col xl:flex-row">
-        <section className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-          {isLoading ? (
-            <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold text-text-secondary">
-                Carregando biblioteca
-              </div>
-            </div>
-          ) : hasLoadError ? (
-            <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-status-red px-4 py-2 text-sm font-semibold text-status-red-text">
-                Nao foi possivel carregar a biblioteca.
-              </div>
-            </div>
-          ) : documents.length > 0 ? (
-            <div className={listClassName}>
-              {documents.map((document) => (
-                <DocumentCard
-                  key={document.id}
-                  document={document}
-                  mode={isTrashRoute ? "trash" : "library"}
-                  isSelected={document.id === selectedDocumentId}
-                  onSelect={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
-                  onToggleFavorite={(nextDocumentId) => void toggleFavorite(nextDocumentId)}
-                  onDelete={(nextDocumentId) => void moveToTrash(nextDocumentId)}
-                />
-              ))}
-            </div>
-          ) : hasActiveSearch ? (
-            <EmptyState
-              icon={SearchXIcon}
-              title="Nenhum resultado"
-              description="Tente outros termos ou remova os filtros ativos."
-            />
-          ) : activeRoute.type === "collection" ? (
-            <EmptyState
-              icon={FolderOpenIcon}
-              title="Coleção vazia"
-              description="Nenhum documento nesta coleção ainda."
-              action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
-            />
-          ) : allDocuments.length === 0 && !isTrashRoute ? (
-            <EmptyState
-              icon={LibraryBigIcon}
-              title="Sua biblioteca está vazia"
-              description="Adicione seu primeiro documento para começar."
-              action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
-            />
-          ) : (
-            <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold text-text-secondary">{emptyMessage}</div>
-              <p className="mt-3 text-sm text-text-secondary">{emptyDescription}</p>
-            </div>
-          )}
-        </section>
 
         {selectedDocument ? (
           <DocumentDetailsPanel
