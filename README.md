@@ -87,6 +87,29 @@ npm run tauri dev
 A primeira execução compila as dependências Rust — pode demorar alguns
 minutos. As próximas são bem mais rápidas.
 
+### Fontes
+
+A UI usa Segoe UI. É uma fonte proprietária da Microsoft (licenciada só
+para uso no Windows, sem redistribuição), então os arquivos `.ttf` **não**
+ficam no repositório — `src/assets/fonts/*.ttf` está no `.gitignore`.
+
+Em uma máquina Windows, copie os seguintes arquivos de `C:\Windows\Fonts`
+para `src/assets/fonts/`, renomeando conforme a tabela:
+
+| Origem (`C:\Windows\Fonts`) | Destino (`src/assets/fonts/`) |
+| --- | --- |
+| `segoeui.ttf` | `segoeui.ttf` |
+| `segoeuii.ttf` | `segoeui-italic.ttf` |
+| `seguisb.ttf` | `segoeui-semibold.ttf` |
+| `segoeuib.ttf` | `segoeui-bold.ttf` |
+| `segoeuiz.ttf` | `segoeui-bold-italic.ttf` |
+| `seguibl.ttf` | `segoeui-black.ttf` |
+
+Sem esses arquivos, o app roda normalmente e cai no fallback do CSS
+(Inter, IBM Plex Sans, `system-ui`) — a UI funciona, só visualmente
+diferente do Figma. Em Linux/macOS, onde a Segoe UI não existe, o
+fallback é o comportamento esperado.
+
 ### Scripts disponíveis
 
 | Comando | O que faz |

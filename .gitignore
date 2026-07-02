@@ -25,3 +25,8 @@ desktop.ini
 # Internal development artifacts
 CLAUDE.md
 references/
+
+# Segoe UI e' fonte proprietaria da Microsoft (licenciada apenas para uso no
+# Windows, sem redistribuicao). Os .ttf sao locais a cada maquina — veja
+# "Fontes" no README para copia-los de C:\Windows\Fonts antes do build.
+src/assets/fonts/*.ttf
