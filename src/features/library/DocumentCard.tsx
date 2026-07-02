@@ -41,12 +41,16 @@ function CircularProgress({ value }: { value: number }) {
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - clamped / 100);
 
+  // O SVG preenche o container (h-full w-full) e o anel e desenhado no centro
+  // exato do viewBox (cx/cy = 12), ficando sempre concentrico com o circulo
+  // branco — sem depender de centralizacao via flex (que deixava o anel
+  // levemente deslocado dentro do circulo).
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <circle cx="9" cy="9" r={radius} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+    <svg className="block h-full w-full" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r={radius} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3" />
       <circle
-        cx="9"
-        cy="9"
+        cx="12"
+        cy="12"
         r={radius}
         fill="none"
         stroke="currentColor"
@@ -54,7 +58,7 @@ function CircularProgress({ value }: { value: number }) {
         strokeLinecap="round"
         strokeDasharray={circumference}
         strokeDashoffset={offset}
-        transform="rotate(-90 9 9)"
+        transform="rotate(-90 12 12)"
       />
     </svg>
   );
@@ -90,7 +94,7 @@ function DocumentListRow({ document, isSelected, mode = "library", onSelect, onT
 
   return (
     <article
-      className={`group flex cursor-pointer items-center gap-4 rounded-xl border bg-surface-card p-3 shadow-card transition hover:shadow-lg ${
+      className={`group flex cursor-pointer items-center gap-4 rounded-xl border bg-surface-card p-3 shadow-card transition hover:-translate-y-1 ${
         isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
       }`}
       role="button"
@@ -115,7 +119,7 @@ function DocumentListRow({ document, isSelected, mode = "library", onSelect, onT
       </div>
 
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-sm font-bold text-text-primary">{document.title}</h2>
+        <h2 className="truncate text-[13px] font-semibold leading-[17.5px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
         <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
         <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
       </div>
@@ -178,7 +182,7 @@ function DocumentGridCard({ document, isSelected, mode = "library", onSelect, on
 
   return (
     <article
-      className={`group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:shadow-lg ${
+      className={`group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:-translate-y-1 ${
         isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
       }`}
       role="button"
@@ -252,7 +256,7 @@ function DocumentGridCard({ document, isSelected, mode = "library", onSelect, on
 
       <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
         <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
-        <h2 className="line-clamp-2 text-sm font-bold text-text-primary">{document.title}</h2>
+        <h2 className="line-clamp-2 text-[13px] font-semibold leading-[17.5px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
         <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
 
         {isTrashMode ? (
