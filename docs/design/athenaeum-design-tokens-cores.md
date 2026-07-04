@@ -1,5 +1,15 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Nota conhecida (03/07/2026):** o popup "Mais ferramentas" do Quadro
+> mostra 4 itens em inglês (Web Embed, Laser pointer, Generate, Mermaid
+> to Excalidraw) — traduções ausentes no locale pt-BR da própria lib
+> @excalidraw/excalidraw@0.18.1, mesmo com a cobertura geral do idioma
+> em 91%. Aceito como limitação conhecida: baixa visibilidade (exige
+> abrir o popup), e esconder via CSS adicionaria fragilidade
+> desproporcional ao ganho. Reavaliar apenas se a lib atualizar a
+> tradução, ou se decidirmos contribuir a tradução faltante ao projeto
+> Excalidraw upstream.
+
 > **Changelog 03/07/2026:** revisão de decisão — o header dos painéis
 > flutuantes (Quadro/Caderno/Leitor) deixou de ser fixo em `#14161F`
 > independente do tema. Agora acompanha o tema do app via os tokens
