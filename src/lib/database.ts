@@ -646,7 +646,7 @@ export async function listNotebooks(collectionId: string): Promise<Notebook[]> {
   }));
 }
 
-export async function createNotebook(collectionId: string, title = "Untitled Notebook"): Promise<Notebook> {
+export async function createNotebook(collectionId: string, title = "Caderno sem título"): Promise<Notebook> {
   const database = await getDatabase();
 
   const insertResult = await database.execute("INSERT INTO notebooks (collection_id, title) VALUES ($1, $2)", [
@@ -681,7 +681,7 @@ export async function createNotebook(collectionId: string, title = "Untitled Not
 
 export async function renameNotebook(notebookId: number, title: string) {
   const database = await getDatabase();
-  const nextTitle = title.trim() || "Untitled Notebook";
+  const nextTitle = title.trim() || "Caderno sem título";
   await database.execute("UPDATE notebooks SET title = $1 WHERE id = $2 AND deleted_at IS NULL", [nextTitle, notebookId]);
 }
 
@@ -783,7 +783,7 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
 
 export async function updateNotebookInfo(notebookId: number, updates: { title: string; description: string; collectionId: string }): Promise<NotebookInfo> {
   const database = await getDatabase();
-  const title = updates.title.trim() || "Untitled Notebook";
+  const title = updates.title.trim() || "Caderno sem título";
   const description = updates.description;
 
   await database.execute("UPDATE notebooks SET title = $1, description = $2, collection_id = $3 WHERE id = $4", [
@@ -871,7 +871,7 @@ export async function listCanvases(collectionId: string): Promise<Canvas[]> {
   return rows.map(mapCanvasRow);
 }
 
-export async function createCanvas(collectionId: string, title = "Untitled Canvas"): Promise<Canvas> {
+export async function createCanvas(collectionId: string, title = "Quadro sem título"): Promise<Canvas> {
   const database = await getDatabase();
   const insertResult = await database.execute("INSERT INTO canvases (collection_id, title) VALUES ($1, $2)", [
     collectionId,
@@ -893,7 +893,7 @@ export async function createCanvas(collectionId: string, title = "Untitled Canva
 
 export async function renameCanvas(canvasId: number, title: string) {
   const database = await getDatabase();
-  const nextTitle = title.trim() || "Untitled Canvas";
+  const nextTitle = title.trim() || "Quadro sem título";
   await database.execute("UPDATE canvases SET title = $1 WHERE id = $2 AND deleted_at IS NULL", [nextTitle, canvasId]);
 }
 

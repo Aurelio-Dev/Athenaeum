@@ -26,7 +26,7 @@ function getMaximizedPanelSize() {
 
 function pageDisplayTitle(page: NotebookPage) {
   // Fallback calculado na UI a partir de position — nunca persistido.
-  return page.title ?? `Untitled Page ${page.position}`;
+  return page.title ?? `Página sem título ${page.position}`;
 }
 
 function NotebookHeaderIcon() {
@@ -245,7 +245,7 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
       return;
     }
 
-    const nextTitle = infoDraftTitleRef.current.trim() || "Untitled Notebook";
+    const nextTitle = infoDraftTitleRef.current.trim() || "Caderno sem título";
     const nextDescription = infoDraftDescriptionRef.current;
     const nextCollectionId = infoDraftCollectionIdRef.current || notebookInfo?.collectionId || collections[0]?.id || "";
 
@@ -525,7 +525,7 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
               isDirtyRef.current = true;
             }}
             onBlur={() => void saveActivePage()}
-            placeholder={`Untitled Page ${activePage.position}`}
+            placeholder={`Página sem título ${activePage.position}`}
             aria-label="Título da página"
             className={`min-w-0 flex-1 border-0 bg-transparent pb-1 pr-5 pt-4 font-serif text-[26px] font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] ${contentInset}`}
           />

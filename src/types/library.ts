@@ -75,7 +75,7 @@ export type Canvas = {
 };
 
 // Pagina de um caderno. title e null quando o usuario nunca renomeou — o
-// fallback "Untitled Page N" e calculado na UI a partir de position, nunca
+// fallback "Pagina sem titulo N" e calculado na UI a partir de position, nunca
 // persistido como texto generico.
 export type NotebookPage = {
   id: number;
