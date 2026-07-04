@@ -1,5 +1,17 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 04/07/2026:** o painel de Ajustes ganhou seleção funcional
+> de variante do ícone do app (`Frontão` / `Coluna`). Os previews agora
+> usam SVG inline compartilhado com a marca da sidebar, removendo o antigo
+> `column-icon.svg` externo renderizado via `mask-image` (que no WebView
+> podia aparecer como bloco sólido). A seleção persiste em `app_settings`
+> (`icon_variant`) e passa por um provider global, então sidebar e painel
+> respondem juntos à troca. Limitação conhecida: a aplicação também tenta
+> trocar o ícone da janela/taskbar via API runtime do Tauri, mas o ícone do
+> executável, instalador e atalhos continua sendo o definido em build-time
+> pelo `src-tauri/tauri.conf.json`/`src-tauri/icons/*`; no Windows, o shell
+> ainda pode manter cache visual do ícone nativo até reiniciar/reinstalar.
+
 > **Nota conhecida (03/07/2026):** o popup "Mais ferramentas" do Quadro
 > mostra 4 itens em inglês (Web Embed, Laser pointer, Generate, Mermaid
 > to Excalidraw) — traduções ausentes no locale pt-BR da própria lib
