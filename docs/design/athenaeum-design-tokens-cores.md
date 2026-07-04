@@ -1,5 +1,14 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 03/07/2026:** revisão de decisão — o header dos painéis
+> flutuantes (Quadro/Caderno/Leitor) deixou de ser fixo em `#14161F`
+> independente do tema. Agora acompanha o tema do app via os tokens
+> `--floating-header-*` e `--reader-header-*` (claro: fundo `var(--card)`
+> = `#FAF5EF`; escuro: `var(--card)` = `#231C16`). O token `--surface-header`
+> (`#14161F`) continua existindo no código mas não é mais usado nesses
+> headers — mantido apenas por compatibilidade até uma limpeza futura
+> remover as referências órfãs, se houver.
+
 > **Changelog 03/07/2026:** adicionado token `accent-tint-bg` (#EFE2D8) —
 > fundo de destaque para ferramenta ativa na toolbar de Quadros, extraído
 > por amostragem de pixel do protótipo Claude Design em 03/07/2026.
