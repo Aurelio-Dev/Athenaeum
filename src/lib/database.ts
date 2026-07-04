@@ -5,10 +5,16 @@ import { TAG_COLOR_TOKENS } from "./tagColors";
 import { getSubjectTagTone } from "../styles/designTokens";
 import { isHighlightColor } from "../types/annotation";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
-import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, SubjectTag } from "../types/library";
+import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag } from "../types/library";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
+const trashItemCountSql = `
+  SELECT
+    (SELECT COUNT(*) FROM documents WHERE deleted_at IS NOT NULL) +
+    (SELECT COUNT(*) FROM notebooks WHERE deleted_at IS NOT NULL) +
+    (SELECT COUNT(*) FROM canvases WHERE deleted_at IS NOT NULL) AS count
+`;
 const defaultCollectionColor = TAG_COLOR_TOKENS.slate.bg;
 const defaultCollectionName = "Sem título";
 
@@ -443,7 +449,7 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
     database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC"),
     listDocuments(database, { searchTerm: "", sortMode: "recentes", route: { type: "all" } }),
     listDocuments(database, options),
-    database.select<CountRow[]>("SELECT COUNT(*) AS count FROM documents WHERE deleted_at IS NOT NULL"),
+    database.select<CountRow[]>(trashItemCountSql),
   ]);
 
   return {
@@ -468,7 +474,7 @@ export async function listAvailableTags(): Promise<SubjectTag[]> {
 
 export async function countTrashDocuments(): Promise<number> {
   const database = await getDatabase();
-  const rows = await database.select<CountRow[]>("SELECT COUNT(*) AS count FROM documents WHERE deleted_at IS NOT NULL");
+  const rows = await database.select<CountRow[]>(trashItemCountSql);
   return rows[0]?.count ?? 0;
 }
 
@@ -570,8 +576,387 @@ export async function deleteCollection(collectionId: string) {
   const database = await getDatabase();
   const fallbackCollectionId = await ensureFallbackCollection(database, collectionId);
 
+  // Documentos, cadernos e quadros sao PRESERVADOS: migram para a colecao
+  // fallback antes do DELETE. Os FKs usam ON DELETE RESTRICT, entao o banco
+  // recusaria excluir a colecao se algum desses UPDATEs faltasse.
   await database.execute("UPDATE documents SET collection_id = $1 WHERE collection_id = $2", [fallbackCollectionId, collectionId]);
+  await database.execute("UPDATE notebooks SET collection_id = $1 WHERE collection_id = $2", [fallbackCollectionId, collectionId]);
+  await database.execute("UPDATE canvases SET collection_id = $1 WHERE collection_id = $2", [fallbackCollectionId, collectionId]);
   await database.execute("DELETE FROM collections WHERE id = $1", [collectionId]);
+}
+
+type NotebookRow = {
+  id: number;
+  collection_id: string;
+  title: string;
+  favorite: number;
+  deleted_at: string | null;
+  created_at: string;
+  page_count: number;
+  last_edited_at: string;
+};
+
+export type NotebookInfo = {
+  id: number;
+  title: string;
+  collectionId: string;
+  collectionName: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listNotebooks(collectionId: string): Promise<Notebook[]> {
+  const database = await getDatabase();
+
+  // page_count e last_edited_at sao agregados das paginas. O CASE cobre o
+  // "Editado ha X" do card: vale a edicao mais recente entre as paginas e o
+  // proprio caderno (renomear o caderno tambem conta como edicao).
+  const rows = await database.select<NotebookRow[]>(
+    `SELECT
+       notebooks.id,
+       notebooks.collection_id,
+       notebooks.title,
+       notebooks.favorite,
+       notebooks.deleted_at,
+       notebooks.created_at,
+       COUNT(notebook_pages.id) AS page_count,
+       CASE
+         WHEN MAX(notebook_pages.updated_at) IS NULL OR MAX(notebook_pages.updated_at) < notebooks.updated_at
+         THEN notebooks.updated_at
+         ELSE MAX(notebook_pages.updated_at)
+       END AS last_edited_at
+     FROM notebooks
+     LEFT JOIN notebook_pages ON notebook_pages.notebook_id = notebooks.id
+     WHERE notebooks.collection_id = $1 AND notebooks.deleted_at IS NULL
+     GROUP BY notebooks.id
+     ORDER BY last_edited_at DESC`,
+    [collectionId],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    collectionId: row.collection_id,
+    title: row.title,
+    pageCount: row.page_count,
+    favorite: row.favorite === 1,
+    createdAt: row.created_at,
+    updatedAt: row.last_edited_at,
+    deletedAt: row.deleted_at ?? undefined,
+  }));
+}
+
+export async function createNotebook(collectionId: string, title = "Untitled Notebook"): Promise<Notebook> {
+  const database = await getDatabase();
+
+  const insertResult = await database.execute("INSERT INTO notebooks (collection_id, title) VALUES ($1, $2)", [
+    collectionId,
+    title,
+  ]);
+  const notebookId = insertResult.lastInsertId;
+
+  if (typeof notebookId !== "number") {
+    throw new Error("Nao foi possivel criar o caderno.");
+  }
+
+  // Todo caderno nasce com uma pagina vazia (position 1): o editor sempre tem
+  // onde focar ao abrir, sem estado especial de "caderno sem paginas".
+  await database.execute("INSERT INTO notebook_pages (notebook_id, position) VALUES ($1, 1)", [notebookId]);
+
+  const [row] = await database.select<Array<{ created_at: string; updated_at: string }>>(
+    "SELECT created_at, updated_at FROM notebooks WHERE id = $1",
+    [notebookId],
+  );
+
+  return {
+    id: notebookId,
+    collectionId,
+    title,
+    pageCount: 1,
+    favorite: false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function renameNotebook(notebookId: number, title: string) {
+  const database = await getDatabase();
+  const nextTitle = title.trim() || "Untitled Notebook";
+  await database.execute("UPDATE notebooks SET title = $1 WHERE id = $2 AND deleted_at IS NULL", [nextTitle, notebookId]);
+}
+
+export async function setNotebookFavorite(notebookId: number, favorite: boolean) {
+  const database = await getDatabase();
+  await database.execute("UPDATE notebooks SET favorite = $1 WHERE id = $2 AND deleted_at IS NULL", [favorite ? 1 : 0, notebookId]);
+}
+
+export async function moveNotebookToCollection(notebookId: number, collectionId: string) {
+  const database = await getDatabase();
+  await database.execute("UPDATE notebooks SET collection_id = $1 WHERE id = $2 AND deleted_at IS NULL", [collectionId, notebookId]);
+}
+
+export async function moveNotebookToTrash(notebookId: number) {
+  const database = await getDatabase();
+  await database.execute("UPDATE notebooks SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1", [notebookId]);
+}
+
+type NotebookPageRow = {
+  id: number;
+  notebook_id: number;
+  title: string | null;
+  content: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapNotebookPageRow(row: NotebookPageRow): NotebookPage {
+  return {
+    id: row.id,
+    notebookId: row.notebook_id,
+    title: row.title,
+    content: row.content,
+    position: row.position,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getNotebookTitle(notebookId: number): Promise<string> {
+  const database = await getDatabase();
+  const [row] = await database.select<Array<{ title: string }>>("SELECT title FROM notebooks WHERE id = $1", [notebookId]);
+
+  if (!row) {
+    throw new Error("Caderno nao encontrado.");
+  }
+
+  return row.title;
+}
+
+export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo> {
+  const database = await getDatabase();
+  const [row] = await database.select<
+    Array<{
+      id: number;
+      title: string;
+      collection_id: string;
+      description: string;
+      collection_name: string;
+      created_at: string;
+      last_edited_at: string;
+    }>
+  >(
+    `SELECT
+       notebooks.id,
+       notebooks.title,
+       notebooks.collection_id,
+       notebooks.description,
+       collections.name AS collection_name,
+       notebooks.created_at,
+       CASE
+         WHEN MAX(notebook_pages.updated_at) IS NULL OR MAX(notebook_pages.updated_at) < notebooks.updated_at
+         THEN notebooks.updated_at
+         ELSE MAX(notebook_pages.updated_at)
+       END AS last_edited_at
+     FROM notebooks
+     JOIN collections ON collections.id = notebooks.collection_id
+     LEFT JOIN notebook_pages ON notebook_pages.notebook_id = notebooks.id
+     WHERE notebooks.id = $1
+     GROUP BY notebooks.id`,
+    [notebookId],
+  );
+
+  if (!row) {
+    throw new Error("Caderno nao encontrado.");
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    collectionId: row.collection_id,
+    collectionName: row.collection_name,
+    description: row.description,
+    createdAt: row.created_at,
+    updatedAt: row.last_edited_at,
+  };
+}
+
+export async function updateNotebookInfo(notebookId: number, updates: { title: string; description: string; collectionId: string }): Promise<NotebookInfo> {
+  const database = await getDatabase();
+  const title = updates.title.trim() || "Untitled Notebook";
+  const description = updates.description;
+
+  await database.execute("UPDATE notebooks SET title = $1, description = $2, collection_id = $3 WHERE id = $4", [
+    title,
+    description,
+    updates.collectionId,
+    notebookId,
+  ]);
+  return getNotebookInfo(notebookId);
+}
+
+export async function listNotebookPages(notebookId: number): Promise<NotebookPage[]> {
+  const database = await getDatabase();
+  const rows = await database.select<NotebookPageRow[]>(
+    "SELECT id, notebook_id, title, content, position, created_at, updated_at FROM notebook_pages WHERE notebook_id = $1 ORDER BY position ASC",
+    [notebookId],
+  );
+
+  return rows.map(mapNotebookPageRow);
+}
+
+export async function createNotebookPage(notebookId: number): Promise<NotebookPage> {
+  const database = await getDatabase();
+
+  // position = maior atual + 1, calculado no proprio INSERT (a query agregada
+  // sempre devolve exatamente uma linha, mesmo sem paginas: MAX = NULL -> 1).
+  const insertResult = await database.execute(
+    "INSERT INTO notebook_pages (notebook_id, position) SELECT $1, COALESCE(MAX(position), 0) + 1 FROM notebook_pages WHERE notebook_id = $1",
+    [notebookId],
+  );
+  const pageId = insertResult.lastInsertId;
+
+  if (typeof pageId !== "number") {
+    throw new Error("Nao foi possivel criar a pagina.");
+  }
+
+  const [row] = await database.select<NotebookPageRow[]>(
+    "SELECT id, notebook_id, title, content, position, created_at, updated_at FROM notebook_pages WHERE id = $1",
+    [pageId],
+  );
+
+  return mapNotebookPageRow(row);
+}
+
+// Autosave do editor de caderno (blur/troca de pagina/fechar painel). O
+// trigger notebook_pages_touch_updated_at cuida do updated_at.
+export async function saveNotebookPage(pageId: number, updates: { title: string | null; content: string }) {
+  const database = await getDatabase();
+  await database.execute("UPDATE notebook_pages SET title = $1, content = $2 WHERE id = $3", [
+    updates.title,
+    updates.content,
+    pageId,
+  ]);
+}
+
+type CanvasRow = {
+  id: number;
+  collection_id: string;
+  title: string;
+  favorite: number;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapCanvasRow(row: CanvasRow): Canvas {
+  return {
+    id: row.id,
+    collectionId: row.collection_id,
+    title: row.title,
+    favorite: row.favorite === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at ?? undefined,
+  };
+}
+
+export async function listCanvases(collectionId: string): Promise<Canvas[]> {
+  const database = await getDatabase();
+  const rows = await database.select<CanvasRow[]>(
+    "SELECT id, collection_id, title, favorite, deleted_at, created_at, updated_at FROM canvases WHERE collection_id = $1 AND deleted_at IS NULL ORDER BY updated_at DESC",
+    [collectionId],
+  );
+
+  return rows.map(mapCanvasRow);
+}
+
+export async function createCanvas(collectionId: string, title = "Untitled Canvas"): Promise<Canvas> {
+  const database = await getDatabase();
+  const insertResult = await database.execute("INSERT INTO canvases (collection_id, title) VALUES ($1, $2)", [
+    collectionId,
+    title,
+  ]);
+  const canvasId = insertResult.lastInsertId;
+
+  if (typeof canvasId !== "number") {
+    throw new Error("Nao foi possivel criar o quadro.");
+  }
+
+  const [row] = await database.select<CanvasRow[]>(
+    "SELECT id, collection_id, title, favorite, deleted_at, created_at, updated_at FROM canvases WHERE id = $1",
+    [canvasId],
+  );
+
+  return mapCanvasRow(row);
+}
+
+export async function renameCanvas(canvasId: number, title: string) {
+  const database = await getDatabase();
+  const nextTitle = title.trim() || "Untitled Canvas";
+  await database.execute("UPDATE canvases SET title = $1 WHERE id = $2 AND deleted_at IS NULL", [nextTitle, canvasId]);
+}
+
+export async function setCanvasFavorite(canvasId: number, favorite: boolean) {
+  const database = await getDatabase();
+  await database.execute("UPDATE canvases SET favorite = $1 WHERE id = $2 AND deleted_at IS NULL", [favorite ? 1 : 0, canvasId]);
+}
+
+export async function moveCanvasToCollection(canvasId: number, collectionId: string) {
+  const database = await getDatabase();
+  await database.execute("UPDATE canvases SET collection_id = $1 WHERE id = $2 AND deleted_at IS NULL", [collectionId, canvasId]);
+}
+
+export async function moveCanvasToTrash(canvasId: number) {
+  const database = await getDatabase();
+  await database.execute("UPDATE canvases SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1", [canvasId]);
+}
+
+// Cena do Excalidraw serializada ({elements, appState}, SEM imagens — elas
+// vivem em disco via canvas_files, carregadas pelo comando Rust
+// load_canvas_files).
+export async function getCanvasContent(canvasId: number): Promise<string> {
+  const database = await getDatabase();
+  const [row] = await database.select<Array<{ content: string }>>("SELECT content FROM canvases WHERE id = $1", [
+    canvasId,
+  ]);
+
+  if (!row) {
+    throw new Error("Quadro nao encontrado.");
+  }
+
+  return row.content;
+}
+
+// Autosave da cena (debounce + flush no fechamento). O trigger
+// canvases_touch_updated_at cuida do updated_at — o "Editado ha X" do card
+// acompanha sozinho.
+export async function saveCanvasContent(canvasId: number, contentJson: string) {
+  const database = await getDatabase();
+  await database.execute("UPDATE canvases SET content = $1 WHERE id = $2", [contentJson, canvasId]);
+}
+
+// Imagens do quadro: a persistencia fisica (escrita atomica em disco + linha
+// em canvas_files) e dos comandos Rust — aqui so os wrappers tipados de
+// invoke. dataBase64 e o corpo do dataURL do Excalidraw, sem o prefixo
+// "data:...;base64," (o Rust decodifica e valida o limite de 10MB).
+export type CanvasFilePayload = {
+  fileId: string;
+  mimeType: string;
+  dataBase64: string;
+};
+
+export async function loadCanvasFiles(canvasId: number): Promise<CanvasFilePayload[]> {
+  return invoke<CanvasFilePayload[]>("load_canvas_files", { canvasId });
+}
+
+export async function saveCanvasFile(canvasId: number, file: CanvasFilePayload): Promise<string> {
+  return invoke<string>("save_canvas_file", {
+    canvasId,
+    fileId: file.fileId,
+    mimeType: file.mimeType,
+    dataBase64: file.dataBase64,
+  });
 }
 
 function uniqueTrimmed(values: string[]) {
@@ -796,6 +1181,8 @@ export async function permanentlyDeleteDocument(documentId: string) {
 export async function emptyTrash() {
   const database = await getDatabase();
   await database.execute("DELETE FROM documents WHERE deleted_at IS NOT NULL");
+  await database.execute("DELETE FROM notebooks WHERE deleted_at IS NOT NULL");
+  await database.execute("DELETE FROM canvases WHERE deleted_at IS NOT NULL");
 }
 
 function isNormalizedRect(value: unknown): value is NormalizedRect {
@@ -915,5 +1302,11 @@ export async function deleteAnnotation(annotationId: string): Promise<void> {
 async function purgeExpiredTrash(database: Database) {
   await database.execute(
     "DELETE FROM documents WHERE deleted_at IS NOT NULL AND deleted_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')",
+  );
+  await database.execute(
+    "DELETE FROM notebooks WHERE deleted_at IS NOT NULL AND deleted_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')",
+  );
+  await database.execute(
+    "DELETE FROM canvases WHERE deleted_at IS NOT NULL AND deleted_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')",
   );
 }

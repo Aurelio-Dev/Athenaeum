@@ -48,6 +48,45 @@ export type LibraryCollection = {
   description: string;
 };
 
+// Caderno de anotacoes pertencente a uma colecao. pageCount e updatedAt
+// (ultima edicao, considerando tambem as paginas) chegam agregados pela
+// query de listagem — nao sao colunas diretas da tabela notebooks.
+export type Notebook = {
+  id: number;
+  collectionId: string;
+  title: string;
+  pageCount: number;
+  favorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+};
+
+// Quadro (whiteboard) de uma colecao. So os metadados por enquanto — o schema
+// do conteudo sera definido quando a biblioteca de canvas for escolhida.
+export type Canvas = {
+  id: number;
+  collectionId: string;
+  title: string;
+  favorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+};
+
+// Pagina de um caderno. title e null quando o usuario nunca renomeou — o
+// fallback "Untitled Page N" e calculado na UI a partir de position, nunca
+// persistido como texto generico.
+export type NotebookPage = {
+  id: number;
+  notebookId: number;
+  title: string | null;
+  content: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExtractedPdfMetadata = {
   title: string;
   authors: string;

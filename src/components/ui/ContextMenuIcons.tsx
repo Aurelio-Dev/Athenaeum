@@ -26,6 +26,21 @@ export function IconContextVerDetalhes({ className }: ContextMenuIconProps) {
   );
 }
 
+export function IconContextRenomear({ className }: ContextMenuIconProps) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden="true">
+      <path d="M9.33334 2.66669L13.3333 6.66669" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M12.1667 1.83335C12.432 1.56814 12.7917 1.41916 13.1667 1.41916C13.5417 1.41916 13.9015 1.56814 14.1667 1.83335C14.4319 2.09857 14.5809 2.45832 14.5809 2.83335C14.5809 3.20839 14.4319 3.56814 14.1667 3.83335L4.66668 13.3334L2.00001 14L2.66668 11.3334L12.1667 1.83335Z"
+        stroke="currentColor"
+        strokeWidth="1.33333"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconContextMoverColecao({ className }: ContextMenuIconProps) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden="true">
