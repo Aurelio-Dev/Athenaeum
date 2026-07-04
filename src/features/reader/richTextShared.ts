@@ -15,6 +15,15 @@
 export const codeBlockStyle =
   "display:block;background:#1E2130;color:#F0E6DC;font-family:'IBM Plex Mono',Consolas,monospace;font-size:0.85em;padding:0.5em 0.75em;border-radius:8px;margin:0.4em 0;white-space:pre-wrap;";
 
+export function prepareCodeElement(code: HTMLElement) {
+  code.setAttribute("style", codeBlockStyle);
+  code.setAttribute("spellcheck", "false");
+}
+
+export function prepareCodeElements(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>("code").forEach(prepareCodeElement);
+}
+
 // Sobe do no ate o editor procurando um ancestral com a tag dada. Devolve null
 // se a selecao nao estiver dentro dessa formatacao.
 export function findEnclosingTag(node: Node | null, tagName: string, editor: HTMLElement): HTMLElement | null {
@@ -95,6 +104,40 @@ export function flattenBlockElements(fragment: DocumentFragment) {
   });
 }
 
+export function insertPlainTextWithLineBreaks(range: Range, text: string) {
+  const normalizedText = text.replace(/\r\n?/g, "\n");
+
+  if (normalizedText.length === 0) {
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  normalizedText.split("\n").forEach((line, index) => {
+    if (index > 0) {
+      fragment.appendChild(document.createElement("br"));
+    }
+
+    if (line.length > 0) {
+      fragment.appendChild(document.createTextNode(line));
+    }
+  });
+
+  const lastInsertedNode = fragment.lastChild;
+  if (!lastInsertedNode) {
+    return;
+  }
+
+  range.deleteContents();
+  range.insertNode(fragment);
+
+  const selection = window.getSelection();
+  const nextRange = document.createRange();
+  nextRange.setStartAfter(lastInsertedNode);
+  nextRange.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(nextRange);
+}
+
 // Remove qualquer <code>/<sub>/<sup> encontrado DENTRO do fragmento
 // extraido antes de envolve-lo numa formatacao nova. Sem isso, quando
 // a selecao cruza a fronteira de uma formatacao ja existente (ex.:
@@ -134,7 +177,7 @@ export function wrapSelectionInCode(selection: Selection, editor: HTMLElement) {
   }
 
   const code = document.createElement("code");
-  code.setAttribute("style", codeBlockStyle);
+  prepareCodeElement(code);
 
   try {
     range.surroundContents(code);

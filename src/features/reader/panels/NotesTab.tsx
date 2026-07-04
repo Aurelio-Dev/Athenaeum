@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { findEnclosingTag, toggleWrapTag, wrapSelectionInCode } from "../richTextShared";
+import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, toggleWrapTag, wrapSelectionInCode } from "../richTextShared";
 
 type NotesTabProps = {
   notesText: string;
@@ -97,6 +97,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
     const editor = editorRef.current;
     if (editor) {
       editor.innerHTML = notesText;
+      prepareCodeElements(editor);
     }
     // Intencional: so no mount. Atualizacoes externas sao tratadas abaixo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,6 +110,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
     const editor = editorRef.current;
     if (editor && notesText !== lastEmittedRef.current) {
       editor.innerHTML = notesText;
+      prepareCodeElements(editor);
       lastEmittedRef.current = notesText;
     }
   }, [notesText]);
@@ -196,6 +198,21 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
   function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
     const text = event.clipboardData.getData("text/plain");
+
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (editor && selection && selection.rangeCount > 0 && selection.anchorNode && selection.focusNode) {
+      const anchorCode = findEnclosingTag(selection.anchorNode, "code", editor);
+      const focusCode = findEnclosingTag(selection.focusNode, "code", editor);
+
+      if (anchorCode && anchorCode === focusCode) {
+        insertPlainTextWithLineBreaks(selection.getRangeAt(0), text);
+        emitChange();
+        syncSelectionState();
+        return;
+      }
+    }
+
     document.execCommand("insertText", false, text);
     emitChange();
   }

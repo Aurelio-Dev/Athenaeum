@@ -219,6 +219,11 @@ function getMaximizedReaderSize() {
   };
 }
 
+function centerHorizontalScroll(element: HTMLElement) {
+  const scrollMax = Math.max(0, element.scrollWidth - element.clientWidth);
+  element.scrollLeft = Math.round(scrollMax / 2);
+}
+
 function useInViewport<T extends Element>(rootMargin: string) {
   const elementRef = useRef<T | null>(null);
   const [isInViewport, setIsInViewport] = useState(false);
@@ -609,6 +614,17 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   useEffect(() => {
     setPageSizes(new Map());
   }, [document.id, zoom]);
+
+  useLayoutEffect(() => {
+    const readerSurface = readerSurfaceRef.current;
+
+    if (!readerSurface) {
+      return;
+    }
+
+    const center = () => centerHorizontalScroll(readerSurface);
+    window.requestAnimationFrame(center);
+  }, [zoom, pageSizes, readerPanelSize.width, leftPanelOpen, sidePanelOpen]);
 
   const updatePageSize = useCallback((pageNumber: number, size: PageSize) => {
     setPageSizes((current) => {
@@ -1220,12 +1236,8 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
           >
             <Icon name="back" />
           </button>
-          <h1 id="reader-title" className="min-w-0 truncate text-sm">
-            <span>Minha Biblioteca</span>
-            <span className="px-1.5">/</span>
-            <span>{document.collection}</span>
-            <span className="px-1.5">/</span>
-            <span className="font-bold text-white">{document.title}</span>
+          <h1 id="reader-title" className="min-w-0 truncate text-sm font-bold text-[var(--reader-header-text)]">
+            {document.title}
           </h1>
         </div>
 
@@ -1318,7 +1330,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
       )}
     >
       <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-        <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-y-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
+        <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
           {isPdfLoading ? (
             <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
               Carregando PDF...
@@ -1328,14 +1340,14 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
               {pdfError}
             </div>
           ) : (
-            <div className="space-y-10">
+            <div className="flex w-max min-w-full flex-col items-center gap-10">
               {pageNumbers.map((page) => (
                 <div
                   key={page}
                   ref={(element) => {
                     pageRefs.current[page - 1] = element;
                   }}
-                  className="mx-auto w-fit max-w-[700px]"
+                  className="w-fit"
                 >
                   {pdfDocument ? (
                     <VirtualPdfCanvasPage

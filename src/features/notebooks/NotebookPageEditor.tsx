@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { findEnclosingTag, wrapSelectionInCode } from "../reader/richTextShared";
+import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, wrapSelectionInCode } from "../reader/richTextShared";
 
 // Editor block-aware das paginas de caderno. Diferente do editor de Notas do
 // leitor (inline-only, Enter = <br>), aqui os blocos nativos do browser sao
@@ -189,6 +189,7 @@ export function NotebookPageEditor({ initialContent, contentInsetClassName = "pl
     const editor = editorRef.current;
     if (editor) {
       editor.innerHTML = initialContent;
+      prepareCodeElements(editor);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -246,6 +247,21 @@ export function NotebookPageEditor({ initialContent, contentInsetClassName = "pl
   function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
     const text = event.clipboardData.getData("text/plain");
+
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (editor && selection && selection.rangeCount > 0 && selection.anchorNode && selection.focusNode) {
+      const anchorCode = findEnclosingTag(selection.anchorNode, "code", editor);
+      const focusCode = findEnclosingTag(selection.focusNode, "code", editor);
+
+      if (anchorCode && anchorCode === focusCode) {
+        insertPlainTextWithLineBreaks(selection.getRangeAt(0), text);
+        emitChange();
+        syncActiveActions();
+        return;
+      }
+    }
+
     document.execCommand("insertText", false, text);
     emitChange();
   }
