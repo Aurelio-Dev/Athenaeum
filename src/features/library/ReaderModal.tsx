@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useQueryClient } from "@tanstack/react-query";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
+import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
+import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { createAnnotation, deleteAnnotation, listAnnotations, setDocumentReadingLocation, updateAnnotationNote } from "../../lib/database";
 import type { NewAnnotation } from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
@@ -38,6 +41,18 @@ const fallbackPageCount = 15;
 const minZoom = 70;
 const maxZoom = 140;
 const zoomStep = 10;
+
+// Posicao inicial do painel de anotacoes flutuante: encostado a direita, logo
+// abaixo do header do leitor — mesmo comportamento de antes do refactor para
+// a pilha de paineis (as dimensoes espelham as do ReaderSidePanel).
+function getAnnotationsPanelInitialPosition() {
+  const panelWidth = 440;
+  const panelHeight = 580;
+  return {
+    x: Math.max(8, window.innerWidth - panelWidth - 24),
+    y: Math.max(76, Math.min(94, window.innerHeight - panelHeight)),
+  };
+}
 // Escala base do PDF: o canvas e a camada de texto usam a MESMA escala para o
 // texto transparente cair exatamente sobre as letras.
 const pdfBaseScale = 1.1;
@@ -48,7 +63,7 @@ function pageScale(zoom: number) {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev" | "next" | "minus" | "plus" | "search" | "pen" | "split" }) {
+function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev" | "next" | "minus" | "plus" | "search" | "pen" | "split" | "maximize" | "restore" }) {
   const commonProps = {
     width: 18,
     height: 18,
@@ -116,6 +131,26 @@ function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev
     );
   }
 
+  if (name === "maximize") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8 4H4v4" />
+        <path d="M16 4h4v4" />
+        <path d="M20 16v4h-4" />
+        <path d="M8 20H4v-4" />
+      </svg>
+    );
+  }
+
+  if (name === "restore") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8 4h12v12" />
+        <path d="M4 8h12v12H4z" />
+      </svg>
+    );
+  }
+
   if (name === "prev") {
     return (
       <svg {...commonProps}>
@@ -174,6 +209,13 @@ function estimatedPageSize(zoom: number): PageSize {
   return {
     width: Math.round(850 * zoomRatio),
     height: Math.round(1120 * zoomRatio),
+  };
+}
+
+function getMaximizedReaderSize() {
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
   };
 }
 
@@ -503,7 +545,37 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   const [leftPanelTab, setLeftPanelTab] = useState<"pages" | "summary">("pages");
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [sidePanelInitialTab, setSidePanelInitialTab] = useState<"annotations" | undefined>(undefined);
-  const [sidePanelFloating, setSidePanelFloating] = useState(false);
+  // O modo flutuante do painel de anotacoes agora vive na pilha global de
+  // paineis (FloatingPanelsContext) em vez de um boolean local — assim ele
+  // coexiste com outros paineis (ex.: um caderno aberto ao mesmo tempo).
+  const queryClient = useQueryClient();
+  const { panels: floatingPanels, openPanel, closePanel, minimizePanel, restorePanel, movePanel } = useFloatingPanels();
+  const annotationsPanelId = floatingPanelId("annotations", document.id);
+  const annotationsPanel = floatingPanels.find((panel) => panel.id === annotationsPanelId) ?? null;
+  const sidePanelFloating = annotationsPanel !== null;
+  // O proprio leitor tambem e um painel da pilha (aberto pelo LibraryView em
+  // openForReading) — le a propria entrada para posicao/zIndex.
+  const readerPanelId = floatingPanelId("reader", document.id);
+  const readerPanel = floatingPanels.find((panel) => panel.id === readerPanelId) ?? null;
+  const [readerPanelSize, setReaderPanelSize] = useState(() => ({
+    width: Math.max(720, Math.min(1240, window.innerWidth - 64)),
+    height: Math.max(480, Math.min(900, window.innerHeight - 96)),
+  }));
+  const [isReaderMaximized, setIsReaderMaximized] = useState(false);
+  const readerRestoreStateRef = useRef<{
+    position: { x: number; y: number };
+    size: { width: number; height: number };
+  } | null>(null);
+
+  // Fechar o leitor remove os paineis dele da pilha (o proprio leitor e o de
+  // anotacoes) — sem isso paineis "fantasma" continuariam registrados depois
+  // do unmount.
+  useEffect(() => {
+    return () => {
+      closePanel(annotationsPanelId);
+      closePanel(readerPanelId);
+    };
+  }, [closePanel, annotationsPanelId, readerPanelId]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [documentSearchTerm, setDocumentSearchTerm] = useState("");
   const [isHighlightModeEnabled, setIsHighlightModeEnabled] = useState(false);
@@ -930,7 +1002,12 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
     };
   }, [currentPage, document.readingLocation?.pageOffset, document.readingLocation?.scrollRatio, totalPages, zoom]);
 
+  // Marca o fechamento explicito para o flush de unmount (abaixo) nao rodar
+  // em duplicidade depois do closeAndSave.
+  const hasClosedExplicitlyRef = useRef(false);
+
   const closeAndSave = useCallback(() => {
+    hasClosedExplicitlyRef.current = true;
     const readingLocation = getCurrentReadingLocation();
     flushNotes();
     void flushReadingTime().finally(() => onClose(readingLocation));
@@ -947,6 +1024,34 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   }, [document, getCurrentReadingLocation]);
 
   const { schedule: scheduleReadingSave } = useReaderPersistence(persistReadingLocation, 750);
+
+  // Flush no UNMOUNT sem fechamento explicito — o caso real e a troca de
+  // documento no leitor (abrir outro PDF desmonta este painel sem passar pelo
+  // closeAndSave). Roda o MESMO flush do fechamento (posicao exata + notas +
+  // tempo de leitura), apenas sem o onClose, ja que o proximo leitor esta
+  // assumindo. useLayoutEffect e obrigatorio aqui: o cleanup dele executa
+  // ANTES do DOM ser destacado, entao getCurrentReadingLocation ainda consegue
+  // medir o scroll (num useEffect o cleanup rodaria tarde demais e salvaria a
+  // posicao zerada do fallback).
+  const flushOnUnmountRef = useRef<() => void>(() => {});
+  flushOnUnmountRef.current = () => {
+    if (hasClosedExplicitlyRef.current) {
+      return;
+    }
+
+    const readingLocation = getCurrentReadingLocation();
+    flushNotes();
+    void flushReadingTime();
+    void setDocumentReadingLocation(document, readingLocation)
+      .then(() => queryClient.invalidateQueries({ queryKey: ["library"] }))
+      .catch((error) => {
+        console.warn("Nao foi possivel salvar a posicao de leitura na troca de documento.", error);
+      });
+  };
+
+  useLayoutEffect(() => {
+    return () => flushOnUnmountRef.current();
+  }, []);
 
   useEffect(() => {
     const readerSurface = readerSurfaceRef.current;
@@ -974,6 +1079,14 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
         return;
       }
 
+      // O leitor e um painel da pilha: Esc so age quando ELE esta no topo.
+      // Com um caderno/quadro por cima, o Esc e desse painel (que se fecha
+      // sozinho), nao do leitor.
+      const topPanel = [...floatingPanels].reverse().find((panel) => !panel.isMinimized);
+      if (topPanel && topPanel.id !== readerPanelId) {
+        return;
+      }
+
       // Com o popup de nota aberto, o proprio NotePopover trata o Esc; aqui so
       // garantimos que o leitor nao feche por baixo dele.
       if (editingAnnotationId) {
@@ -993,7 +1106,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeAndSave, editingAnnotationId, pendingSelection]);
+  }, [closeAndSave, editingAnnotationId, pendingSelection, floatingPanels, readerPanelId]);
 
   function handleReaderScroll() {
     // A toolbar e posicionada por coordenadas de viewport; ao rolar ela ficaria
@@ -1024,15 +1137,87 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
     scheduleReadingSave();
   }
 
+  const toggleReaderMaximized = useCallback(() => {
+    if (!readerPanel) {
+      return;
+    }
+
+    if (isReaderMaximized) {
+      const restoreState = readerRestoreStateRef.current;
+
+      if (restoreState) {
+        setReaderPanelSize(restoreState.size);
+        movePanel(readerPanelId, restoreState.position);
+      }
+
+      setIsReaderMaximized(false);
+      return;
+    }
+
+    readerRestoreStateRef.current = {
+      position: readerPanel.position,
+      size: readerPanelSize,
+    };
+    setReaderPanelSize(getMaximizedReaderSize());
+    movePanel(readerPanelId, { x: 0, y: 0 });
+    setIsReaderMaximized(true);
+  }, [isReaderMaximized, movePanel, readerPanel, readerPanelId, readerPanelSize]);
+
+  useEffect(() => {
+    if (!isReaderMaximized) {
+      return;
+    }
+
+    function handleWindowResize() {
+      setReaderPanelSize(getMaximizedReaderSize());
+      movePanel(readerPanelId, { x: 0, y: 0 });
+    }
+
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, [isReaderMaximized, movePanel, readerPanelId]);
+
   const progress = Math.round((currentPage / totalPages) * 100);
   const summaryItems = pdfOutline.length > 0 ? pdfOutline : ["Resumo", "Arquitetura", "Treinamento", "Resultados", "Conclusoes"].map((title) => ({ title }));
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
 
+  // Entrada da pilha ainda nao criada (transitorio durante abrir/fechar).
+  if (!readerPanel) {
+    return null;
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--background)] text-[var(--foreground)]" role="dialog" aria-modal="true" aria-labelledby="reader-title">
-      <header className="flex h-11 shrink-0 items-center border-b border-[#2A1A12] bg-[var(--surface-header)] text-[#9E8878]">
+    <FloatingPanelFrame
+      panel={readerPanel}
+      width={readerPanelSize.width}
+      height={readerPanelSize.height}
+      minWidth={720}
+      minHeight={480}
+      resizable={!isReaderMaximized}
+      edgeToEdge={isReaderMaximized}
+      onFocusPanel={() => {
+        if (sidePanelFloating) {
+          minimizePanel(annotationsPanelId);
+        }
+      }}
+      // O header proprio do leitor (breadcrumb + toolbar) vira o handle de
+      // drag — os controles interativos param a propagacao do mousedown para
+      // nao iniciar arrasto.
+      renderHeader={(startDragging) => (
+        <header
+          className={`flex h-11 shrink-0 items-center border-b border-[#2A1A12] bg-[var(--surface-header)] text-[#9E8878] ${
+            isReaderMaximized ? "" : "cursor-move"
+          }`}
+          onMouseDown={isReaderMaximized ? undefined : startDragging}
+        >
         <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
-          <button type="button" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" aria-label="Voltar para biblioteca" onClick={closeAndSave}>
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+            aria-label="Voltar para biblioteca"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={closeAndSave}
+          >
             <Icon name="back" />
           </button>
           <h1 id="reader-title" className="min-w-0 truncate text-sm">
@@ -1044,7 +1229,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
           </h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 px-5">
+        <div className="flex shrink-0 items-center gap-2 px-5" onMouseDown={(event) => event.stopPropagation()}>
           <button type="button" aria-label="Reduzir zoom" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(zoom - zoomStep)}>
             <Icon name="minus" />
           </button>
@@ -1087,19 +1272,52 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
           </button>
           <button
             type="button"
-            aria-label={sidePanelOpen ? "Fechar painel" : "Abrir painel"}
+            aria-label={sidePanelFloating ? (annotationsPanel?.isMinimized ? "Restaurar painel" : "Minimizar painel") : sidePanelOpen ? "Fechar painel" : "Abrir painel"}
+            title={sidePanelFloating ? (annotationsPanel?.isMinimized ? "Restaurar painel" : "Minimizar painel") : sidePanelOpen ? "Fechar painel" : "Abrir painel"}
             className={`rounded-md p-1.5 transition ${sidePanelOpen ? "bg-primary/20 text-primary" : "text-[#9E8878] hover:bg-white/5 hover:text-white"}`}
             onClick={() => {
               setSidePanelInitialTab(undefined);
+              if (sidePanelFloating) {
+                setSidePanelOpen(true);
+
+                if (annotationsPanel?.isMinimized) {
+                  restorePanel(annotationsPanelId);
+                  return;
+                }
+
+                minimizePanel(annotationsPanelId);
+                return;
+              }
+
               setSidePanelOpen((isOpen) => !isOpen);
             }}
           >
             <Icon name="split" />
           </button>
+          <div className="mx-2 h-6 w-px bg-white/10" />
+          <button
+            type="button"
+            aria-label={isReaderMaximized ? "Restaurar janela do leitor" : "Maximizar janela do leitor"}
+            title={isReaderMaximized ? "Restaurar" : "Maximizar"}
+            className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+            onClick={toggleReaderMaximized}
+          >
+            <Icon name={isReaderMaximized ? "restore" : "maximize"} />
+          </button>
+          <button
+            type="button"
+            aria-label="Fechar leitor"
+            title="Fechar"
+            className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+            onClick={closeAndSave}
+          >
+            <Icon name="close" />
+          </button>
         </div>
-      </header>
-
-      <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[var(--background)]">
+        </header>
+      )}
+    >
+      <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
         <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-y-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
           {isPdfLoading ? (
             <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
@@ -1154,14 +1372,14 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             timeSpentSeconds={timeSpentSeconds}
             isFloating={sidePanelFloating}
             initialTab={sidePanelInitialTab}
-            onFloat={() => setSidePanelFloating(true)}
-            onDock={() => setSidePanelFloating(false)}
+            onFloat={() => openPanel("annotations", document.id, getAnnotationsPanelInitialPosition())}
+            onDock={() => closePanel(annotationsPanelId)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}
             onUpdateAnnotationNote={saveAnnotationNoteById}
             onClose={() => {
               setSidePanelInitialTab(undefined);
-              setSidePanelFloating(false);
+              closePanel(annotationsPanelId);
               setSidePanelOpen(false);
             }}
           />
@@ -1185,7 +1403,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
           onDelete={() => removeAnnotation(editingAnnotation.id)}
         />
       ) : null}
-    </div>
+    </FloatingPanelFrame>
   );
 }
 

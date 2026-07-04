@@ -54,7 +54,31 @@
   font-display: swap;
 }
 
+/* Lora (serif de titulos) — bundlada em dois pesos apenas, Medium e Bold.
+   Licenca OFL em src/assets/fonts/OFL.txt; diferente da Segoe UI, pode ser
+   redistribuida e por isso e versionada no repo. */
+@font-face {
+  font-family: "Lora";
+  src: url("../assets/fonts/Lora-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Lora";
+  src: url("../assets/fonts/Lora-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  /* Familias tipograficas: serif (Lora) para titulos, sans (Segoe UI) para
+     o resto da UI. Mesmos valores do fontFamily do tailwind.config. */
+  --font-serif: "Lora", serif;
+  --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+
   /* Backgrounds */
   --background: #F5EDE4;
   --card: #FAF5EF;
@@ -123,6 +147,7 @@
   --color-primary-hover: var(--primary);
   --color-primary-soft: var(--muted);
   --color-primary-text: var(--primary);
+  --color-accent-tint-bg: #EFE2D8;
 
   --color-tag-violet-bg: #5B21B6;
   --color-tag-violet-text: #FFFFFF;
@@ -209,7 +234,7 @@ body,
 body {
   background: var(--color-surface-app);
   color: var(--color-text-primary);
-  font-family: "Segoe UI", Inter, "IBM Plex Sans", system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 button,
@@ -232,4 +257,80 @@ select {
 .sidebar-scroll::-webkit-scrollbar-thumb {
   background: var(--color-sidebar-border);
   border-color: var(--color-sidebar);
+}
+
+/* Editor de paginas de caderno: o preflight do Tailwind zera a aparencia de
+   h1-h3, listas e blockquote; dentro do contentEditable eles precisam de
+   estilo real para a formatacao ser visivel (e o HTML salvo renderiza igual
+   ao recarregar, pois estas regras valem sempre que o conteudo estiver num
+   .notebook-editor). */
+.notebook-editor h1 {
+  font-size: 1.6em;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.5em 0 0.3em;
+}
+
+.notebook-editor h2 {
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.5em 0 0.3em;
+}
+
+.notebook-editor h3 {
+  font-size: 1.15em;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0.5em 0 0.3em;
+}
+
+.notebook-editor ul {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0.35em 0;
+}
+
+.notebook-editor ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+  margin: 0.35em 0;
+}
+
+.notebook-editor blockquote {
+  border-left: 3px solid var(--color-primary);
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: var(--color-text-secondary);
+}
+
+/* Excalidraw (painel de quadro): tokens confirmados por amostragem do Figma.
+   A versao instalada usa --color-surface-primary-container para ferramenta
+   selecionada; --button-active-bg cobre botoes standalone/pressionados. */
+.canvas-panel-editor .excalidraw {
+  --color-primary: var(--primary);
+  --color-primary-darker: #7E4825;
+  --color-primary-darkest: #6B3D20;
+  --color-primary-light: var(--color-accent-tint-bg);
+  --color-primary-hover: #B26B39;
+  --color-on-primary-container: var(--primary);
+  --color-surface-primary-container: var(--color-accent-tint-bg);
+  --island-bg-color: var(--color-surface-card);
+  --default-bg-color: #FAF5EF;
+  --default-border-color: #E8DDD4;
+  --button-active-bg: var(--color-accent-tint-bg);
+  --button-selected-bg: var(--color-accent-tint-bg);
+  --button-selected-hover-bg: var(--color-accent-tint-bg);
+  --button-active-border: var(--color-accent-tint-bg);
+  --button-selected-border: var(--color-accent-tint-bg);
+  --icon-fill-color: var(--color-text-secondary);
+  --icon-fill-color-active: var(--primary);
+}
+
+/* O menu principal padrao do Excalidraw nao bate com a identidade do app:
+   um <MainMenu /> vazio remove os itens, e o botao hamburguer remanescente
+   e escondido aqui (primeira aproximacao combinada). */
+.canvas-panel-editor .excalidraw .main-menu-trigger,
+.canvas-panel-editor .excalidraw [data-testid="main-menu-trigger"] {
+  display: none;
 }

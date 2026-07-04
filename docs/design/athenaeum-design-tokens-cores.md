@@ -1,5 +1,9 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 03/07/2026:** adicionado token `accent-tint-bg` (#EFE2D8) —
+> fundo de destaque para ferramenta ativa na toolbar de Quadros, extraído
+> por amostragem de pixel do protótipo Claude Design em 03/07/2026.
+
 > Referência de design system. Validado em WCAG AA (contraste mínimo
 > 4.5:1, critério de texto pequeno) via fórmula de luminância relativa
 > do WCAG. Última atualização: 01/07/2026.
@@ -65,16 +69,16 @@ Reaproveita a coluna "Texto" da tabela pastel acima como o novo
 **Background**, então nenhum hex novo precisou ser inventado:
 
 | Nome   | Background (= texto pastel) | Texto     | Contraste | Uso sugerido           |
-| ------ | ---------------------------- | --------- | --------- | ---------------------- |
-| Violet | `#5B21B6`                     | `#FFFFFF` | 8.98:1    | Tema/assunto principal |
-| Indigo | `#4338CA`                     | `#FFFFFF` | 7.90:1    | Tema/assunto principal |
-| Blue   | `#1D4ED8`                     | `#FFFFFF` | 6.70:1    | Subcategoria           |
-| Teal   | `#0D5C54`                     | `#FFFFFF` | 7.85:1    | Subcategoria           |
-| Green  | `#036B4D`                     | `#FFFFFF` | 6.53:1    | Estado positivo        |
-| Amber  | `#92400E`                     | `#FFFFFF` | 7.09:1    | Atenção / destaque     |
-| Rose   | `#9D174D`                     | `#FFFFFF` | 7.88:1    | Subcategoria           |
-| Red    | `#B91C1C`                     | `#FFFFFF` | 6.47:1    | Erro / exclusão        |
-| Slate  | `#475569`                     | `#FFFFFF` | 7.58:1    | Estados neutros         |
+| ------ | --------------------------- | --------- | --------- | ---------------------- |
+| Violet | `#5B21B6`                   | `#FFFFFF` | 8.98:1    | Tema/assunto principal |
+| Indigo | `#4338CA`                   | `#FFFFFF` | 7.90:1    | Tema/assunto principal |
+| Blue   | `#1D4ED8`                   | `#FFFFFF` | 6.70:1    | Subcategoria           |
+| Teal   | `#0D5C54`                   | `#FFFFFF` | 7.85:1    | Subcategoria           |
+| Green  | `#036B4D`                   | `#FFFFFF` | 6.53:1    | Estado positivo        |
+| Amber  | `#92400E`                   | `#FFFFFF` | 7.09:1    | Atenção / destaque     |
+| Rose   | `#9D174D`                   | `#FFFFFF` | 7.88:1    | Subcategoria           |
+| Red    | `#B91C1C`                   | `#FFFFFF` | 6.47:1    | Erro / exclusão        |
+| Slate  | `#475569`                   | `#FFFFFF` | 7.58:1    | Estados neutros        |
 
 Pior caso é Red a 6.47:1 — todos folgados acima do mínimo de 4.5:1.
 
@@ -85,14 +89,14 @@ Pior caso é Red a 6.47:1 — todos folgados acima do mínimo de 4.5:1.
 
 **Modo claro** — sobre `--card` `#FAF5EF`:
 
-- Cor: `#7A6558` *(era `#8B7263` — corrigido; o valor antigo media
-  ~3.9–4.1:1, abaixo do mínimo)*
+- Cor: `#7A6558` _(era `#8B7263` — corrigido; o valor antigo media
+  ~3.9–4.1:1, abaixo do mínimo)_
 - Contraste: 5.06:1
 - **Não usar tom mais claro que este.**
 
 **Modo escuro** — sobre `--card` `#231C16`:
 
-- Cor: `#9E8878` *(sem alteração — já passava)*
+- Cor: `#9E8878` _(sem alteração — já passava)_
 - Contraste: 5.00:1
 - **Não usar tom mais claro que este.**
 
@@ -125,17 +129,17 @@ Pior caso é Red a 6.47:1 — todos folgados acima do mínimo de 4.5:1.
 > existentes por papel semântico (tema principal / subcategoria /
 > destaque / estado), não por área de conhecimento.
 
-| Cor    | Papel                | Palavras-chave                                          |
-| ------ | --------------------- | -------------------------------------------------------- |
-| Violet | Tema principal        | Machine Learning, Consciousness, Philosophy, Deep Learning, Urbanismo, Cognition |
-| Indigo | Tema principal        | Systems / Infra, Design Systems, Typography, Accessibility |
-| Blue   | Subcategoria          | NLP, Transformers, Language                              |
-| Teal   | Subcategoria          | Computer Vision, Neuroscience, Perception                |
-| Rose   | Subcategoria          | Theory / Math, Epistemologia, Memory, Sociologia, Reinf. Learning |
-| Amber  | Destaque              | AI Safety / Ethics, Seminal                               |
-| Green  | Estado (não-assunto)  | Concluído                                                 |
-| Slate  | Estado (não-assunto)  | Não iniciado, Review                                      |
-| Red    | Estado (não-assunto)  | Erro / exclusão                                           |
+| Cor    | Papel                | Palavras-chave                                                                   |
+| ------ | -------------------- | -------------------------------------------------------------------------------- |
+| Violet | Tema principal       | Machine Learning, Consciousness, Philosophy, Deep Learning, Urbanismo, Cognition |
+| Indigo | Tema principal       | Systems / Infra, Design Systems, Typography, Accessibility                       |
+| Blue   | Subcategoria         | NLP, Transformers, Language                                                      |
+| Teal   | Subcategoria         | Computer Vision, Neuroscience, Perception                                        |
+| Rose   | Subcategoria         | Theory / Math, Epistemologia, Memory, Sociologia, Reinf. Learning                |
+| Amber  | Destaque             | AI Safety / Ethics, Seminal                                                      |
+| Green  | Estado (não-assunto) | Concluído                                                                        |
+| Slate  | Estado (não-assunto) | Não iniciado, Review                                                             |
+| Red    | Estado (não-assunto) | Erro / exclusão                                                                  |
 
 Green, Slate e Red **nunca** devem ser usados para tags de assunto —
 estão reservados para badges de estado.
@@ -143,7 +147,7 @@ estão reservados para badges de estado.
 ⚠️ **Nota de produto, não só técnica:** ao consolidar assim, "Violet"
 passa a aparecer em Philosophy of Mind, Machine Learning, Urban
 Studies e Cognitive Science ao mesmo tempo — o token identifica o
-*papel* da tag (tema principal), não a área de conhecimento nem a
+_papel_ da tag (tema principal), não a área de conhecimento nem a
 coleção. Se no futuro você quiser que cada coleção tenha uma
 identidade de cor mais exclusiva, esse mapeamento precisa ser revisto
 (provavelmente separando "cor por coleção" de "cor por tag", que hoje
@@ -154,12 +158,13 @@ são dois sistemas sobrepostos).
 > Diferente da paleta de tags acima (conteúdo: assunto, status), estas
 > cores são da casca do app — header, toolbars, estados ativos.
 
-| Nome                 | Valor       | Uso                                                                                                                       |
-| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `surface-header`     | `#14161F`   | Fundo do header/top bar (telas com leitor)                                                                                |
-| `surface-elevated`   | `#1E2130`   | Fundo de elementos flutuantes escuros (toolbar de seleção, toolbar de formatação)                                         |
-| `accent-interactive` | `#9C5A2E`   | Ícone do logo, botão "+ Adicionar", barra de progresso de leitura, toggle de painel ativo, aba ativa no painel de anotações. **Mesmo hex em claro e escuro — sem variante separada.** |
-| `accent-icon-amber`  | `#F59E0B`   | Ícone "Marcar" em estado ativo na toolbar de seleção (mais vívido que `tag-amber-text`, é ícone pequeno, não texto)       |
+| Nome                 | Valor     | Uso                                                                                                                                                                                                                              |
+| -------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `surface-header`     | `#14161F` | Fundo do header/top bar (telas com leitor)                                                                                                                                                                                       |
+| `surface-elevated`   | `#1E2130` | Fundo de elementos flutuantes escuros (toolbar de seleção, toolbar de formatação)                                                                                                                                                |
+| `accent-interactive` | `#9C5A2E` | Ícone do logo, botão "+ Adicionar", barra de progresso de leitura, toggle de painel ativo, aba ativa no painel de anotações. **Mesmo hex em claro e escuro — sem variante separada.**                                            |
+| `accent-icon-amber`  | `#F59E0B` | Ícone "Marcar" em estado ativo na toolbar de seleção (mais vívido que `tag-amber-text`, é ícone pequeno, não texto)                                                                                                              |
+| `accent-tint-bg`     | `#EFE2D8` | Fundo de destaque em estado "ativo" de botões de ferramenta (ex: toolbar do Quadro) — tint sutil de terracota sobre o accent. Diferente do fill sólido das tags: aqui o texto/ícone continua na cor accent por cima, não branco. |
 
 Regra: `accent-icon-amber` não substitui o par `tag-amber-bg`/`tag-amber-text`
 documentado acima — são usos diferentes (ícone vívido vs. texto sobre fundo
@@ -236,6 +241,7 @@ contraste validado centralizado em um único lugar.
 
 Telas finalizadas no protótipo (Figma Make) e prontas para spec de
 implementação:
+
 - Library View (grid + list, claro + escuro)
 - Modal Adicionar Documento (4 estados: vazio, revisão 1 arquivo,
   revisão lote, importando/status)
@@ -245,8 +251,10 @@ implementação:
 
 Telas ainda sem design próprio (implementar como variação da
 Library View, sem necessidade de spec separada):
+
 - Recentes, Favoritos, Lixeira — mesma estrutura, filtro diferente
 - List view — mesmo card em layout de linha, toggle já visível
 
 Telas que precisam de design antes de codar:
+
 - Settings/Ajustes — sem spec ainda

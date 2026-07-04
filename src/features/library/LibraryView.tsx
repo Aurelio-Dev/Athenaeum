@@ -7,40 +7,67 @@ import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
 import {
   countTrashDocuments,
+  createCanvas as createPersistedCanvas,
   createCollection as createPersistedCollection,
   createDocument,
+  createNotebook as createPersistedNotebook,
   deleteCollection as deletePersistedCollection,
   emptyTrash,
   getDocumentFilePaths,
   getTrashFilePaths,
   listAvailableTags,
+  listCanvases,
   listCollections,
   listLibraryDocuments,
+  listNotebooks,
+  moveCanvasToCollection as movePersistedCanvasToCollection,
+  moveCanvasToTrash as movePersistedCanvasToTrash,
   moveDocumentToTrash,
+  moveNotebookToCollection as movePersistedNotebookToCollection,
+  moveNotebookToTrash as movePersistedNotebookToTrash,
   permanentlyDeleteDocument,
   restoreDocument,
+  renameCanvas as renamePersistedCanvas,
   renameCollection as renamePersistedCollection,
+  renameNotebook as renamePersistedNotebook,
+  setCanvasFavorite,
   setDocumentFavorite,
   setDocumentNote,
   setDocumentReadingLocation,
   setDocumentReadingStarted,
+  setNotebookFavorite,
   updateCollection as updatePersistedCollection,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
 } from "../../lib/database";
 import type { CollectionUpdates, DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
-import type { LibraryCollection, LibraryDocument, LibraryRoute, ReadingLocation, SortMode, SubjectTag, ViewMode } from "../../types/library";
+import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, ReadingLocation, SortMode, SubjectTag, ViewMode } from "../../types/library";
 import { NewCollectionModal } from "../../components/NewCollectionModal";
+import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { CanvasesGrid } from "../canvases/CanvasesGrid";
+import { canvasPanelHeight, canvasPanelWidth } from "../canvases/canvasPanelDimensions";
+import { NotebookPanel, notebookPanelWidth } from "../notebooks/NotebookPanel";
+import { NotebooksGrid } from "../notebooks/NotebooksGrid";
 import { AddDocumentModal } from "./AddDocumentModal";
+import { CollectionTabs, type CollectionTab } from "./CollectionTabs";
 import { DocumentCard } from "./DocumentCard";
 import { DocumentDetailsPanel } from "./DocumentDetailsPanel";
 import { LibraryHeader } from "./LibraryHeader";
 import { LibraryToolbar } from "./LibraryToolbar";
+import { RenameLibraryItemModal } from "./RenameLibraryItemModal";
 
 const ReaderModal = lazy(() => import("./ReaderModal").then((module) => ({ default: module.ReaderModal })));
+// Lazy pelo mesmo motivo do leitor: o Excalidraw e pesado e so entra no
+// bundle quando o primeiro quadro for aberto.
+const CanvasPanel = lazy(() => import("../canvases/CanvasPanel").then((module) => ({ default: module.CanvasPanel })));
 
 type PendingConfirmation =
   | { type: "permanent-delete"; document: LibraryDocument }
   | { type: "empty-trash" }
+  | null;
+
+type RenameTarget =
+  | { type: "notebook"; id: number; title: string }
+  | { type: "canvas"; id: number; title: string }
   | null;
 
 const allDocumentsOptions: ListDocumentsOptions = {
@@ -126,15 +153,18 @@ function SearchXIcon(props: SVGProps<SVGSVGElement>) {
 
 export function LibraryView() {
   const queryClient = useQueryClient();
+  const { panels: floatingPanelsList, openPanel: openFloatingPanel, closePanel: closeFloatingPanel } = useFloatingPanels();
   const [activeRoute, setActiveRoute] = useState<LibraryRoute>({ type: "all" });
   const [searchTerm, setSearchTerm] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recentes");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [collectionTab, setCollectionTab] = useState<CollectionTab>("documents");
   const [isAddPdfModalOpen, setIsAddPdfModalOpen] = useState(false);
   const [isEditCollectionModalOpen, setIsEditCollectionModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+  const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
   const hasAutoSelectedFirstDocumentRef = useRef(false);
 
   const isTrashRoute = activeRoute.type === "trash";
@@ -231,12 +261,115 @@ export function LibraryView() {
   const activeCollection =
     activeRoute.type === "collection" ? collections.find((collection) => collection.name === activeRoute.collectionName) : undefined;
   const hasActiveSearch = searchTerm.trim().length > 0;
+
+  // Trocar de rota sempre volta para a aba Documentos — cada colecao abre no
+  // seu conteudo principal, e as rotas globais nem tem abas.
+  useEffect(() => {
+    setCollectionTab("documents");
+  }, [activeRoute]);
+
+  const notebooksQuery = useQuery({
+    queryKey: ["library", "notebooks", activeCollection?.id ?? ""] as const,
+    queryFn: () => listNotebooks(activeCollection?.id ?? ""),
+    // So busca quando a aba Cadernos esta visivel numa colecao resolvida.
+    enabled: Boolean(activeCollection) && collectionTab === "notebooks",
+  });
+  const notebooks = notebooksQuery.data ?? [];
+
+  const canvasesQuery = useQuery({
+    queryKey: ["library", "canvases", activeCollection?.id ?? ""] as const,
+    queryFn: () => listCanvases(activeCollection?.id ?? ""),
+    enabled: Boolean(activeCollection) && collectionTab === "canvases",
+  });
+  const canvases = canvasesQuery.data ?? [];
   const emptyMessage = isTrashRoute ? "Sua lixeira esta vazia" : "Nenhum documento encontrado";
   const emptyDescription = isTrashRoute ? "Itens movidos para a lixeira aparecem aqui por ate 30 dias." : "Ajuste a busca ou os filtros para ver a biblioteca novamente.";
 
+  async function createNotebookInCollection() {
+    if (!activeCollection) {
+      return;
+    }
+
+    const notebook = await createPersistedNotebook(activeCollection.id);
+    await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
+    // Cascata com a largura REAL do painel (520px), para nao transbordar a
+    // borda direita como acontecia com o fallback de 440px.
+    openFloatingPanel("notebook", String(notebook.id), undefined, notebookPanelWidth);
+  }
+
+  function openNotebook(notebook: Notebook) {
+    openFloatingPanel("notebook", String(notebook.id), undefined, notebookPanelWidth);
+  }
+
+  async function toggleNotebookFavorite(notebook: Notebook) {
+    await setNotebookFavorite(notebook.id, !notebook.favorite);
+    await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
+  }
+
+  async function moveNotebookToCollection(notebook: Notebook, collectionId: string) {
+    if (notebook.collectionId === collectionId) {
+      return;
+    }
+
+    await movePersistedNotebookToCollection(notebook.id, collectionId);
+    await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
+  }
+
+  async function moveNotebookToTrash(notebook: Notebook) {
+    await movePersistedNotebookToTrash(notebook.id);
+    closeFloatingPanel(floatingPanelId("notebook", String(notebook.id)));
+    await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
+    await queryClient.invalidateQueries({ queryKey: libraryQueryKeys.trashCount() });
+  }
+
+  async function createCanvasInCollection() {
+    if (!activeCollection) {
+      return;
+    }
+
+    const canvas = await createPersistedCanvas(activeCollection.id);
+    await queryClient.invalidateQueries({ queryKey: ["library", "canvases"] });
+    // Quadro (900px) abre centralizado — a cascata de canto foi pensada para
+    // paineis estreitos e deixava ~metade do painel fora da tela a direita.
+    openFloatingPanel("canvas", String(canvas.id), getCenteredPanelPosition(canvasPanelWidth, canvasPanelHeight));
+  }
+
+  function openCanvas(canvas: Canvas) {
+    openFloatingPanel("canvas", String(canvas.id), getCenteredPanelPosition(canvasPanelWidth, canvasPanelHeight));
+  }
+
+  async function toggleCanvasFavorite(canvas: Canvas) {
+    await setCanvasFavorite(canvas.id, !canvas.favorite);
+    await queryClient.invalidateQueries({ queryKey: ["library", "canvases"] });
+  }
+
+  async function moveCanvasToCollection(canvas: Canvas, collectionId: string) {
+    if (canvas.collectionId === collectionId) {
+      return;
+    }
+
+    await movePersistedCanvasToCollection(canvas.id, collectionId);
+    await queryClient.invalidateQueries({ queryKey: ["library", "canvases"] });
+  }
+
+  async function moveCanvasToTrash(canvas: Canvas) {
+    await movePersistedCanvasToTrash(canvas.id);
+    closeFloatingPanel(floatingPanelId("canvas", String(canvas.id)));
+    await queryClient.invalidateQueries({ queryKey: ["library", "canvases"] });
+    await queryClient.invalidateQueries({ queryKey: libraryQueryKeys.trashCount() });
+  }
+
   async function openForReading(documentToOpen: LibraryDocument) {
     await setDocumentReadingStarted(documentToOpen.id);
+
+    // Um leitor por vez: abrir outro documento fecha o painel do anterior
+    // (a posicao de leitura dele ja fica salva pelo autosave periodico).
+    floatingPanelsList
+      .filter((floatingPanel) => floatingPanel.type === "reader" && floatingPanel.entityId !== documentToOpen.id)
+      .forEach((floatingPanel) => closeFloatingPanel(floatingPanel.id));
+
     setReaderDocumentId(documentToOpen.id);
+    openFloatingPanel("reader", documentToOpen.id, getReaderInitialPosition());
     await invalidateLibraryQueries();
   }
 
@@ -356,6 +489,21 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
+  async function renameLibraryItem(name: string) {
+    if (!renameTarget) {
+      return;
+    }
+
+    if (renameTarget.type === "notebook") {
+      await renamePersistedNotebook(renameTarget.id, name);
+      await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
+      return;
+    }
+
+    await renamePersistedCanvas(renameTarget.id, name);
+    await queryClient.invalidateQueries({ queryKey: ["library", "canvases"] });
+  }
+
   async function deleteCollection(collection: LibraryCollection) {
     await deletePersistedCollection(collection.id);
 
@@ -438,8 +586,13 @@ export function LibraryView() {
           <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-5">
             <LibraryHeader
               title={getRouteTitle(activeRoute)}
-              count={documents.length}
+              countText={getHeaderCountText(collectionTab, activeRoute, documents.length, notebooks.length, canvases.length)}
               description={activeCollection?.description || undefined}
+              tabs={
+                activeRoute.type === "collection" ? (
+                  <CollectionTabs activeTab={collectionTab} onTabChange={setCollectionTab} />
+                ) : undefined
+              }
               onEdit={activeCollection ? () => setIsEditCollectionModalOpen(true) : undefined}
             />
             {isTrashRoute && trashCount > 0 ? (
@@ -451,13 +604,32 @@ export function LibraryView() {
                 Esvaziar lixeira
               </button>
             ) : null}
-            <LibraryToolbar
-              compact={isTrashRoute}
-              sortMode={sortMode}
-              viewMode={viewMode}
-              onSortModeChange={setSortMode}
-              onViewModeChange={setViewMode}
-            />
+            {activeRoute.type === "collection" && collectionTab !== "documents" ? (
+              // Cadernos/Quadros trocam o sort + grid/lista por um "+ Criar"
+              // outline terracota, como no design.
+              <button
+                type="button"
+                onClick={() => {
+                  if (collectionTab === "notebooks") {
+                    void createNotebookInCollection();
+                  } else {
+                    void createCanvasInCollection();
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-primary bg-transparent px-4 py-2 text-[12px] font-bold leading-[18px] text-primary transition hover:bg-primary hover:text-text-inverse"
+              >
+                <PlusIcon />
+                Criar
+              </button>
+            ) : (
+              <LibraryToolbar
+                compact={isTrashRoute}
+                sortMode={sortMode}
+                viewMode={viewMode}
+                onSortModeChange={setSortMode}
+                onViewModeChange={setViewMode}
+              />
+            )}
           </header>
 
           {/* Divisor com o mesmo recuo horizontal (px-8) da grade de cards, para
@@ -473,7 +645,33 @@ export function LibraryView() {
           ) : null}
 
           <section className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-            {isLoading ? (
+            {activeRoute.type === "collection" && collectionTab === "notebooks" ? (
+              <NotebooksGrid
+                notebooks={notebooks}
+                collections={collections}
+                isLoading={notebooksQuery.isPending}
+                hasError={notebooksQuery.isError}
+                onCreate={() => void createNotebookInCollection()}
+                onOpen={openNotebook}
+                onRename={(notebook) => setRenameTarget({ type: "notebook", id: notebook.id, title: notebook.title })}
+                onToggleFavorite={(notebook) => void toggleNotebookFavorite(notebook)}
+                onMoveToCollection={(notebook, collectionId) => void moveNotebookToCollection(notebook, collectionId)}
+                onMoveToTrash={(notebook) => void moveNotebookToTrash(notebook)}
+              />
+            ) : activeRoute.type === "collection" && collectionTab === "canvases" ? (
+              <CanvasesGrid
+                canvases={canvases}
+                collections={collections}
+                isLoading={canvasesQuery.isPending}
+                hasError={canvasesQuery.isError}
+                onCreate={() => void createCanvasInCollection()}
+                onOpen={openCanvas}
+                onRename={(canvas) => setRenameTarget({ type: "canvas", id: canvas.id, title: canvas.title })}
+                onToggleFavorite={(canvas) => void toggleCanvasFavorite(canvas)}
+                onMoveToCollection={(canvas, collectionId) => void moveCanvasToCollection(canvas, collectionId)}
+                onMoveToTrash={(canvas) => void moveCanvasToTrash(canvas)}
+              />
+            ) : isLoading ? (
               <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
                 <div className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold text-text-secondary">
                   Carregando biblioteca
@@ -564,6 +762,15 @@ export function LibraryView() {
         />
       ) : null}
 
+      {renameTarget ? (
+        <RenameLibraryItemModal
+          title={renameTarget.type === "notebook" ? "Renomear caderno" : "Renomear quadro"}
+          initialName={renameTarget.title}
+          onClose={() => setRenameTarget(null)}
+          onRename={renameLibraryItem}
+        />
+      ) : null}
+
       {isAddPdfModalOpen ? (
         <AddDocumentModal
           collections={collections}
@@ -579,12 +786,17 @@ export function LibraryView() {
       {readerDocument ? (
         <Suspense
           fallback={
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#11131d] text-sm font-semibold text-slate-200">
-              Carregando leitor
+            // O leitor agora e um painel flutuante — o fallback do lazy import
+            // e um aviso discreto, nao mais uma tela cheia escura.
+            <div className="pointer-events-none fixed inset-x-0 top-24 z-[55] flex justify-center">
+              <div className="rounded-full bg-[var(--surface-header)] px-4 py-2 text-sm font-semibold text-white shadow-2xl">
+                Carregando leitor
+              </div>
             </div>
           }
         >
           <ReaderModal
+            key={readerDocument.id}
             document={readerDocument}
             availableTags={availableTags}
             onAvailableTagsChange={updateAvailableTags}
@@ -594,6 +806,44 @@ export function LibraryView() {
           />
         </Suspense>
       ) : null}
+
+      {/* Paineis flutuantes de caderno abertos (a pilha permite varios ao
+          mesmo tempo, inclusive junto do painel de anotacoes do leitor). */}
+      {floatingPanelsList
+        .filter((floatingPanel) => floatingPanel.type === "notebook")
+        .map((floatingPanel) => (
+          <NotebookPanel
+            key={floatingPanel.id}
+            panel={floatingPanel}
+            collections={collections}
+            onClose={() => closeFloatingPanel(floatingPanel.id)}
+            onNotebookChanged={() => void queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] })}
+          />
+        ))}
+
+      {/* Paineis de quadro: editor Excalidraw (lazy — o chunk so carrega ao
+          abrir o primeiro quadro). */}
+      {floatingPanelsList
+        .filter((floatingPanel) => floatingPanel.type === "canvas")
+        .map((floatingPanel) => (
+          <Suspense
+            key={floatingPanel.id}
+            fallback={
+              <div className="pointer-events-none fixed inset-x-0 top-24 z-[55] flex justify-center">
+                <div className="rounded-full bg-[var(--surface-header)] px-4 py-2 text-sm font-semibold text-white shadow-2xl">
+                  Carregando editor de quadros
+                </div>
+              </div>
+            }
+          >
+            <CanvasPanel
+              panel={floatingPanel}
+              title={canvases.find((canvas) => String(canvas.id) === floatingPanel.entityId)?.title ?? "Quadro"}
+              onClose={() => closeFloatingPanel(floatingPanel.id)}
+              onCanvasChanged={() => void queryClient.invalidateQueries({ queryKey: ["library", "canvases"] })}
+            />
+          </Suspense>
+        ))}
 
       {pendingConfirmation ? (
         <ConfirmationDialog
@@ -611,6 +861,31 @@ export function LibraryView() {
       ) : null}
     </AppShell>
   );
+}
+
+// Posicao inicial do painel do leitor: centralizado horizontalmente, logo
+// abaixo do header do app (espelha o calculo de largura do ReaderModal).
+function getReaderInitialPosition() {
+  const readerWidth = Math.max(720, Math.min(1240, window.innerWidth - 64));
+  return {
+    x: Math.max(8, Math.round((window.innerWidth - readerWidth) / 2)),
+    y: 84,
+  };
+}
+
+// Linha de contagem sob o titulo, sensivel a aba ativa da colecao
+// ("7 itens" / "4 cadernos" / "2 quadros"). Fora de colecoes so existe a aba
+// de documentos.
+function getHeaderCountText(tab: CollectionTab, route: LibraryRoute, documentCount: number, notebookCount: number, canvasCount: number) {
+  if (route.type === "collection" && tab === "notebooks") {
+    return `${notebookCount} ${notebookCount === 1 ? "caderno" : "cadernos"}`;
+  }
+
+  if (route.type === "collection" && tab === "canvases") {
+    return `${canvasCount} ${canvasCount === 1 ? "quadro" : "quadros"}`;
+  }
+
+  return `${documentCount} ${documentCount === 1 ? "item" : "itens"}`;
 }
 
 function getRouteTitle(route: LibraryRoute) {

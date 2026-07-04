@@ -1,4 +1,6 @@
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
+import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
+import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument, SubjectTag } from "../../types/library";
 import { AiTab } from "./panels/AiTab";
@@ -35,16 +37,9 @@ const tabs: Array<{ id: ReaderTab; label: string }> = [
 ];
 const floatingPanelWidth = 440;
 const floatingPanelHeight = 580;
+const floatingPanelMinimizedHeight = 48;
 const floatingPanelMinWidth = 320;
 const floatingPanelMinHeight = 400;
-const floatingPanelTop = 94;
-
-function getInitialFloatingPosition() {
-  return {
-    x: Math.max(8, Math.min(window.innerWidth - floatingPanelWidth, window.innerWidth - floatingPanelWidth - 24)),
-    y: Math.max(76, Math.min(floatingPanelTop, window.innerHeight - floatingPanelHeight)),
-  };
-}
 
 function CloseIcon() {
   return (
@@ -65,17 +60,20 @@ function PopOutIcon() {
   );
 }
 
+function MinimizeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
 export function ReaderSidePanel({
   document,
   notesText,
   onNotesChange,
   onNotesBlur,
-  availableTags,
-  onAddTag,
-  onRemoveTag,
   annotations,
-  progress,
-  timeSpentSeconds,
   isFloating,
   initialTab,
   onFloat,
@@ -86,76 +84,37 @@ export function ReaderSidePanel({
   onClose,
 }: ReaderSidePanelProps) {
   const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "ai");
-  const [floatingPosition, setFloatingPosition] = useState(getInitialFloatingPosition);
+  const { panels, minimizePanel, restorePanel } = useFloatingPanels();
+  const annotationsPanelId = floatingPanelId("annotations", document.id);
 
-  function floatPanel() {
-    setFloatingPosition(getInitialFloatingPosition());
-    onFloat();
-  }
-
-  function startDragging(event: MouseEvent<HTMLElement>) {
-    if (!isFloating || event.button !== 0) {
+  // Esc fecha o painel flutuante quando ele e o topo da pilha — mesma regra
+  // dos paineis de caderno (o leitor, por sua vez, so fecha quando ELE e o
+  // topo, entao um unico Esc nunca fecha os dois).
+  useEffect(() => {
+    if (!isFloating) {
       return;
     }
 
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const initialPosition = floatingPosition;
-
-    function handleMouseMove(moveEvent: globalThis.MouseEvent) {
-      setFloatingPosition({
-        x: Math.max(8, initialPosition.x + moveEvent.clientX - startX),
-        y: Math.max(76, initialPosition.y + moveEvent.clientY - startY),
-      });
-    }
-
-    function handleMouseUp() {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    }
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-  }
-
-  const panelClassName = isFloating
-    ? "fixed z-40 flex resize flex-col overflow-hidden rounded-xl border border-border-subtle bg-[var(--card)] shadow-2xl"
-    : "relative z-20 flex w-[340px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-[var(--card)]";
-  const panelStyle = isFloating
-    ? {
-        left: floatingPosition.x,
-        top: floatingPosition.y,
-        width: floatingPanelWidth,
-        height: floatingPanelHeight,
-        minWidth: floatingPanelMinWidth,
-        minHeight: floatingPanelMinHeight,
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
       }
-    : undefined;
 
-  return (
-    <aside className={panelClassName} style={panelStyle}>
-      {isFloating ? (
-        <div
-          className="flex h-11 shrink-0 items-center justify-between rounded-t-xl bg-[var(--surface-header)] px-4 cursor-move"
-          onMouseDown={startDragging}
-        >
-          <h2 className="min-w-0 truncate text-sm font-bold text-white">
-            Anotações — {document.title}
-          </h2>
-          <button
-            type="button"
-            aria-label="Fechar painel"
-            title="Fechar painel"
-            className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={onClose}
-          >
-            <CloseIcon />
-          </button>
-        </div>
-      ) : null}
+      const topPanel = panels[panels.length - 1];
+      if (topPanel?.id === annotationsPanelId && !topPanel.isMinimized) {
+        onClose();
+      }
+    }
 
-      <header className="flex h-[56px] items-center justify-between border-b border-border-subtle pr-4">
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFloating, panels, annotationsPanelId, onClose]);
+
+  // Header de abas + conteudo sao os mesmos nos dois modos (dock/flutuante);
+  // so a casca em volta muda.
+  const panelContent = (
+    <>
+      <header className="flex h-[56px] shrink-0 items-center justify-between border-b border-border-subtle pr-4">
         <div className="flex">
           {tabs.map((tab) => (
             <button
@@ -174,10 +133,10 @@ export function ReaderSidePanel({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            aria-label="Abrir em janela separada"
-            title="Abrir em janela separada"
+            aria-label={isFloating ? "Ancorar painel" : "Abrir em janela separada"}
+            title={isFloating ? "Ancorar painel" : "Abrir em janela separada"}
             className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-            onClick={isFloating ? onDock : floatPanel}
+            onClick={isFloating ? onDock : onFloat}
           >
             <PopOutIcon />
           </button>
@@ -193,6 +152,78 @@ export function ReaderSidePanel({
           <AiTab />
         )}
       </div>
+    </>
+  );
+
+  if (isFloating) {
+    const panel = panels.find((candidate) => candidate.id === annotationsPanelId);
+
+    // Estado transitorio (painel acabou de ser fechado na pilha): nao ha o que
+    // renderizar ate o ReaderModal reagir e voltar para o modo dock.
+    if (!panel) {
+      return null;
+    }
+
+    return (
+      <FloatingPanelFrame
+        panel={panel}
+        width={floatingPanelWidth}
+        height={panel.isMinimized ? floatingPanelMinimizedHeight : floatingPanelHeight}
+        minWidth={floatingPanelMinWidth}
+        minHeight={panel.isMinimized ? floatingPanelMinimizedHeight : floatingPanelMinHeight}
+        resizable={!panel.isMinimized}
+        title={<h2 className="min-w-0 truncate text-sm font-bold text-white">Anotações — {document.title}</h2>}
+        actions={
+          <>
+            <button
+              type="button"
+              aria-label={panel.isMinimized ? "Restaurar painel" : "Minimizar painel"}
+              title={panel.isMinimized ? "Restaurar painel" : "Minimizar painel"}
+              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+
+                if (panel.isMinimized) {
+                  restorePanel(panel.id);
+                  return;
+                }
+
+                minimizePanel(panel.id);
+              }}
+            >
+              <MinimizeIcon />
+            </button>
+            <button
+              type="button"
+              aria-label="Fechar painel"
+              title="Fechar painel"
+              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              <CloseIcon />
+            </button>
+          </>
+        }
+      >
+        {panel.isMinimized ? null : panelContent}
+      </FloatingPanelFrame>
+    );
+  }
+
+  return (
+    <aside className="relative z-20 flex w-[340px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-[var(--card)]">
+      {panelContent}
     </aside>
   );
 }

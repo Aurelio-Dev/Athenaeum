@@ -185,9 +185,9 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
         </div>
 
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[13px] font-semibold leading-[17.5px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
-          <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
-          <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
+          <h2 className="truncate font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
+          <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{formatAuthors(document.authors)}</p>
+          <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{publisherLine}</p>
         </div>
 
         {isTrashMode ? (
@@ -276,6 +276,11 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
           }
         }}
       >
+      {/* Faixa superior SEMPRE no accent fixo (token primary) — mesma marca
+          visual dos cards de Cadernos/Quadros. A cor da capa (deriveCoverColor)
+          continua variando por documento; so a faixa e fixa. O overflow-hidden
+          + rounded-xl do card clipa a faixa nos cantos arredondados. */}
+      <div className="h-[3px] w-full shrink-0 bg-primary" aria-hidden="true" />
       <div className="relative aspect-[3/4] w-full" style={{ backgroundColor: coverColor }}>
         {/* Linhas decorativas que imitam o topo de uma pagina. */}
         <div className="absolute inset-0 p-4" aria-hidden="true">
@@ -335,9 +340,9 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-        <p className="truncate text-xs text-text-secondary">{publisherLine}</p>
-        <h2 className="line-clamp-2 text-[13px] font-semibold leading-[17.5px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
-        <p className="truncate text-xs text-text-secondary">{formatAuthors(document.authors)}</p>
+        <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{publisherLine}</p>
+        <h2 className="line-clamp-2 font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
+        <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{formatAuthors(document.authors)}</p>
 
         {isTrashMode ? (
           <span
