@@ -334,3 +334,34 @@ select {
 .canvas-panel-editor .excalidraw [data-testid="main-menu-trigger"] {
   display: none;
 }
+
+/* Elementos do chrome padrao do Excalidraw que nao fazem sentido no nosso
+   contexto (o quadro vive num painel com header proprio do FloatingPanelFrame).
+   A lib NAO expoe prop de UIOptions para escondê-los individualmente na versao
+   instalada (@excalidraw/excalidraw 0.18.1) — a unica via oficial seria
+   viewModeEnabled/zenModeEnabled, que quebram o desenho —, entao caem no CSS.
+   Sao classes INTERNAS da lib, sem garantia de estabilidade: ao subir a versao
+   do @excalidraw, reconferir cada seletor (um rename silencioso reexibe o
+   elemento sem erro). Especificidade 0,3,0 vence as regras internas (0,1,0)
+   independentemente da ordem de carga do CSS. */
+
+/* Botao "Biblioteca" (canto superior direito). Risco MEDIO: .sidebar-trigger
+   e a classe generica de qualquer gatilho de sidebar; hoje so existe o da
+   Biblioteca (nao usamos sidebar custom). Se um dia adicionarmos uma sidebar
+   propria, este seletor a esconderia tambem — rever aqui nesse caso. */
+.canvas-panel-editor .excalidraw .sidebar-trigger {
+  display: none;
+}
+
+/* Botao de travar a ferramenta ativa (cadeado, na ilha da toolbar). Risco
+   BAIXO-MEDIO: classe especifica; esconder deixa um pequeno vao antes do
+   botao "mao" ao lado. */
+.canvas-panel-editor .excalidraw .ToolIcon__lock {
+  display: none;
+}
+
+/* Botao de ajuda "?" (rodape, canto inferior direito). Risco BAIXO: classe
+   especifica e estavel. */
+.canvas-panel-editor .excalidraw .help-icon {
+  display: none;
+}

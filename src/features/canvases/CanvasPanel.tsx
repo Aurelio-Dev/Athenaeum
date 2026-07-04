@@ -209,6 +209,17 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         // — protecao contra drift de schema entre versoes do Excalidraw.
         const restored = restore(parsed ? { ...parsed, files } : { files }, null, null);
 
+        // Fundo creme (#F0E8DF, token do app) APENAS para cena nova: sem
+        // conteudo persistido (parsed === null), o restore() cai no branco
+        // padrao do Excalidraw. Um quadro ja existente tem parsed != null e
+        // seu viewBackgroundColor salvo (sanitizeAppState persiste esse campo)
+        // — nao sobrescrevemos, senao trocariamos o fundo escolhido pelo
+        // usuario em quadros antigos. Corrompido tambem cai aqui (parsed null)
+        // e abre creme, o que e o comportamento desejado para "comecar do zero".
+        if (parsed === null) {
+          restored.appState.viewBackgroundColor = "#F0E8DF";
+        }
+
         if (cancelled) {
           return;
         }
