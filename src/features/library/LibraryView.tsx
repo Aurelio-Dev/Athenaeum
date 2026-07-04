@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, SVGProps } from "react";
 import { remove } from "@tauri-apps/plugin-fs";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
+import { SettingsPanel, settingsPanelHeight, settingsPanelWidth } from "../settings/SettingsPanel";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
 import { ContextMenu } from "../../components/ui/ContextMenu";
@@ -632,6 +633,9 @@ export function LibraryView() {
       onRenameCollection={renameCollection}
       onDeleteCollection={deleteCollection}
       onEmptyAreaContextMenu={openLibraryAreaContextMenu}
+      onOpenSettings={() =>
+        openFloatingPanel("settings", "app", getCenteredPanelPosition(settingsPanelWidth, settingsPanelHeight))
+      }
     >
       <div className="flex h-full min-h-0 flex-1 flex-col xl:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col" onContextMenu={openLibraryAreaContextMenu}>
@@ -955,6 +959,14 @@ export function LibraryView() {
               onCanvasChanged={() => void queryClient.invalidateQueries({ queryKey: ["library", "canvases"] })}
             />
           </Suspense>
+        ))}
+
+      {/* Painel de Ajustes (singleton: entityId fixo "app"). Aberto pelo botao
+          "Ajustes" no rodape da sidebar. */}
+      {floatingPanelsList
+        .filter((floatingPanel) => floatingPanel.type === "settings")
+        .map((floatingPanel) => (
+          <SettingsPanel key={floatingPanel.id} panel={floatingPanel} onClose={() => closeFloatingPanel(floatingPanel.id)} />
         ))}
 
       {pendingConfirmation ? (

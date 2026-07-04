@@ -12,6 +12,7 @@ type AppShellProps = {
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
   onEmptyAreaContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
+  onOpenSettings: () => void;
   children: ReactNode;
 };
 
@@ -24,6 +25,7 @@ export function AppShell({
   onRenameCollection,
   onDeleteCollection,
   onEmptyAreaContextMenu,
+  onOpenSettings,
   children,
 }: AppShellProps) {
   return (
@@ -37,6 +39,7 @@ export function AppShell({
         onRenameCollection={onRenameCollection}
         onDeleteCollection={onDeleteCollection}
         onEmptyAreaContextMenu={onEmptyAreaContextMenu}
+        onOpenSettings={onOpenSettings}
       />
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
     </div>

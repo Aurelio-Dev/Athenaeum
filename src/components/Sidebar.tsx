@@ -1,5 +1,6 @@
-import { type MouseEvent, useEffect, useState } from "react";
+import { type MouseEvent, useState } from "react";
 import { NewCollectionModal } from "./NewCollectionModal";
+import { useTheme } from "../hooks/useTheme";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
 type SidebarProps = {
@@ -11,6 +12,7 @@ type SidebarProps = {
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
   onEmptyAreaContextMenu?: (event: MouseEvent<HTMLElement>) => void;
+  onOpenSettings: () => void;
 };
 
 type NavItem = {
@@ -41,14 +43,6 @@ const navItems: NavItem[] = [
   { label: "Favoritos", icon: "heart", route: { type: "favorites" } },
   { label: "Lixeira", icon: "trash", route: { type: "trash" } },
 ];
-
-// Persistencia da escolha de tema entre sessoes. A classe .dark no <html>
-// ativa as variaveis CSS do tema escuro (ver styles/index.css).
-const themeStorageKey = "athenaeum-theme";
-
-function readStoredTheme(): "light" | "dark" {
-  return window.localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
-}
 
 function isRouteActive(activeRoute: LibraryRoute, route: LibraryRoute) {
   if (activeRoute.type !== route.type) {
@@ -239,9 +233,10 @@ export function Sidebar({
   onRenameCollection,
   onDeleteCollection,
   onEmptyAreaContextMenu,
+  onOpenSettings,
 }: SidebarProps) {
+  const { theme, toggleTheme } = useTheme();
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">(readStoredTheme);
   const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
   const [collectionName, setCollectionName] = useState("");
   const [collectionError, setCollectionError] = useState("");
@@ -253,13 +248,6 @@ export function Sidebar({
   documents.forEach((document) => {
     collectionCounts.set(document.collection, (collectionCounts.get(document.collection) ?? 0) + 1);
   });
-
-  // Aplica o tema no elemento raiz e persiste a escolha. Roda no mount (para
-  // restaurar a preferencia salva) e a cada troca pelo botao do rodape.
-  useEffect(() => {
-    window.document.documentElement.classList.toggle("dark", theme === "dark");
-    window.localStorage.setItem(themeStorageKey, theme);
-  }, [theme]);
 
   function openCreateCollectionDialog() {
     setCollectionContextMenu(null);
@@ -408,11 +396,11 @@ export function Sidebar({
       </nav>
 
       <div className="flex items-center justify-between border-t border-sidebar-raised px-5 py-4">
-        {/* Tela de ajustes ainda nao existe; o botao marca o lugar dela no layout. */}
         <button
           type="button"
+          onClick={onOpenSettings}
           className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[13px] font-normal leading-[19.5px] text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
-          title="Ajustes (em breve)"
+          title="Ajustes"
         >
           <span className="text-sidebar-muted">
             <Icon name="gear" />
@@ -421,7 +409,7 @@ export function Sidebar({
         </button>
         <button
           type="button"
-          onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
+          onClick={toggleTheme}
           className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-raised text-sidebar-text transition hover:brightness-110"
           aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
           title={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
