@@ -1,6 +1,7 @@
 import { type MouseEvent, useState } from "react";
 import { NewCollectionModal } from "./NewCollectionModal";
 import { useTheme } from "../hooks/useTheme";
+import { AppIconGlyph, useAppIcon } from "../lib/appIcon";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
 type SidebarProps = {
@@ -68,7 +69,7 @@ function getErrorMessage(error: unknown) {
   return "Erro desconhecido.";
 }
 
-function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" | "plus" | "edit" | "gear" | "contrast" }) {
+function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "plus" | "edit" | "gear" | "contrast" }) {
   const commonProps = {
     width: 16,
     height: 16,
@@ -80,22 +81,6 @@ function Icon({ name }: { name: NavItem["icon"] | "folder" | "search" | "brand" 
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
   };
-
-  if (name === "brand") {
-    // Frontao (TempleIcon) — a marca do app. Icone preenchido (nao stroke),
-    // viewBox proprio 16x16; fill:currentColor herda o branco do badge.
-    return (
-      <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-        <path d="M1.5 7.5H14.5L8 2.5L1.5 7.5Z" />
-        <path d="M14.5 7.5H1.5V9H14.5V7.5Z" />
-        <path d="M4.5 9H1.5V12.5H4.5V9Z" />
-        <path d="M9.5 9H6.5V12.5H9.5V9Z" />
-        <path d="M14.5 9H11.5V12.5H14.5V9Z" />
-        <path d="M14.5 12.5H1.5V13.5H14.5V12.5Z" />
-        <path d="M15.25 13.5H0.75V14.25H15.25V13.5Z" />
-      </svg>
-    );
-  }
 
   if (name === "search") {
     return (
@@ -236,6 +221,7 @@ export function Sidebar({
   onOpenSettings,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
+  const { variant: appIconVariant } = useAppIcon();
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
   const [collectionName, setCollectionName] = useState("");
@@ -316,7 +302,7 @@ export function Sidebar({
     >
       <div className="flex items-center gap-3 px-5 pb-2 pt-5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-text-inverse">
-          <Icon name="brand" />
+          <AppIconGlyph variant={appIconVariant} className="h-5 w-5" />
         </div>
         <span className="text-lg font-bold text-sidebar-text">Athenaeum</span>
       </div>

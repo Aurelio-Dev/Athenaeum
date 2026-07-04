@@ -5,12 +5,7 @@ import { useFloatingPanels, type FloatingPanel } from "../../components/floating
 import { SectionLabel } from "../../components/ui/SectionLabel";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { useTheme, type Theme } from "../../hooks/useTheme";
-import { getSetting, setSetting } from "../../lib/database";
-// SVG real da variante "Coluna" (origem: redesign/reference-prints/icons/
-// ColumnIcon.svg, copiado para ca fora do fluxo normal de design). Importado
-// como URL pelo Vite; renderizado via CSS mask para herdar currentColor — o
-// arquivo tem fill branco fixo, que sumiria num card claro.
-import columnIconUrl from "../../assets/icons/column-icon.svg";
+import { AppIconPreview, useAppIcon } from "../../lib/appIcon";
 
 // Dimensoes do painel. O conteudo interno e limitado a ~480px centralizado
 // (so 3 controles em lista), entao o painel nao precisa ser largo. Exportadas
@@ -20,12 +15,6 @@ export const settingsPanelHeight = 560;
 const settingsPanelMinWidth = 420;
 const settingsPanelMinHeight = 360;
 const collapsedHeight = 48;
-
-// icon_variant persistido em app_settings (migration v14). So a "coluna" tem
-// SVG real por enquanto; "frontao" fica em placeholder ate o arquivo existir.
-type IconVariant = "frontao" | "coluna";
-const iconVariantSettingKey = "icon_variant";
-const defaultIconVariant: IconVariant = "coluna";
 
 function getMaximizedPanelSize() {
   return { width: window.innerWidth, height: window.innerHeight };
@@ -83,6 +72,7 @@ type SettingsPanelProps = {
 export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
   const { movePanel } = useFloatingPanels();
   const { theme, setTheme } = useTheme();
+  const { variant: iconVariant, setVariant: chooseIconVariant } = useAppIcon();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -91,42 +81,27 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
   // lugar exato (mesmo padrao do NotebookPanel).
   const restoreStateRef = useRef<{ position: { x: number; y: number }; size: { width: number; height: number }; collapsed: boolean } | null>(null);
 
-  const [iconVariant, setIconVariant] = useState<IconVariant>(defaultIconVariant);
   const [storagePath, setStoragePath] = useState("");
 
-  // Carrega a variante de icone salva e o caminho de armazenamento atual. O
-  // caminho e o app_data_dir resolvido pelo Tauri (read-only por ora: nao ha
-  // conceito de biblioteca movivel ainda).
+  // Carrega o caminho de armazenamento atual. O caminho e o app_data_dir
+  // resolvido pelo Tauri (read-only por ora: nao ha conceito de biblioteca
+  // movivel ainda).
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      const [storedVariant, dir] = await Promise.all([
-        getSetting(iconVariantSettingKey).catch(() => null),
-        appDataDir().catch(() => ""),
-      ]);
+      const dir = await appDataDir().catch(() => "");
 
       if (cancelled) {
         return;
       }
 
-      if (storedVariant === "frontao" || storedVariant === "coluna") {
-        setIconVariant(storedVariant);
-      }
       setStoragePath(dir);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const chooseIconVariant = useCallback((variant: IconVariant) => {
-    setIconVariant(variant);
-    // Persiste em background; a UI ja refletiu a escolha (otimista). Aplicar a
-    // variante ao icone REAL da janela/taskbar e um passo separado, ainda nao
-    // pedido — aqui so guardamos a preferencia.
-    void setSetting(iconVariantSettingKey, variant);
   }, []);
 
   const toggleCollapsed = useCallback(() => {
@@ -257,8 +232,7 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
                     selected={iconVariant === "frontao"}
                     onSelect={() => chooseIconVariant("frontao")}
                   >
-                    {/* Placeholder: o SVG do Frontao ainda nao existe no projeto. */}
-                    <span className="text-xs font-medium text-text-subtle">Frontão</span>
+                    <AppIconPreview variant="frontao" className="h-16 w-16" />
                   </IconVariantCard>
 
                   <IconVariantCard
@@ -266,22 +240,7 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
                     selected={iconVariant === "coluna"}
                     onSelect={() => chooseIconVariant("coluna")}
                   >
-                    {/* SVG real via mask para herdar a cor do tema (o fill do
-                        arquivo e branco fixo). */}
-                    <span
-                      aria-hidden
-                      className="h-10 w-10 bg-text-primary"
-                      style={{
-                        maskImage: `url(${columnIconUrl})`,
-                        WebkitMaskImage: `url(${columnIconUrl})`,
-                        maskSize: "contain",
-                        WebkitMaskSize: "contain",
-                        maskRepeat: "no-repeat",
-                        WebkitMaskRepeat: "no-repeat",
-                        maskPosition: "center",
-                        WebkitMaskPosition: "center",
-                      }}
-                    />
+                    <AppIconPreview variant="coluna" className="h-16 w-16" />
                   </IconVariantCard>
                 </div>
               </div>
@@ -330,6 +289,7 @@ function IconVariantCard({
       }`}
     >
       {children}
+      <span className="text-xs font-medium text-text-secondary">{label}</span>
     </button>
   );
 }
