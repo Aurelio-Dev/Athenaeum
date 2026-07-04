@@ -416,13 +416,13 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
       edgeToEdge={isMaximized}
       renderHeader={(startDragging) => (
         <div
-          className={`flex h-10 shrink-0 items-center justify-between bg-[var(--surface-header)] px-4 ${
+          className={`flex h-10 shrink-0 items-center justify-between border-b border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] px-4 ${
             isMaximized ? "" : "cursor-move"
           }`}
           onMouseDown={isMaximized ? undefined : startDragging}
         >
-          <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold text-white">
-            <span className="shrink-0 text-white/80">
+          <h2 className="flex min-w-0 items-center gap-2 text-sm font-bold text-[var(--floating-header-text)]">
+            <span className="shrink-0 text-[var(--floating-header-muted)]">
               <NotebookHeaderIcon />
             </span>
             <span className="truncate">{notebookTitle || "Caderno"}</span>
@@ -432,7 +432,7 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
               type="button"
               aria-label={isCollapsed ? "Restaurar painel" : "Minimizar painel"}
               title={isCollapsed ? "Restaurar painel" : "Minimizar painel"}
-              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
               onClick={() => setIsCollapsed((current) => !current)}
             >
               <MinimizeIcon />
@@ -441,7 +441,7 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
               type="button"
               aria-label={isMaximized ? "Restaurar painel" : "Maximizar painel"}
               title={isMaximized ? "Restaurar painel" : "Maximizar painel"}
-              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
               onClick={toggleMaximized}
             >
               {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
@@ -450,7 +450,7 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
               type="button"
               aria-label="Fechar painel"
               title="Fechar painel"
-              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
               onClick={() => void handleClose()}
             >
               <CloseIcon />

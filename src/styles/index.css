@@ -139,6 +139,26 @@
      onde escurecer sobre o fundo escuro pioraria a legibilidade. */
   --color-sidebar-muted: #8B786A;
 
+  --reader-header-bg: var(--card);
+  --reader-header-border: var(--border);
+  --reader-header-text: var(--foreground);
+  --reader-header-muted: var(--muted-foreground);
+  --reader-header-strong: var(--primary);
+  --reader-header-control: var(--primary);
+  --reader-header-hover-bg: var(--muted);
+  --reader-header-active-bg: var(--color-accent-tint-bg);
+  --reader-header-divider: var(--border);
+  --reader-header-input-bg: var(--input);
+  --reader-header-input-border: var(--border);
+
+  --floating-header-bg: var(--card);
+  --floating-header-border: var(--border);
+  --floating-header-text: var(--foreground);
+  --floating-header-muted: var(--muted-foreground);
+  --floating-header-control: var(--primary);
+  --floating-header-hover-bg: var(--muted);
+  --floating-header-divider: var(--border);
+
   --color-border-subtle: var(--border);
   --color-border-muted: var(--border);
   --color-border-strong: var(--border);
@@ -208,6 +228,26 @@
 
   --surface-header: #14161F;
   --surface-elevated: #1E2130;
+
+  --reader-header-bg: var(--card);
+  --reader-header-border: var(--border);
+  --reader-header-text: var(--foreground);
+  --reader-header-muted: var(--muted-foreground);
+  --reader-header-strong: #C7B5A6;
+  --reader-header-control: var(--muted-foreground);
+  --reader-header-hover-bg: var(--muted);
+  --reader-header-active-bg: rgba(156, 90, 46, 0.2);
+  --reader-header-divider: var(--border);
+  --reader-header-input-bg: var(--input);
+  --reader-header-input-border: var(--border);
+
+  --floating-header-bg: var(--card);
+  --floating-header-border: var(--border);
+  --floating-header-text: var(--foreground);
+  --floating-header-muted: var(--muted-foreground);
+  --floating-header-control: var(--muted-foreground);
+  --floating-header-hover-bg: var(--muted);
+  --floating-header-divider: var(--border);
 
   --border: #3D2E22;
   --input: #2E2018;

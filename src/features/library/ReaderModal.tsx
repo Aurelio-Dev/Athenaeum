@@ -1205,7 +1205,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
       // nao iniciar arrasto.
       renderHeader={(startDragging) => (
         <header
-          className={`flex h-11 shrink-0 items-center border-b border-[#2A1A12] bg-[var(--surface-header)] text-[#9E8878] ${
+          className={`flex h-11 shrink-0 items-center border-b border-[var(--reader-header-border)] bg-[var(--reader-header-bg)] text-[var(--reader-header-muted)] ${
             isReaderMaximized ? "" : "cursor-move"
           }`}
           onMouseDown={isReaderMaximized ? undefined : startDragging}
@@ -1213,7 +1213,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
         <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
           <button
             type="button"
-            className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
             aria-label="Voltar para biblioteca"
             onMouseDown={(event) => event.stopPropagation()}
             onClick={closeAndSave}
@@ -1230,20 +1230,20 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
         </div>
 
         <div className="flex shrink-0 items-center gap-2 px-5" onMouseDown={(event) => event.stopPropagation()}>
-          <button type="button" aria-label="Reduzir zoom" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(zoom - zoomStep)}>
+          <button type="button" aria-label="Reduzir zoom" className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => changeZoom(zoom - zoomStep)}>
             <Icon name="minus" />
           </button>
-          <button type="button" className="min-w-14 rounded-md px-2 py-1 text-sm font-medium text-[#C7B5A6] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(100)}>
+          <button type="button" className="min-w-14 rounded-md px-2 py-1 text-sm font-medium text-[var(--reader-header-strong)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => changeZoom(100)}>
             {zoom}%
           </button>
-          <button type="button" aria-label="Aumentar zoom" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => changeZoom(zoom + zoomStep)}>
+          <button type="button" aria-label="Aumentar zoom" className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => changeZoom(zoom + zoomStep)}>
             <Icon name="plus" />
           </button>
-          <div className="mx-2 h-6 w-px bg-white/10" />
-          <span className="min-w-16 text-center text-sm font-medium text-[#C7B5A6]">
+          <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
+          <span className="min-w-16 text-center text-sm font-medium text-[var(--reader-header-strong)]">
             {currentPage} / {totalPages}
           </span>
-          <div className="mx-2 h-6 w-px bg-white/10" />
+          <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
           {isSearchOpen ? (
             <input
               value={documentSearchTerm}
@@ -1253,19 +1253,19 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
                   setIsSearchOpen(false);
                 }
               }}
-              className="h-8 w-52 rounded-md border border-white/10 bg-white/5 px-3 text-sm text-white outline-none placeholder:text-[#9E8878] focus:border-primary"
+              className="h-8 w-52 rounded-md border border-[var(--reader-header-input-border)] bg-[var(--reader-header-input-bg)] px-3 text-sm text-[var(--reader-header-text)] outline-none placeholder:text-[var(--reader-header-muted)] focus:border-primary"
               placeholder="Buscar no documento..."
               autoFocus
             />
           ) : (
-            <button type="button" aria-label="Buscar no documento" className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white" onClick={() => setIsSearchOpen(true)}>
+            <button type="button" aria-label="Buscar no documento" className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => setIsSearchOpen(true)}>
               <Icon name="search" />
             </button>
           )}
           <button
             type="button"
             aria-label="Modo marca-texto"
-            className={`rounded-md p-1.5 transition ${isHighlightModeEnabled ? "text-primary" : "text-[#9E8878] hover:bg-white/5 hover:text-white"}`}
+            className={`rounded-md p-1.5 transition ${isHighlightModeEnabled ? "text-primary" : "text-[var(--reader-header-control)] hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"}`}
             onClick={() => setIsHighlightModeEnabled((isEnabled) => !isEnabled)}
           >
             <Icon name="pen" />
@@ -1274,7 +1274,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             type="button"
             aria-label={sidePanelFloating ? (annotationsPanel?.isMinimized ? "Restaurar painel" : "Minimizar painel") : sidePanelOpen ? "Fechar painel" : "Abrir painel"}
             title={sidePanelFloating ? (annotationsPanel?.isMinimized ? "Restaurar painel" : "Minimizar painel") : sidePanelOpen ? "Fechar painel" : "Abrir painel"}
-            className={`rounded-md p-1.5 transition ${sidePanelOpen ? "bg-primary/20 text-primary" : "text-[#9E8878] hover:bg-white/5 hover:text-white"}`}
+            className={`rounded-md p-1.5 transition ${sidePanelOpen ? "bg-[var(--reader-header-active-bg)] text-primary" : "text-[var(--reader-header-control)] hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"}`}
             onClick={() => {
               setSidePanelInitialTab(undefined);
               if (sidePanelFloating) {
@@ -1294,12 +1294,12 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
           >
             <Icon name="split" />
           </button>
-          <div className="mx-2 h-6 w-px bg-white/10" />
+          <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
           <button
             type="button"
             aria-label={isReaderMaximized ? "Restaurar janela do leitor" : "Maximizar janela do leitor"}
             title={isReaderMaximized ? "Restaurar" : "Maximizar"}
-            className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
             onClick={toggleReaderMaximized}
           >
             <Icon name={isReaderMaximized ? "restore" : "maximize"} />
@@ -1308,7 +1308,7 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
             type="button"
             aria-label="Fechar leitor"
             title="Fechar"
-            className="rounded-md p-1.5 text-[#9E8878] transition hover:bg-white/5 hover:text-white"
+            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
             onClick={closeAndSave}
           >
             <Icon name="close" />

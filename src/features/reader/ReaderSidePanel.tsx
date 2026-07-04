@@ -172,14 +172,14 @@ export function ReaderSidePanel({
         minWidth={floatingPanelMinWidth}
         minHeight={panel.isMinimized ? floatingPanelMinimizedHeight : floatingPanelMinHeight}
         resizable={!panel.isMinimized}
-        title={<h2 className="min-w-0 truncate text-sm font-bold text-white">Anotações — {document.title}</h2>}
+        title={<h2 className="min-w-0 truncate text-sm font-bold text-[var(--floating-header-text)]">Anotações — {document.title}</h2>}
         actions={
           <>
             <button
               type="button"
               aria-label={panel.isMinimized ? "Restaurar painel" : "Minimizar painel"}
               title={panel.isMinimized ? "Restaurar painel" : "Minimizar painel"}
-              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
               onMouseDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -201,7 +201,7 @@ export function ReaderSidePanel({
               type="button"
               aria-label="Fechar painel"
               title="Fechar painel"
-              className="rounded-md p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
               onMouseDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();

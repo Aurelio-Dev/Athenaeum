@@ -42,7 +42,7 @@ function getEventPanelId(target: EventTarget | null) {
 
 // Casca comum dos paineis flutuantes: portal para o <body> (escapa do
 // stacking context de modais como o leitor, entao os zIndex da pilha valem
-// entre TODOS os paineis), header escuro arrastavel e corpo com resize.
+// entre TODOS os paineis), header arrastavel e corpo com resize.
 export function FloatingPanelFrame({ panel, width, height, minWidth, minHeight, resizable = true, edgeToEdge = false, title, actions, renderHeader, onFocusPanel, onMoveEnd, children }: FloatingPanelFrameProps) {
   const { focusPanel, movePanel } = useFloatingPanels();
 
@@ -119,7 +119,7 @@ export function FloatingPanelFrame({ panel, width, height, minWidth, minHeight, 
         renderHeader(startDragging)
       ) : (
         <div
-          className="flex h-12 shrink-0 cursor-move items-center justify-between rounded-t-xl bg-[var(--surface-header)] px-4"
+          className="flex h-12 shrink-0 cursor-move items-center justify-between rounded-t-xl border-b border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] px-4 text-[var(--floating-header-text)]"
           onMouseDown={startDragging}
         >
           {title}
