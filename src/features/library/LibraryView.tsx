@@ -1,10 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SVGProps } from "react";
+import type { MouseEvent as ReactMouseEvent, SVGProps } from "react";
 import { remove } from "@tauri-apps/plugin-fs";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
+import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
 import {
   countTrashDocuments,
   createCanvas as createPersistedCanvas,
@@ -43,6 +46,7 @@ import type { CollectionUpdates, DocumentMetadataUpdates, ListDocumentsOptions }
 import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, ReadingLocation, SortMode, SubjectTag, ViewMode } from "../../types/library";
 import { NewCollectionModal } from "../../components/NewCollectionModal";
 import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { useContextMenu } from "../../hooks/useContextMenu";
 import { CanvasesGrid } from "../canvases/CanvasesGrid";
 import { canvasPanelHeight, canvasPanelWidth } from "../canvases/canvasPanelDimensions";
 import { NotebookPanel, notebookPanelWidth } from "../notebooks/NotebookPanel";
@@ -110,6 +114,59 @@ function PlusIcon() {
   );
 }
 
+function ContextCategoryIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="4" width="6" height="6" rx="1.5" fill="currentColor" />
+      <rect x="14" y="4" width="6" height="6" rx="1.5" fill="currentColor" />
+      <rect x="4" y="14" width="6" height="6" rx="1.5" fill="currentColor" />
+      <rect x="14" y="14" width="6" height="6" rx="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ContextRowsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" aria-hidden="true">
+      <line x1="5" x2="19" y1="7" y2="7" />
+      <line x1="5" x2="19" y1="12" y2="12" />
+      <line x1="5" x2="19" y1="17" y2="17" />
+    </svg>
+  );
+}
+
+function ContextGridIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="4" width="6" height="6" rx="1" />
+      <rect x="14" y="4" width="6" height="6" rx="1" />
+      <rect x="4" y="14" width="6" height="6" rx="1" />
+      <rect x="14" y="14" width="6" height="6" rx="1" />
+    </svg>
+  );
+}
+
+function ContextRefreshIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 0 1-15.1 6.6" />
+      <path d="M3 12A9 9 0 0 1 18.1 5.4" />
+      <path d="M18 2v4h-4" />
+      <path d="M6 22v-4h4" />
+    </svg>
+  );
+}
+
+function isLibraryAreaContextTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return !target.closest(
+    "article, button, a, input, textarea, select, [role='button'], [data-context-menu-root='true']",
+  );
+}
+
 // Icones de estado vazio (equivalentes inline a LibraryBig/FolderOpen/SearchX).
 // Aceitam props de SVG (className, size) para o EmptyState controlar cor/tamanho.
 const emptyStateIconProps = {
@@ -160,11 +217,13 @@ export function LibraryView() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [collectionTab, setCollectionTab] = useState<CollectionTab>("documents");
   const [isAddPdfModalOpen, setIsAddPdfModalOpen] = useState(false);
+  const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [isEditCollectionModalOpen, setIsEditCollectionModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
+  const libraryAreaContextMenu = useContextMenu();
   const hasAutoSelectedFirstDocumentRef = useRef(false);
 
   const isTrashRoute = activeRoute.type === "trash";
@@ -545,6 +604,24 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
+  function openLibraryAreaContextMenu(event: ReactMouseEvent<HTMLElement>) {
+    if (!isLibraryAreaContextTarget(event.target)) {
+      return;
+    }
+
+    libraryAreaContextMenu.open(event);
+  }
+
+  function toggleLibraryViewModeFromContextMenu() {
+    setViewMode((currentViewMode) => (currentViewMode === "list" ? "grid" : "list"));
+    libraryAreaContextMenu.close();
+  }
+
+  function refreshLibraryFromContextMenu() {
+    libraryAreaContextMenu.close();
+    void invalidateLibraryQueries();
+  }
+
   return (
     <AppShell
       collections={collections}
@@ -554,9 +631,10 @@ export function LibraryView() {
       onCreateCollection={createCollection}
       onRenameCollection={renameCollection}
       onDeleteCollection={deleteCollection}
+      onEmptyAreaContextMenu={openLibraryAreaContextMenu}
     >
       <div className="flex h-full min-h-0 flex-1 flex-col xl:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col" onContextMenu={openLibraryAreaContextMenu}>
           <div className="flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
             <label className="ml-auto flex w-full max-w-sm items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
               <SearchIcon />
@@ -729,6 +807,33 @@ export function LibraryView() {
               </div>
             )}
           </section>
+
+          <ContextMenu
+            isOpen={libraryAreaContextMenu.isOpen}
+            x={libraryAreaContextMenu.x}
+            y={libraryAreaContextMenu.y}
+            onClose={libraryAreaContextMenu.close}
+          >
+            <ContextMenuItem
+              icon={<ContextCategoryIcon />}
+              label="Nova coleção"
+              onSelect={() => {
+                libraryAreaContextMenu.close();
+                setIsNewCollectionModalOpen(true);
+              }}
+            />
+            <ContextMenuDivider />
+            <ContextMenuItem
+              icon={viewMode === "list" ? <ContextGridIcon /> : <ContextRowsIcon />}
+              label={viewMode === "list" ? "Listar itens em grade" : "Listar itens em linhas"}
+              onSelect={toggleLibraryViewModeFromContextMenu}
+            />
+            <ContextMenuItem
+              icon={<ContextRefreshIcon />}
+              label="Atualizar"
+              onSelect={refreshLibraryFromContextMenu}
+            />
+          </ContextMenu>
         </div>
 
         {selectedDocument ? (
@@ -759,6 +864,13 @@ export function LibraryView() {
           onCreateCollection={({ name, description, color }) =>
             editActiveCollection(activeCollection, { name, description, color })
           }
+        />
+      ) : null}
+
+      {isNewCollectionModalOpen ? (
+        <NewCollectionModal
+          onClose={() => setIsNewCollectionModalOpen(false)}
+          onCreateCollection={({ name, description, color }) => createCollection(name, description, color)}
         />
       ) : null}
 

@@ -828,6 +828,25 @@ export async function createNotebookPage(notebookId: number): Promise<NotebookPa
   return mapNotebookPageRow(row);
 }
 
+export async function deleteNotebookPage(notebookId: number, pageId: number) {
+  const database = await getDatabase();
+  const [page] = await database.select<Array<{ position: number }>>(
+    "SELECT position FROM notebook_pages WHERE id = $1 AND notebook_id = $2",
+    [pageId, notebookId],
+  );
+
+  if (!page) {
+    return;
+  }
+
+  await database.execute("DELETE FROM notebook_pages WHERE id = $1 AND notebook_id = $2", [pageId, notebookId]);
+  await database.execute("UPDATE notebook_pages SET position = position - 1 WHERE notebook_id = $1 AND position > $2", [
+    notebookId,
+    page.position,
+  ]);
+  await database.execute("UPDATE notebooks SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1", [notebookId]);
+}
+
 // Autosave do editor de caderno (blur/troca de pagina/fechar painel). O
 // trigger notebook_pages_touch_updated_at cuida do updated_at.
 export async function saveNotebookPage(pageId: number, updates: { title: string | null; content: string }) {

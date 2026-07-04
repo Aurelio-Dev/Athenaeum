@@ -399,7 +399,7 @@ export function AddDocumentModal({
 
     if (item.status === "done") {
       return (
-        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-status-green-text">
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-status-green">
           <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-status-green text-status-green-text">
             <CheckIcon />
           </span>

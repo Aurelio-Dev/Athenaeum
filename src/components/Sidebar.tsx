@@ -10,6 +10,7 @@ type SidebarProps = {
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
+  onEmptyAreaContextMenu?: (event: MouseEvent<HTMLElement>) => void;
 };
 
 type NavItem = {
@@ -237,6 +238,7 @@ export function Sidebar({
   onCreateCollection,
   onRenameCollection,
   onDeleteCollection,
+  onEmptyAreaContextMenu,
 }: SidebarProps) {
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(readStoredTheme);
@@ -320,7 +322,10 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar text-sidebar-text">
+    <aside
+      className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar text-sidebar-text"
+      onContextMenu={onEmptyAreaContextMenu}
+    >
       <div className="flex items-center gap-3 px-5 pb-2 pt-5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-text-inverse">
           <Icon name="brand" />

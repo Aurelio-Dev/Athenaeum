@@ -174,15 +174,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
           }
         }}
       >
-        <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={{ backgroundColor: coverColor }}>
-          {!isTrashMode && document.status === "in-progress" ? (
-            <div
-              className="absolute inset-x-0 bottom-0 h-[3px] bg-primary"
-              style={{ width: `${Math.min(100, Math.max(0, document.progress))}%` }}
-              aria-hidden="true"
-            />
-          ) : null}
-        </div>
+        <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={{ backgroundColor: coverColor }} />
 
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
@@ -211,7 +203,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
               ) : null}
             </div>
 
-            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-text-primary">
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-text-primary dark:text-primary">
               <CircularProgress value={document.progress} />
             </span>
 
@@ -251,7 +243,6 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
 function DocumentGridCard({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
-  const isReading = document.status === "in-progress";
   const coverColor = deriveCoverColor(document.id);
   const publisherLine = `${document.year} · ${document.source}`;
   const visibleTags = document.tags.slice(0, MAX_VISIBLE_TAGS);
@@ -324,19 +315,10 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
 
         {/* Indicador de progresso circular: canto inferior direito. */}
         {isTrashMode ? null : (
-          <span className="absolute bottom-2 right-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-text-primary shadow-sm">
+          <span className="absolute bottom-2 right-2 inline-flex h-6 w-6 items-center justify-center text-text-primary dark:text-primary">
             <CircularProgress value={document.progress} />
           </span>
         )}
-
-        {/* Barra de progresso de leitura: linha fina na base da thumbnail. */}
-        {!isTrashMode && isReading ? (
-          <div
-            className="absolute inset-x-0 bottom-0 h-[3px] bg-primary"
-            style={{ width: `${Math.min(100, Math.max(0, document.progress))}%` }}
-            aria-hidden="true"
-          />
-        ) : null}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">

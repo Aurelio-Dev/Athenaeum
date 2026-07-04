@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
+import { TrashIcon } from "../../components/ui/SharedIcons";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
-import { createNotebookPage, getNotebookInfo, listNotebookPages, saveNotebookPage, updateNotebookInfo, type NotebookInfo } from "../../lib/database";
+import { createNotebookPage, deleteNotebookPage, getNotebookInfo, listNotebookPages, saveNotebookPage, updateNotebookInfo, type NotebookInfo } from "../../lib/database";
+import { useContextMenu } from "../../hooks/useContextMenu";
 import type { LibraryCollection, NotebookPage } from "../../types/library";
 import { NotebookPageEditor } from "./NotebookPageEditor";
 
@@ -131,9 +135,11 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [contextPageId, setContextPageId] = useState<number | null>(null);
   const [panelSize, setPanelSize] = useState({ width: panelWidth, height: panelHeight });
   const [isMaximized, setIsMaximized] = useState(false);
   const [isRailExpanded, setIsRailExpanded] = useState(false);
+  const pageContextMenu = useContextMenu();
   const [draftTitle, setDraftTitle] = useState("");
   const restoreStateRef = useRef<{
     position: { x: number; y: number };
@@ -301,6 +307,43 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
       onNotebookChangedRef.current();
     } catch (error) {
       console.warn("Nao foi possivel criar a pagina.", error);
+    }
+  }
+
+  async function deleteContextPage() {
+    const pageId = contextPageId;
+    const page = pages.find((currentPage) => currentPage.id === pageId);
+
+    pageContextMenu.close();
+
+    if (!page) {
+      return;
+    }
+
+    if (page.id !== activePageIdRef.current) {
+      await saveActivePage();
+    }
+
+    try {
+      await deleteNotebookPage(notebookId, page.id);
+
+      let nextPages = await listNotebookPages(notebookId);
+      if (nextPages.length === 0) {
+        nextPages = [await createNotebookPage(notebookId)];
+      }
+
+      setPages(nextPages);
+
+      const activePageStillExists = nextPages.some((nextPage) => nextPage.id === activePageIdRef.current);
+      if (page.id === activePageIdRef.current || !activePageStillExists) {
+        const nextActivePage = nextPages.find((nextPage) => nextPage.position >= page.position) ?? nextPages[nextPages.length - 1];
+        setActivePageDrafts(nextActivePage);
+      }
+
+      setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: new Date().toISOString() } : currentInfo));
+      onNotebookChangedRef.current();
+    } catch (error) {
+      console.warn("Nao foi possivel excluir a pagina do caderno.", error);
     }
   }
 
@@ -478,7 +521,15 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
           >
             <div className="flex flex-col gap-1">
               {pages.map((page) => (
-                <div key={page.id} className="flex items-center">
+                <div
+                  key={page.id}
+                  className="flex items-center"
+                  onContextMenu={(event) => {
+                    event.stopPropagation();
+                    setContextPageId(page.id);
+                    pageContextMenu.open(event);
+                  }}
+                >
                   <button
                     type="button"
                     title={pageDisplayTitle(page)}
@@ -629,6 +680,15 @@ export function NotebookPanel({ panel, collections, onClose, onNotebookChanged }
           />
         </div>
       )}
+
+      <ContextMenu isOpen={pageContextMenu.isOpen} x={pageContextMenu.x} y={pageContextMenu.y} onClose={pageContextMenu.close}>
+        <ContextMenuItem
+          icon={<TrashIcon size={16} />}
+          label="Excluir permanentemente"
+          variant="danger"
+          onSelect={() => void deleteContextPage()}
+        />
+      </ContextMenu>
     </FloatingPanelFrame>
   );
 }

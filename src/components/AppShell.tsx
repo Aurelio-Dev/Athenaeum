@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { Sidebar } from "./Sidebar";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
 
@@ -10,6 +11,7 @@ type AppShellProps = {
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
+  onEmptyAreaContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
   children: ReactNode;
 };
 
@@ -21,6 +23,7 @@ export function AppShell({
   onCreateCollection,
   onRenameCollection,
   onDeleteCollection,
+  onEmptyAreaContextMenu,
   children,
 }: AppShellProps) {
   return (
@@ -33,6 +36,7 @@ export function AppShell({
         onCreateCollection={onCreateCollection}
         onRenameCollection={onRenameCollection}
         onDeleteCollection={onDeleteCollection}
+        onEmptyAreaContextMenu={onEmptyAreaContextMenu}
       />
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
     </div>
