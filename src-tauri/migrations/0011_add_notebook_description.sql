@@ -1,0 +1,1 @@
+ALTER TABLE notebooks ADD COLUMN description TEXT NOT NULL DEFAULT '';

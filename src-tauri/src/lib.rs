@@ -824,6 +824,44 @@ END;
       sql: include_str!("../migrations/0009_add_collection_color_and_description.sql"),
       kind: MigrationKind::Up,
     },
+    // v10: Cadernos (notebooks + notebook_pages) e Quadros (canvases).
+    // O SQL vive em arquivo separado (mesmo padrao da v9) e esta comentado
+    // bloco a bloco la. Pontos-chave do design:
+    //   - collection_id e TEXT (collections.id e slug textual, nao numero);
+    //   - FK colecao -> caderno/quadro usa ON DELETE RESTRICT: excluir a
+    //     colecao exige mover o conteudo para a colecao fallback antes
+    //     (deleteCollection, em src/lib/database.ts, faz esse UPDATE);
+    //   - FK caderno -> pagina usa ON DELETE CASCADE: pagina e parte do
+    //     caderno, nao sobrevive sem ele.
+    // CRUD de cadernos/paginas/quadros fica em TypeScript via plugin-sql
+    // (mesmo padrao de annotations) — nenhum comando Rust novo.
+    Migration {
+      version: 10,
+      description: "add_notebooks_and_canvases",
+      sql: include_str!("../migrations/0010_add_notebooks_and_canvases.sql"),
+      kind: MigrationKind::Up,
+    },
+    Migration {
+      version: 11,
+      description: "add_notebook_description",
+      sql: include_str!("../migrations/0011_add_notebook_description.sql"),
+      kind: MigrationKind::Up,
+    },
+    // v12: conteudo dos Quadros (cena Excalidraw em canvases.content) + tabela
+    // canvas_files (indice dos binarios em disco). O trigger de updated_at de
+    // canvases ja existe desde a v10 — a v12 nao recria. SQL comentado no arquivo.
+    Migration {
+      version: 12,
+      description: "add_canvas_content_and_files",
+      sql: include_str!("../migrations/0012_add_canvas_content_and_files.sql"),
+      kind: MigrationKind::Up,
+    },
+    Migration {
+      version: 13,
+      description: "add_notebook_canvas_menu_state",
+      sql: include_str!("../migrations/0013_add_notebook_canvas_menu_state.sql"),
+      kind: MigrationKind::Up,
+    },
   ]
 }
 
