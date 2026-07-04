@@ -337,10 +337,19 @@ fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
 // foge do padrao TypeScript).
 // ===========================================================================
 
-// Limite de tamanho por arquivo: 10MB. Validado no BACKEND porque o backend
+// Limite de tamanho por arquivo: 4MB. Validado no BACKEND porque o backend
 // e a ultima linha de defesa — a validacao do frontend e cortesia de UX,
 // nao seguranca (qualquer chamada de invoke chega aqui direto).
-const MAX_CANVAS_FILE_BYTES: usize = 10 * 1024 * 1024;
+//
+// O valor ESPELHA de proposito o MAX_ALLOWED_FILE_BYTES (4 * 1024 * 1024) do
+// Excalidraw: a lib ja reduz a imagem para 1440px e rejeita acima de 4MB
+// ANTES de chamar este comando, entao pela via normal da UI nada entre 4MB e
+// o antigo limite de 10MB chegava aqui. Alinhar os dois numeros garante que,
+// se algum caminho futuro (mudanca da lib, invoke manual) entregar um arquivo
+// grande direto ao backend, ele seja rejeitado no MESMO patamar que a UI
+// anuncia — uma unica fonte de verdade, sem duas mensagens de erro diferentes
+// para o mesmo problema.
+const MAX_CANVAS_FILE_BYTES: usize = 4 * 1024 * 1024;
 
 // Traduz o mime type do Excalidraw para a extensao do arquivo em disco.
 // Lista fechada de proposito: mime desconhecido e rejeitado com erro claro
@@ -382,8 +391,8 @@ async fn save_canvas_file<R: tauri::Runtime>(
   // ETAPA 1 — Validacoes ANTES de tocar no disco.
   //
   // Os bytes chegam como base64 (e nao Vec<u8>) de proposito: o IPC do
-  // Tauri serializa argumentos como JSON, e um Vec<u8> de 10MB viraria um
-  // array JSON de 10 milhoes de numeros — lento de serializar e parsear.
+  // Tauri serializa argumentos como JSON, e um Vec<u8> de 4MB viraria um
+  // array JSON de 4 milhoes de numeros — lento de serializar e parsear.
   // O Excalidraw ja entrega a imagem como dataURL base64, entao o TS so
   // recorta o prefixo e repassa a string; o Rust decodifica uma vez aqui.
   //
@@ -395,7 +404,9 @@ async fn save_canvas_file<R: tauri::Runtime>(
   let extension = mime_to_extension(&mime_type)?;
 
   if data_base64.len() > (MAX_CANVAS_FILE_BYTES / 3 + 1) * 4 {
-    return Err("Arquivo excede o limite de 10MB.".to_string());
+    // Mensagem derivada da constante: se o limite mudar, o texto acompanha
+    // sozinho (uma fonte de verdade, sem "10MB" hardcoded desatualizando).
+    return Err(format!("Arquivo excede o limite de {}MB.", MAX_CANVAS_FILE_BYTES / 1024 / 1024));
   }
 
   let data = base64::engine::general_purpose::STANDARD
@@ -403,7 +414,9 @@ async fn save_canvas_file<R: tauri::Runtime>(
     .map_err(|error| format!("Base64 invalido: {error}"))?;
 
   if data.len() > MAX_CANVAS_FILE_BYTES {
-    return Err("Arquivo excede o limite de 10MB.".to_string());
+    // Mensagem derivada da constante: se o limite mudar, o texto acompanha
+    // sozinho (uma fonte de verdade, sem "10MB" hardcoded desatualizando).
+    return Err(format!("Arquivo excede o limite de {}MB.", MAX_CANVAS_FILE_BYTES / 1024 / 1024));
   }
 
   // ---------------------------------------------------------------------
