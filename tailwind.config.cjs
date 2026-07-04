@@ -17,6 +17,7 @@ module.exports = {
         },
         accent: {
           "icon-amber": "var(--color-accent-icon-amber)",
+          "tint-bg": "var(--color-accent-tint-bg)",
         },
         overlay: {
           modal: "var(--color-overlay-modal)",
@@ -82,7 +83,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ["Segoe UI", "Inter", "IBM Plex Sans", "system-ui", "sans-serif"],
+        sans: ["Segoe UI", "-apple-system", "BlinkMacSystemFont", "Roboto", "sans-serif"],
+        serif: ["Lora", "serif"],
         mono: ["IBM Plex Mono", "Consolas", "monospace"],
       },
       boxShadow: {

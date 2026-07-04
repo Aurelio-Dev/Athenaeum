@@ -29,4 +29,8 @@ references/
 # Segoe UI e' fonte proprietaria da Microsoft (licenciada apenas para uso no
 # Windows, sem redistribuicao). Os .ttf sao locais a cada maquina — veja
 # "Fontes" no README para copia-los de C:\Windows\Fonts antes do build.
+# A Lora e' OFL (licenca em src/assets/fonts/OFL.txt) e PODE ser versionada,
+# por isso as excecoes abaixo.
 src/assets/fonts/*.ttf
+!src/assets/fonts/Lora-Medium.ttf
+!src/assets/fonts/Lora-Bold.ttf
