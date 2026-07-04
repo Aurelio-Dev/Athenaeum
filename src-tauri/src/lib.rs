@@ -1107,6 +1107,16 @@ END;
       sql: include_str!("../migrations/0013_add_notebook_canvas_menu_state.sql"),
       kind: MigrationKind::Up,
     },
+    // v14: tabela app_settings (chave-valor) para preferencias globais do app.
+    // Primeira chave: icon_variant (variante do icone). O CRUD e feito em
+    // TypeScript via plugin-sql (mesmo padrao das outras leituras/escritas
+    // simples); nenhum comando Rust novo — este bloco so registra a migration.
+    Migration {
+      version: 14,
+      description: "add_app_settings",
+      sql: include_str!("../migrations/0014_add_app_settings.sql"),
+      kind: MigrationKind::Up,
+    },
   ]
 }
 

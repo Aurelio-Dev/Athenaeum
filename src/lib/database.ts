@@ -1329,3 +1329,30 @@ async function purgeExpiredTrash(database: Database) {
     "DELETE FROM canvases WHERE deleted_at IS NOT NULL AND deleted_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')",
   );
 }
+
+// ---------------------------------------------------------------------------
+// Configuracoes do app (tabela app_settings, chave-valor — ver migration v14).
+// Usado hoje apenas para icon_variant. O TEMA nao passa por aqui: fica em
+// localStorage (ver hooks/useTheme), por leitura sincrona antes do primeiro
+// paint.
+// ---------------------------------------------------------------------------
+
+type AppSettingRow = { value: string };
+
+// Devolve null quando a chave nunca foi gravada — o chamador aplica o proprio
+// default (ex.: icon_variant cai em "coluna" na UI).
+export async function getSetting(key: string): Promise<string | null> {
+  const database = await getDatabase();
+  const [row] = await database.select<AppSettingRow[]>("SELECT value FROM app_settings WHERE key = $1", [key]);
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const database = await getDatabase();
+  // UPSERT: a primeira gravacao insere, as seguintes atualizam o mesmo registro
+  // (key e PRIMARY KEY). Mantem a operacao idempotente sem um SELECT previo.
+  await database.execute(
+    "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    [key, value],
+  );
+}
