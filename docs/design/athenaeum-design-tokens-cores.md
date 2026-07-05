@@ -1,5 +1,35 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 05/07/2026:** a tela de Caderno foi reestruturada para uma
+> experiência de editor em três áreas: trilho/lista de páginas à esquerda,
+> editor central responsivo e drawer de detalhes à direita. O header agora
+> usa breadcrumb centralizado (`Minha Biblioteca > Coleção > Caderno`), o
+> painel de detalhes passou a exibir `Caderno`, `Coleção`, `Status de leitura`,
+> `PDFs vinculados`, `Tags`, `Autor / disciplina`, `Criado`, `Atualizado` e
+> `Última abertura`, e o footer do editor ganhou contagem de palavras/caracteres,
+> modo `Foco` e zoom com presets. O modo Foco esconde laterais, centraliza o
+> texto, usa toolbar reduzida (`Texto`, `Inserir`, `Mais opções`) e permite
+> espaçamento independente (`Compacto`, `Normal`, `Confortável`, `Amplo`) para
+> leitura/escrita longa. A toolbar normal também ganhou `Espaçamento` no menu
+> `...`.
+>
+> **Changelog técnico 05/07/2026:** Cadernos ganharam tags próprias,
+> metadados adicionais, PDFs vinculados e assets persistentes em disco. As
+> migrations `v15`, `v16` e `v17` criam `notebook_tags`,
+> `notebook_linked_documents`, `reading_status`, `author_discipline` e
+> `notebook_assets`. Imagens coladas ou inseridas por `Inserir > Figura >
+> Imagem` são salvas em `notebook-assets/{notebookId}/{pageId}/` via
+> `save_notebook_asset`, com allowlist PNG/JPEG/WebP/GIF, limite de 4MB,
+> escrita temp+rename e proteção contra path traversal; o HTML da página salva
+> apenas `data-notebook-asset-id`, sem `src="data:image..."`. O editor também
+> passou a suportar tabelas editáveis com navegação por Tab, callouts com tipos
+> `Info`, `Dica`, `Atenção` e `Perigo`, links com Ctrl+clique, e equações com
+> fonte LaTeX editável renderizada por **KaTeX** (`throwOnError: false`,
+> `trust: false`). Limitações conhecidas: KaTeX cobre preview matemático de
+> bloco, ainda sem equação inline, numeração automática, referência cruzada ou
+> macros globais persistentes; assets SVG, múltiplos uploads, drag and drop,
+> compressão e galeria de assets ficam para etapas futuras.
+
 > **Changelog 05/07/2026:** o painel de Ajustes passou a organizar as
 > preferências em navegação lateral (`Geral`, `Aparência`, `Biblioteca`,
 > `Avançado`) e ganhou a opção `Linhas divisórias`, persistida em
