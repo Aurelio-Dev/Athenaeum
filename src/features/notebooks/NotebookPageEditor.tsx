@@ -138,6 +138,15 @@ const supportedNotebookImageMimeTypes = new Set([
   "image/gif",
 ]);
 const supportedNotebookImageAccept = Array.from(supportedNotebookImageMimeTypes).join(",");
+const notebookRichContentSelector = [
+  "img[data-notebook-asset-id]",
+  'table[data-athenaeum-block="table"]',
+  '[data-athenaeum-block="callout"]',
+  '[data-athenaeum-block="diagram"]',
+  '[data-athenaeum-block="equation"]',
+  '[data-athenaeum-block="figure"]',
+  '[data-athenaeum-block="file-attachment"]',
+].join(",");
 
 function getSupportedImageFilesFromClipboard(dataTransfer: DataTransfer): File[] {
   const files = Array.from(dataTransfer.files).filter((file) => supportedNotebookImageMimeTypes.has(file.type));
@@ -192,14 +201,17 @@ function serializeNotebookEditorHtml(editor: HTMLElement) {
 }
 
 function notebookEditorHasContent(editor: HTMLElement) {
-  return (editor.textContent ?? "").trim().length > 0 || editor.querySelector("img[data-notebook-asset-id]") !== null;
+  return (editor.textContent ?? "").trim().length > 0 || editor.querySelector(notebookRichContentSelector) !== null;
 }
 
 function initialNotebookContentIsEmpty(content: string) {
   const template = document.createElement("template");
   template.innerHTML = content;
 
-  return (template.content.textContent ?? "").trim().length === 0 && template.content.querySelector("img[data-notebook-asset-id]") === null;
+  return (
+    (template.content.textContent ?? "").trim().length === 0 &&
+    template.content.querySelector(notebookRichContentSelector) === null
+  );
 }
 
 function hydrateNotebookAssetImages(editor: HTMLElement, assets: NotebookAssetData[]) {
@@ -1247,21 +1259,37 @@ export function NotebookPageEditor({
     return `https://${trimmedUrl}`;
   }
 
-  function insertHtml(html: string) {
+  function insertHtml(html: string, options: { placeCursorInTrailingBlock?: boolean } = {}) {
     const editor = editorRef.current;
     if (!editor) {
       return;
     }
 
     editor.focus();
-    document.execCommand("insertHTML", false, html);
+    const markerId = options.placeCursorInTrailingBlock ? crypto.randomUUID() : "";
+    const markerHtml = markerId ? `<span data-athenaeum-caret-marker="${markerId}"></span>` : "";
+    document.execCommand("insertHTML", false, `${html}${markerHtml}`);
+
+    const marker = markerId
+      ? editor.querySelector<HTMLElement>(`span[data-athenaeum-caret-marker="${markerId}"]`)
+      : null;
+    const trailingBlock =
+      marker?.previousElementSibling instanceof HTMLElement &&
+      marker.previousElementSibling.tagName.toLowerCase() === "div"
+        ? marker.previousElementSibling
+        : null;
+    marker?.remove();
+
     emitChange();
+    if (trailingBlock?.isConnected) {
+      savedRangeRef.current = placeCursorAtEnd(trailingBlock)?.cloneRange() ?? null;
+    }
     syncActiveActions();
   }
 
   function insertBlockHtml(html: string) {
     restoreSavedRangeOrEditorEnd();
-    insertHtml(html);
+    insertHtml(html, { placeCursorInTrailingBlock: true });
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -1346,7 +1374,7 @@ export function NotebookPageEditor({
         <figcaption>Imagem sem título. Adicione uma legenda...</figcaption>
       </figure>
       <div><br></div>
-    `);
+    `, { placeCursorInTrailingBlock: true });
     saveCurrentRangeOrEditorEnd();
   }
 
@@ -1440,7 +1468,7 @@ export function NotebookPageEditor({
         <figcaption>Arquivo anexado</figcaption>
       </figure>
       <div><br></div>
-    `);
+    `, { placeCursorInTrailingBlock: true });
     saveCurrentRangeOrEditorEnd();
   }
 
