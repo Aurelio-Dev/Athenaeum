@@ -1,5 +1,21 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog técnico 05/07/2026:** `Inserir > Arquivo` no editor de
+> Cadernos deixou de ser placeholder e ganhou persistência inicial de anexos.
+> A migration `v18` cria `notebook_file_attachments`; os bytes ficam em
+> `notebook-attachments/{notebookId}/{pageId}/{attachmentId}/`, enquanto o
+> HTML da página salva apenas `data-notebook-attachment-id`, sem base64 nem
+> caminho absoluto. O backend valida IDs/nome de arquivo, aplica limite de
+> 4MB, usa escrita temp+rename e registra metadados no SQLite.
+>
+> **Update 05/07/2026:** cards de anexo agora exibem ações `Abrir`,
+> `Mostrar no sistema` e `Remover`. Essas ações enviam somente `attachmentId`
+> ao backend, que busca `file_path` no banco antes de abrir/revelar/remover;
+> ao remover, o registro é excluído e o arquivo físico é apagado quando ainda
+> existe. Limitações conhecidas: ainda não há preview de PDF/imagem/vídeo,
+> busca em anexos, múltiplos uploads, drag and drop, deduplicação por hash,
+> limpeza global de órfãos ou sincronização em nuvem.
+
 > **Changelog 05/07/2026:** a tela de Caderno foi reestruturada para uma
 > experiência de editor em três áreas: trilho/lista de páginas à esquerda,
 > editor central responsivo e drawer de detalhes à direita. O header agora
