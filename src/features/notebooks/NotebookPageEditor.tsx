@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import katex from "katex";
-import { loadNotebookAssets, saveNotebookAsset, type NotebookAssetData, type NotebookAssetMetadata } from "../../lib/database";
+import {
+  deleteNotebookFileAttachment,
+  loadNotebookAssets,
+  openNotebookFileAttachment,
+  revealNotebookFileAttachment,
+  saveNotebookAsset,
+  saveNotebookFileAttachment,
+  type NotebookAssetData,
+  type NotebookAssetMetadata,
+  type NotebookFileAttachmentMetadata,
+} from "../../lib/database";
 import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, wrapSelectionInCode } from "../reader/richTextShared";
 
 // Editor block-aware das paginas de caderno. Diferente do editor de Notas do
@@ -29,6 +39,7 @@ type LinkedPdfReference = {
 
 type FigureSubtype = "image" | "diagram" | "graph-diagram" | "flowchart";
 type CalloutType = "info" | "tip" | "warning" | "danger";
+type FileAttachmentAction = "open" | "reveal" | "delete";
 
 type TableCellInfo = {
   table: HTMLTableElement;
@@ -116,26 +127,26 @@ function getSupportedImageFilesFromClipboard(dataTransfer: DataTransfer): File[]
     .filter((file): file is File => file !== null);
 }
 
-function readFileAsDataBase64(file: File): Promise<string> {
+function readFileAsDataBase64(file: File, itemLabel = "imagem do clipboard"): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = () => {
       if (typeof reader.result !== "string") {
-        reject(new Error("Resultado inválido ao ler imagem do clipboard."));
+        reject(new Error(`Resultado inválido ao ler ${itemLabel}.`));
         return;
       }
 
       const [, base64 = ""] = reader.result.split(",");
       if (!base64) {
-        reject(new Error("Imagem do clipboard sem conteúdo base64."));
+        reject(new Error(`${itemLabel} sem conteúdo base64.`));
         return;
       }
 
       resolve(base64);
     };
 
-    reader.onerror = () => reject(new Error("Não foi possível ler a imagem do clipboard."));
+    reader.onerror = () => reject(new Error(`Não foi possível ler ${itemLabel}.`));
     reader.readAsDataURL(file);
   });
 }
@@ -147,7 +158,9 @@ function serializeNotebookEditorHtml(editor: HTMLElement) {
     image.removeAttribute("src");
   });
   normalizeEquations(clone);
+  normalizeFileAttachmentCards(clone);
   clearEquationPreviews(clone);
+  clearFileAttachmentControls(clone);
 
   return clone.innerHTML;
 }
@@ -176,6 +189,78 @@ function hydrateNotebookAssetImages(editor: HTMLElement, assets: NotebookAssetDa
 
     image.src = `data:${asset.mimeType};base64,${asset.dataBase64}`;
   });
+}
+
+function formatAttachmentFileSize(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getFileExtension(fileName: string) {
+  const extension = fileName.split(".").pop();
+  return extension && extension !== fileName ? extension.toUpperCase() : "";
+}
+
+function formatAttachmentType(mimeType: string | null, fileName: string) {
+  if (mimeType) {
+    const subtype = mimeType.split("/")[1]?.split(";")[0];
+    if (subtype) {
+      return subtype.toUpperCase();
+    }
+  }
+
+  return getFileExtension(fileName) || "Arquivo";
+}
+
+function formatAttachmentMeta(attachment: NotebookFileAttachmentMetadata) {
+  return `${formatAttachmentType(attachment.mimeType, attachment.originalName)} · ${formatAttachmentFileSize(attachment.fileSize)}`;
+}
+
+function fileAttachmentActionsHtml() {
+  return `
+    <div data-file-attachment-actions="true" contenteditable="false">
+      <button type="button" data-file-attachment-action="open">Abrir</button>
+      <button type="button" data-file-attachment-action="reveal">Mostrar no sistema</button>
+      <button type="button" data-file-attachment-action="delete">Remover</button>
+    </div>
+  `;
+}
+
+function normalizeFileAttachmentCards(editor: HTMLElement) {
+  editor.querySelectorAll<HTMLElement>('[data-athenaeum-block="file-attachment"]').forEach((attachment) => {
+    let card = attachment.querySelector<HTMLElement>(':scope > [data-file-attachment-card="true"]');
+
+    if (!card) {
+      card = document.createElement("div");
+      card.dataset.fileAttachmentCard = "true";
+      card.contentEditable = "false";
+      attachment.prepend(card);
+    }
+
+    card.contentEditable = "false";
+    card.setAttribute("contenteditable", "false");
+
+    if (!card.querySelector('[data-file-attachment-actions="true"]')) {
+      card.insertAdjacentHTML("beforeend", fileAttachmentActionsHtml());
+    }
+  });
+}
+
+function clearFileAttachmentControls(editor: HTMLElement) {
+  editor.querySelectorAll('[data-file-attachment-actions="true"]').forEach((actions) => {
+    actions.remove();
+  });
+}
+
+function isFileAttachmentAction(value: string | undefined): value is FileAttachmentAction {
+  return value === "open" || value === "reveal" || value === "delete";
 }
 
 function findClosestEquation(node: Node | null, editor: HTMLElement): HTMLElement | null {
@@ -695,6 +780,7 @@ export function NotebookPageEditor({
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
   const localImageInputRef = useRef<HTMLInputElement | null>(null);
+  const localAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const zoomScale = zoomPercent / 100;
   const spacingConfig = notebookSpacingConfig[spacingMode];
@@ -817,6 +903,7 @@ export function NotebookPageEditor({
       editor.innerHTML = initialContent;
       normalizeCallouts(editor);
       normalizeEquations(editor);
+      normalizeFileAttachmentCards(editor);
       prepareCodeElements(editor);
       setIsEmpty(!notebookEditorHasContent(editor));
     }
@@ -1139,6 +1226,75 @@ export function NotebookPageEditor({
     } catch (error) {
       console.warn("Nao foi possivel inserir imagem local no caderno.", error);
       setAssetPasteError("Não foi possível inserir a imagem. Tente um arquivo menor.");
+    }
+  }
+
+  async function insertFileAsNotebookAttachment(file: File) {
+    if (!savedRangeRef.current) {
+      saveCurrentRangeOrEditorEnd();
+    }
+
+    const attachmentId = crypto.randomUUID();
+    const dataBase64 = await readFileAsDataBase64(file, "arquivo selecionado");
+    const savedAttachment = await saveNotebookFileAttachment({
+      notebookId,
+      pageId,
+      attachmentId,
+      originalName: file.name || "arquivo",
+      mimeType: file.type || null,
+      dataBase64,
+    });
+
+    restoreSavedRangeOrEditorEnd();
+    insertHtml(`
+      <figure data-athenaeum-block="file-attachment" data-notebook-attachment-id="${escapeHtml(savedAttachment.id)}">
+        <div data-file-attachment-card="true" contenteditable="false">
+          <strong data-file-attachment-name="true">${escapeHtml(savedAttachment.originalName)}</strong>
+          <span data-file-attachment-meta="true">${escapeHtml(formatAttachmentMeta(savedAttachment))}</span>
+          ${fileAttachmentActionsHtml()}
+        </div>
+        <figcaption>Arquivo anexado</figcaption>
+      </figure>
+      <div><br></div>
+    `);
+    saveCurrentRangeOrEditorEnd();
+  }
+
+  function openLocalAttachmentPicker() {
+    saveCurrentRangeOrEditorEnd();
+    setIsTextMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLinkPopoverOpen(false);
+    setIsCiteMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setShowAttachmentNotice(false);
+    setAssetPasteError(null);
+
+    const input = localAttachmentInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.value = "";
+    input.click();
+  }
+
+  async function handleLocalAttachmentSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    input.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setAssetPasteError(null);
+
+    try {
+      await insertFileAsNotebookAttachment(file);
+    } catch (error) {
+      console.warn("Nao foi possivel anexar arquivo ao caderno.", error);
+      setAssetPasteError("Não foi possível anexar o arquivo. Tente um arquivo menor.");
     }
   }
 
@@ -1584,7 +1740,91 @@ export function NotebookPageEditor({
     return editor && link instanceof HTMLAnchorElement && editor.contains(link) ? link : null;
   }
 
+  function findFileAttachmentActionFromTarget(target: EventTarget | null) {
+    const editor = editorRef.current;
+    const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+    const actionElement = element?.closest("[data-file-attachment-action]");
+
+    if (!editor || !(actionElement instanceof HTMLElement) || !editor.contains(actionElement)) {
+      return null;
+    }
+
+    const action = actionElement.dataset.fileAttachmentAction;
+    if (!isFileAttachmentAction(action)) {
+      return null;
+    }
+
+    const attachmentBlock = actionElement.closest('[data-athenaeum-block="file-attachment"]');
+    if (!(attachmentBlock instanceof HTMLElement) || !editor.contains(attachmentBlock)) {
+      return null;
+    }
+
+    const attachmentId = attachmentBlock.dataset.notebookAttachmentId;
+    if (!attachmentId) {
+      return null;
+    }
+
+    return { action, attachmentBlock, attachmentId };
+  }
+
+  function fileAttachmentActionErrorMessage(action: FileAttachmentAction, error: unknown) {
+    const message = String(error).toLowerCase();
+
+    if (message.includes("nao encontrado") || message.includes("não encontrado")) {
+      return "Arquivo não encontrado no disco.";
+    }
+
+    if (action === "open") {
+      return "Não foi possível abrir o arquivo.";
+    }
+
+    if (action === "reveal") {
+      return "Não foi possível mostrar o arquivo no sistema.";
+    }
+
+    return "Não foi possível remover o anexo.";
+  }
+
+  async function runFileAttachmentAction(action: FileAttachmentAction, attachmentBlock: HTMLElement, attachmentId: string) {
+    try {
+      if (action === "open") {
+        await openNotebookFileAttachment(attachmentId);
+        setAssetPasteError(null);
+        return;
+      }
+
+      if (action === "reveal") {
+        await revealNotebookFileAttachment(attachmentId);
+        setAssetPasteError(null);
+        return;
+      }
+
+      await deleteNotebookFileAttachment(attachmentId);
+      const { block } = getOrCreateEditableBlockAfter(attachmentBlock);
+      attachmentBlock.remove();
+      savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
+      setAssetPasteError(null);
+      emitChange();
+      syncActiveActions();
+    } catch (error) {
+      console.warn("Nao foi possivel executar acao do anexo do caderno.", error);
+      setAssetPasteError(fileAttachmentActionErrorMessage(action, error));
+    }
+  }
+
   function handleEditorClick(event: React.MouseEvent<HTMLDivElement>) {
+    const attachmentAction = findFileAttachmentActionFromTarget(event.target);
+    if (attachmentAction) {
+      event.preventDefault();
+      event.stopPropagation();
+      void runFileAttachmentAction(
+        attachmentAction.action,
+        attachmentAction.attachmentBlock,
+        attachmentAction.attachmentId,
+      );
+      return;
+    }
+
     if (!event.ctrlKey) {
       return;
     }
@@ -1680,6 +1920,7 @@ export function NotebookPageEditor({
 
     normalizeCallouts(editor);
     normalizeEquations(editor);
+    normalizeFileAttachmentCards(editor);
     setIsEmpty(!notebookEditorHasContent(editor));
     onContentChange(serializeNotebookEditorHtml(editor));
   }
@@ -1811,6 +2052,13 @@ export function NotebookPageEditor({
         className="hidden"
         tabIndex={-1}
         onChange={(event) => void handleLocalImageSelected(event)}
+      />
+      <input
+        ref={localAttachmentInputRef}
+        type="file"
+        className="hidden"
+        tabIndex={-1}
+        onChange={(event) => void handleLocalAttachmentSelected(event)}
       />
       <div className="shrink-0 border-b border-border-subtle py-2">
         <div
@@ -2110,10 +2358,7 @@ export function NotebookPageEditor({
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  setIsInsertMenuOpen(false);
-                  setShowAttachmentNotice(true);
-                }}
+                onClick={openLocalAttachmentPicker}
               >
                 <AttachmentIcon />
                 Arquivo

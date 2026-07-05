@@ -1162,6 +1162,58 @@ export async function loadNotebookAssets(pageId: number | string): Promise<Noteb
   return invoke<NotebookAssetData[]>("load_notebook_assets", { pageId: String(pageId) });
 }
 
+// Arquivos anexados a paginas de Caderno. Diferente de notebook_assets, esta
+// primeira fase lista apenas metadados: o arquivo fica em disco e o HTML guarda
+// data-notebook-attachment-id, sem base64.
+export type NotebookFileAttachmentPayload = {
+  notebookId: number | string;
+  pageId: number | string;
+  attachmentId: string;
+  originalName: string;
+  mimeType?: string | null;
+  dataBase64: string;
+};
+
+export type NotebookFileAttachmentMetadata = {
+  id: string;
+  notebookId: number;
+  pageId: number;
+  originalName: string;
+  mimeType: string | null;
+  filePath: string;
+  fileSize: number;
+  createdAt: string;
+};
+
+export async function saveNotebookFileAttachment(
+  attachment: NotebookFileAttachmentPayload,
+): Promise<NotebookFileAttachmentMetadata> {
+  return invoke<NotebookFileAttachmentMetadata>("save_notebook_file_attachment", {
+    notebookId: String(attachment.notebookId),
+    pageId: String(attachment.pageId),
+    attachmentId: attachment.attachmentId,
+    originalName: attachment.originalName,
+    mimeType: attachment.mimeType ?? null,
+    dataBase64: attachment.dataBase64,
+  });
+}
+
+export async function loadNotebookFileAttachments(pageId: number | string): Promise<NotebookFileAttachmentMetadata[]> {
+  return invoke<NotebookFileAttachmentMetadata[]>("load_notebook_file_attachments", { pageId: String(pageId) });
+}
+
+export async function openNotebookFileAttachment(attachmentId: string): Promise<void> {
+  await invoke<void>("open_notebook_file_attachment", { attachmentId });
+}
+
+export async function revealNotebookFileAttachment(attachmentId: string): Promise<void> {
+  await invoke<void>("reveal_notebook_file_attachment", { attachmentId });
+}
+
+export async function deleteNotebookFileAttachment(attachmentId: string): Promise<NotebookFileAttachmentMetadata> {
+  return invoke<NotebookFileAttachmentMetadata>("delete_notebook_file_attachment", { attachmentId });
+}
+
 function uniqueTrimmed(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
 }
