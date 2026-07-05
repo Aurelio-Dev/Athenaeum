@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./app/App";
+import "katex/dist/katex.min.css";
 import "./styles/index.css";
 
 type ErrorBoundaryState = {

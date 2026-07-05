@@ -51,7 +51,8 @@ import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "..
 import { useContextMenu } from "../../hooks/useContextMenu";
 import { CanvasesGrid } from "../canvases/CanvasesGrid";
 import { canvasPanelHeight, canvasPanelWidth } from "../canvases/canvasPanelDimensions";
-import { NotebookPanel, notebookPanelWidth } from "../notebooks/NotebookPanel";
+import { NotebookPanel } from "../notebooks/NotebookPanel";
+import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 import { NotebooksGrid } from "../notebooks/NotebooksGrid";
 import { AddDocumentModal } from "./AddDocumentModal";
 import { CollectionTabs, type CollectionTab } from "./CollectionTabs";
@@ -353,13 +354,18 @@ export function LibraryView() {
 
     const notebook = await createPersistedNotebook(activeCollection.id);
     await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
-    // Cascata com a largura REAL do painel (520px), para nao transbordar a
-    // borda direita como acontecia com o fallback de 440px.
-    openFloatingPanel("notebook", String(notebook.id), undefined, notebookPanelWidth);
+    // Centralizado (nao cascata): o layout de 3 colunas e bem mais largo
+    // (1680px) que o antigo painel de coluna unica — a cascata de canto
+    // abriria colado na borda esquerda na maioria das telas.
+    const initialNotebookWidth = Math.min(notebookPanelWidth, window.innerWidth);
+    const initialNotebookHeight = Math.min(notebookPanelHeight, window.innerHeight);
+    openFloatingPanel("notebook", String(notebook.id), getCenteredPanelPosition(initialNotebookWidth, initialNotebookHeight));
   }
 
   function openNotebook(notebook: Notebook) {
-    openFloatingPanel("notebook", String(notebook.id), undefined, notebookPanelWidth);
+    const initialNotebookWidth = Math.min(notebookPanelWidth, window.innerWidth);
+    const initialNotebookHeight = Math.min(notebookPanelHeight, window.innerHeight);
+    openFloatingPanel("notebook", String(notebook.id), getCenteredPanelPosition(initialNotebookWidth, initialNotebookHeight));
   }
 
   async function toggleNotebookFavorite(notebook: Notebook) {
@@ -939,6 +945,9 @@ export function LibraryView() {
             key={floatingPanel.id}
             panel={floatingPanel}
             collections={collections}
+            documents={allDocuments}
+            availableTags={availableTags}
+            onAvailableTagsChange={updateAvailableTags}
             onClose={() => closeFloatingPanel(floatingPanel.id)}
             onNotebookChanged={() => void queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] })}
           />

@@ -613,10 +613,14 @@ export type NotebookInfo = {
   title: string;
   collectionId: string;
   collectionName: string;
+  readingStatus: NotebookReadingStatus;
+  authorDiscipline: string;
   description: string;
   createdAt: string;
   updatedAt: string;
 };
+
+export type NotebookReadingStatus = "not-started" | "in-progress" | "completed";
 
 export async function listNotebooks(collectionId: string): Promise<Notebook[]> {
   const database = await getDatabase();
@@ -752,6 +756,8 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
       id: number;
       title: string;
       collection_id: string;
+      reading_status: NotebookReadingStatus;
+      author_discipline: string;
       description: string;
       collection_name: string;
       created_at: string;
@@ -762,6 +768,8 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
        notebooks.id,
        notebooks.title,
        notebooks.collection_id,
+       notebooks.reading_status,
+       notebooks.author_discipline,
        notebooks.description,
        collections.name AS collection_name,
        notebooks.created_at,
@@ -787,21 +795,28 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
     title: row.title,
     collectionId: row.collection_id,
     collectionName: row.collection_name,
+    readingStatus: row.reading_status,
+    authorDiscipline: row.author_discipline,
     description: row.description,
     createdAt: row.created_at,
     updatedAt: row.last_edited_at,
   };
 }
 
-export async function updateNotebookInfo(notebookId: number, updates: { title: string; description: string; collectionId: string }): Promise<NotebookInfo> {
+export async function updateNotebookInfo(
+  notebookId: number,
+  updates: { title: string; description: string; collectionId: string; readingStatus: NotebookReadingStatus; authorDiscipline: string },
+): Promise<NotebookInfo> {
   const database = await getDatabase();
   const title = updates.title.trim() || "Caderno sem título";
   const description = updates.description;
 
-  await database.execute("UPDATE notebooks SET title = $1, description = $2, collection_id = $3 WHERE id = $4", [
+  await database.execute("UPDATE notebooks SET title = $1, description = $2, collection_id = $3, reading_status = $4, author_discipline = $5 WHERE id = $6", [
     title,
     description,
     updates.collectionId,
+    updates.readingStatus,
+    updates.authorDiscipline,
     notebookId,
   ]);
   return getNotebookInfo(notebookId);
@@ -868,6 +883,118 @@ export async function saveNotebookPage(pageId: number, updates: { title: string 
     updates.content,
     pageId,
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Tags de caderno (notebook_tags, migration v15) — mesmo vocabulario das tags
+// de documento (tabela tags compartilhada). Espelha listAvailableTags /
+// setDocumentTags: registra o tom de cada tag no runtime e persiste o vinculo.
+// ---------------------------------------------------------------------------
+
+export async function listNotebookTags(notebookId: number): Promise<SubjectTag[]> {
+  const database = await getDatabase();
+  const rows = await database.select<TagRow[]>(
+    `SELECT tags.name AS name, tags.color_token AS colorToken
+     FROM notebook_tags
+     JOIN tags ON tags.id = notebook_tags.tag_id
+     WHERE notebook_tags.notebook_id = $1
+     ORDER BY notebook_tags.tag_order`,
+    [notebookId],
+  );
+  return registerTagRows(rows);
+}
+
+export async function saveNotebookTags(notebookId: number, tags: SubjectTag[]) {
+  const database = await getDatabase();
+
+  // Garante que toda tag existe na tabela tags ANTES do insert em notebook_tags
+  // (a FK exige o tag_id). upsertTag e idempotente para as ja existentes.
+  for (const tag of tags) {
+    await upsertTag(database, tag);
+  }
+
+  // Substituicao total (mesmo padrao de setDocumentTags): apaga o conjunto
+  // atual e regrava na ordem recebida — tag_order preserva a ordem da UI.
+  await database.execute("DELETE FROM notebook_tags WHERE notebook_id = $1", [notebookId]);
+  for (const [index, tag] of tags.entries()) {
+    await database.execute("INSERT INTO notebook_tags (notebook_id, tag_id, tag_order) VALUES ($1, $2, $3)", [
+      notebookId,
+      slugify(tag),
+      index,
+    ]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PDFs vinculados a um caderno (notebook_linked_documents, migration v15).
+// ---------------------------------------------------------------------------
+
+// Shape leve para a lista de "Linked PDF" no painel: so os metadados exibidos
+// (titulo/autores/ano/colecao). Nao reusa LibraryDocument inteiro porque nao
+// precisamos de progresso/notas/localizacao aqui — seria peso desnecessario.
+export type LinkedDocument = {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number;
+  collection: string;
+};
+
+type LinkedDocumentRow = {
+  id: string;
+  title: string;
+  year: number;
+  collection: string;
+  authors: string | null;
+};
+
+export async function listNotebookLinkedDocuments(notebookId: number): Promise<LinkedDocument[]> {
+  const database = await getDatabase();
+  // Ignora documentos na lixeira (deleted_at): o vinculo permanece no banco
+  // (so o purge definitivo aciona o cascade), mas um PDF na lixeira nao e um
+  // documento "ativo" para exibir na lista. Restaurar da lixeira faz o vinculo
+  // reaparecer sozinho.
+  const rows = await database.select<LinkedDocumentRow[]>(
+    `SELECT
+       documents.id AS id,
+       documents.title AS title,
+       documents.year AS year,
+       collections.name AS collection,
+       (SELECT group_concat(author, char(31)) FROM document_authors WHERE document_id = documents.id ORDER BY author_order) AS authors
+     FROM notebook_linked_documents
+     JOIN documents ON documents.id = notebook_linked_documents.document_id
+     JOIN collections ON collections.id = documents.collection_id
+     WHERE notebook_linked_documents.notebook_id = $1 AND documents.deleted_at IS NULL
+     ORDER BY notebook_linked_documents.linked_at`,
+    [notebookId],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    authors: parseSeparatedList(row.authors),
+    year: row.year,
+    collection: row.collection,
+  }));
+}
+
+export async function linkDocumentToNotebook(notebookId: number, documentId: string) {
+  const database = await getDatabase();
+  // INSERT OR IGNORE: o PK composto (notebook_id, document_id) ja garante que
+  // vincular o mesmo PDF duas vezes e no-op — a UI tambem previne, mas o banco
+  // e a rede de seguranca.
+  await database.execute(
+    "INSERT OR IGNORE INTO notebook_linked_documents (notebook_id, document_id) VALUES ($1, $2)",
+    [notebookId, documentId],
+  );
+}
+
+export async function unlinkDocumentFromNotebook(notebookId: number, documentId: string) {
+  const database = await getDatabase();
+  await database.execute(
+    "DELETE FROM notebook_linked_documents WHERE notebook_id = $1 AND document_id = $2",
+    [notebookId, documentId],
+  );
 }
 
 type CanvasRow = {
@@ -988,6 +1115,51 @@ export async function saveCanvasFile(canvasId: number, file: CanvasFilePayload):
     mimeType: file.mimeType,
     dataBase64: file.dataBase64,
   });
+}
+
+// Assets de paginas de Caderno: primeira fase da infraestrutura para imagens
+// coladas/inseridas sem base64 dentro de notebook_pages.content. Os bytes ficam
+// em disco via comandos Rust; o HTML futuro deve guardar so referencias.
+export type NotebookAssetPayload = {
+  notebookId: number | string;
+  pageId: number | string;
+  assetId: string;
+  mimeType: string;
+  dataBase64: string;
+  checksum?: string | null;
+  originalName?: string | null;
+};
+
+export type NotebookAssetMetadata = {
+  id: string;
+  notebookId: string;
+  pageId: string;
+  mimeType: string;
+  filePath: string;
+  fileSize: number;
+  checksum: string | null;
+  originalName: string | null;
+  createdAt: string;
+};
+
+export type NotebookAssetData = NotebookAssetMetadata & {
+  dataBase64: string;
+};
+
+export async function saveNotebookAsset(asset: NotebookAssetPayload): Promise<NotebookAssetMetadata> {
+  return invoke<NotebookAssetMetadata>("save_notebook_asset", {
+    notebookId: String(asset.notebookId),
+    pageId: String(asset.pageId),
+    assetId: asset.assetId,
+    mimeType: asset.mimeType,
+    dataBase64: asset.dataBase64,
+    checksum: asset.checksum ?? null,
+    originalName: asset.originalName ?? null,
+  });
+}
+
+export async function loadNotebookAssets(pageId: number | string): Promise<NotebookAssetData[]> {
+  return invoke<NotebookAssetData[]>("load_notebook_assets", { pageId: String(pageId) });
 }
 
 function uniqueTrimmed(values: string[]) {

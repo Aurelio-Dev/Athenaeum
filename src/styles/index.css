@@ -372,6 +372,259 @@ select {
   color: var(--color-text-secondary);
 }
 
+.notebook-editor [data-athenaeum-block="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.55) 0;
+  font-size: 0.95em;
+  table-layout: fixed;
+}
+
+.notebook-editor [data-athenaeum-block="table"] td,
+.notebook-editor [data-athenaeum-block="table"] th {
+  border: 1px solid var(--color-border-subtle);
+  min-width: 6rem;
+  height: 2.4rem;
+  background: var(--color-surface-card);
+  overflow-wrap: anywhere;
+  padding: 0.65em 0.75em;
+  vertical-align: top;
+}
+
+.notebook-editor [data-athenaeum-block="table"] td:focus-within,
+.notebook-editor [data-athenaeum-block="table"] th:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 52%, transparent);
+  outline-offset: -2px;
+}
+
+.notebook-editor [data-athenaeum-block="callout"] {
+  --callout-accent: #2563EB;
+  --callout-bg: color-mix(in srgb, #2563EB 8%, var(--color-surface-card));
+  --callout-border: color-mix(in srgb, #2563EB 34%, var(--color-border-subtle));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75em;
+  border: 1px solid var(--callout-border);
+  border-left: 4px solid var(--callout-accent);
+  border-radius: 8px;
+  background: var(--callout-bg);
+  padding: 0.85em 1em;
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.6) 0;
+}
+
+.notebook-editor [data-athenaeum-block="callout"][data-callout-type="tip"] {
+  --callout-accent: #0F766E;
+  --callout-bg: color-mix(in srgb, #0F766E 9%, var(--color-surface-card));
+  --callout-border: color-mix(in srgb, #0F766E 34%, var(--color-border-subtle));
+}
+
+.notebook-editor [data-athenaeum-block="callout"][data-callout-type="warning"] {
+  --callout-accent: #A16207;
+  --callout-bg: color-mix(in srgb, #A16207 10%, var(--color-surface-card));
+  --callout-border: color-mix(in srgb, #A16207 38%, var(--color-border-subtle));
+}
+
+.notebook-editor [data-athenaeum-block="callout"][data-callout-type="danger"] {
+  --callout-accent: #B91C1C;
+  --callout-bg: color-mix(in srgb, #B91C1C 9%, var(--color-surface-card));
+  --callout-border: color-mix(in srgb, #B91C1C 38%, var(--color-border-subtle));
+}
+
+.notebook-editor [data-callout-icon="true"] {
+  display: inline-flex;
+  width: 1.7em;
+  height: 1.7em;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--callout-accent);
+  color: white;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.82em;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.notebook-editor [data-callout-content="true"] {
+  min-width: 0;
+}
+
+.notebook-editor [data-callout-content="true"] > strong:first-child {
+  display: block;
+  margin-bottom: 0.2em;
+  color: var(--color-text-primary);
+}
+
+.notebook-editor [data-callout-content="true"] > div {
+  color: var(--color-text-secondary);
+}
+
+.notebook-editor [data-athenaeum-block="figure"] {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-surface-card);
+  padding: 0.9em;
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.7) 0;
+}
+
+.notebook-editor .notebook-figure-placeholder {
+  display: flex;
+  min-height: 9rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-border-subtle);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: 0.95em;
+  font-weight: 700;
+}
+
+.notebook-editor [data-athenaeum-block="figure"] img[data-notebook-asset-id] {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.notebook-editor figcaption {
+  margin-top: 0.7em;
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+}
+
+.notebook-editor [data-athenaeum-block="equation"] {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-surface-muted) 72%, var(--color-surface-card));
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.65) 0;
+  padding: 0.85em 1em;
+}
+
+.notebook-editor [data-equation-preview="true"] {
+  min-height: 2.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  padding: 0.65em 0.8em;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.notebook-editor [data-equation-preview="true"]:empty::before {
+  content: "Prévia da equação";
+  color: var(--color-text-subtle);
+  font-family: var(--font-body);
+  font-size: 0.78em;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.notebook-editor [data-equation-preview="true"] .katex-display {
+  max-width: 100%;
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.08em 0;
+}
+
+.notebook-editor [data-equation-preview="true"] .katex {
+  color: inherit;
+}
+
+.notebook-editor [data-equation-source="true"] {
+  margin-top: 0.75em;
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.88em;
+  font-weight: 600;
+  line-height: 1.6;
+  outline: none;
+  overflow-wrap: anywhere;
+  padding-top: 0.65em;
+  white-space: pre-wrap;
+}
+
+.notebook-editor [data-equation-source="true"]:empty::before {
+  content: "Escreva LaTeX, ex: E = mc^2";
+  color: var(--color-text-subtle);
+  font-family: var(--font-body);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.notebook-editor [data-equation-source="true"]:focus {
+  color: var(--color-text-primary);
+}
+
+.notebook-editor--spaced > div,
+.notebook-editor--spaced > p {
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.45) 0;
+}
+
+.notebook-editor--spaced h1 {
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.75) 0 calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.35);
+}
+
+.notebook-editor--spaced h2 {
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.7) 0 calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.32);
+}
+
+.notebook-editor--spaced h3 {
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.65) 0 calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.3);
+}
+
+.notebook-editor--spaced ul,
+.notebook-editor--spaced ol {
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.35) 0 calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.55);
+}
+
+.notebook-editor--spaced blockquote {
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.5) 0;
+}
+
+.notebook-editor--focus::-webkit-scrollbar {
+  width: 8px;
+}
+
+.notebook-editor--focus::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notebook-editor--focus::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.notebook-editor--focus:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-text-subtle) 52%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.notebook-editor a {
+  color: var(--color-primary);
+  cursor: text;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.notebook-editor.notebook-editor--link-nav a {
+  cursor: pointer;
+}
+
 /* Excalidraw (painel de quadro): tokens confirmados por amostragem do Figma.
    A versao instalada usa --color-surface-primary-container para ferramenta
    selecionada; --button-active-bg cobre botoes standalone/pressionados. */
