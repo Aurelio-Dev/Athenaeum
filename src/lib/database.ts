@@ -2,10 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { availableSubjectTags } from "../data/subjectTags";
 import { TAG_COLOR_TOKENS } from "./tagColors";
-import { getSubjectTagTone } from "../styles/designTokens";
+import { getSubjectTagTone, registerSubjectTagTone } from "../styles/designTokens";
 import { isHighlightColor } from "../types/annotation";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
-import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag } from "../types/library";
+import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
@@ -49,6 +49,7 @@ type CollectionRow = {
 
 type TagRow = {
   name: string;
+  colorToken: Tone;
 };
 
 type CountRow = {
@@ -117,6 +118,11 @@ function slugify(value: string) {
 
 function parseSeparatedList(value: string | null) {
   return value ? value.split(listSeparator).filter((item) => item.length > 0) : [];
+}
+
+function registerTagRows(rows: TagRow[]) {
+  rows.forEach((tag) => registerSubjectTagTone(tag.name, tag.colorToken));
+  return rows.map((tag) => tag.name);
 }
 
 function parseReadingLocation(value: string | null): ReadingLocation | undefined {
@@ -446,7 +452,7 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
   const database = await getDatabase();
   const [collections, availableTags, allDocuments, documents, trashCountRows] = await Promise.all([
     database.select<CollectionRow[]>("SELECT id, name, color, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC"),
-    database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC"),
+    database.select<TagRow[]>("SELECT name, color_token AS colorToken FROM tags ORDER BY name COLLATE NOCASE ASC"),
     listDocuments(database, { searchTerm: "", sortMode: "recentes", route: { type: "all" } }),
     listDocuments(database, options),
     database.select<CountRow[]>(trashItemCountSql),
@@ -455,7 +461,7 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
   return {
     collections,
     allDocuments,
-    availableTags: availableTags.map((tag) => tag.name),
+    availableTags: registerTagRows(availableTags),
     documents,
     trashCount: trashCountRows[0]?.count ?? 0,
   };
@@ -468,8 +474,14 @@ export async function listCollections(): Promise<LibraryCollection[]> {
 
 export async function listAvailableTags(): Promise<SubjectTag[]> {
   const database = await getDatabase();
-  const rows = await database.select<TagRow[]>("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC");
-  return rows.map((tag) => tag.name);
+  const rows = await database.select<TagRow[]>("SELECT name, color_token AS colorToken FROM tags ORDER BY name COLLATE NOCASE ASC");
+  return registerTagRows(rows);
+}
+
+export async function updateTagTone(tag: SubjectTag, tone: Tone) {
+  const database = await getDatabase();
+  registerSubjectTagTone(tag, tone);
+  await database.execute("UPDATE tags SET color_token = $1 WHERE name = $2 COLLATE NOCASE", [tone, tag]);
 }
 
 export async function countTrashDocuments(): Promise<number> {

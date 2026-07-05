@@ -42,9 +42,10 @@ import {
   setNotebookFavorite,
   updateCollection as updatePersistedCollection,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
+  updateTagTone as updatePersistedTagTone,
 } from "../../lib/database";
 import type { CollectionUpdates, DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
-import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, ReadingLocation, SortMode, SubjectTag, ViewMode } from "../../types/library";
+import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, ReadingLocation, SortMode, SubjectTag, Tone, ViewMode } from "../../types/library";
 import { NewCollectionModal } from "../../components/NewCollectionModal";
 import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { useContextMenu } from "../../hooks/useContextMenu";
@@ -461,6 +462,11 @@ export function LibraryView() {
     });
   }
 
+  async function updateTagTone(tag: SubjectTag, tone: Tone) {
+    await updatePersistedTagTone(tag, tone);
+    await invalidateLibraryQueries();
+  }
+
   async function toggleFavorite(documentId: string) {
     const document = allDocuments.find((currentDocument) => currentDocument.id === documentId);
 
@@ -855,6 +861,7 @@ export function LibraryView() {
             onAvailableTagsChange={updateAvailableTags}
             onUpdateNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)}
             onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}
+            onUpdateTagTone={(tag, tone) => void updateTagTone(tag, tone)}
             onRestore={(documentId) => void restoreFromTrash(documentId)}
             onPermanentDelete={() => setPendingConfirmation({ type: "permanent-delete", document: selectedDocument })}
           />

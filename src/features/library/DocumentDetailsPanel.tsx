@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { IconButton } from "../../components/IconButton";
 import { TagBadge } from "../../components/TagBadge";
 import { HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
-import type { LibraryCollection, LibraryDocument, SubjectTag } from "../../types/library";
+import { getNextSubjectTagTone, registerSubjectTagTone, rememberSubjectTagToneAlias } from "../../styles/designTokens";
+import type { LibraryCollection, LibraryDocument, SubjectTag, Tone } from "../../types/library";
 import { DocumentPreview } from "./DocumentPreview";
 import { TagSelector } from "./TagSelector";
 
@@ -19,6 +20,7 @@ type DocumentDetailsPanelProps = {
   onAvailableTagsChange: (tags: SubjectTag[]) => void;
   onUpdateNotes?: (documentId: string, notes: string) => void;
   onUpdateDocumentTags?: (documentId: string, tags: SubjectTag[]) => void;
+  onUpdateTagTone?: (tag: SubjectTag, tone: Tone) => void;
   onRestore?: (documentId: string) => void;
   onPermanentDelete?: (documentId: string) => void;
 };
@@ -134,6 +136,24 @@ function formatAuthors(authors: string[]) {
 
 function formatAddedAt(updatedAt: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(updatedAt));
+}
+
+function normalizeTag(tag: string) {
+  return tag.trim().replace(/\s+/g, " ");
+}
+
+function mergeUniqueTags(tags: SubjectTag[]) {
+  const seenTags = new Set<string>();
+  return tags.filter((tag) => {
+    const key = tag.toLocaleLowerCase("pt-BR");
+
+    if (seenTags.has(key)) {
+      return false;
+    }
+
+    seenTags.add(key);
+    return true;
+  });
 }
 
 function splitAuthors(authors: string) {
@@ -282,14 +302,20 @@ export function DocumentDetailsPanel({
   onAvailableTagsChange,
   onUpdateNotes,
   onUpdateDocumentTags,
+  onUpdateTagTone,
   onRestore,
   onPermanentDelete,
 }: DocumentDetailsPanelProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<SubjectTag | null>(null);
+  const [editingTagName, setEditingTagName] = useState("");
   const [notesDraft, setNotesDraft] = useState(document.notes ?? "");
   const initialNotesRef = useRef(document.notes ?? "");
   const tagDropdownRef = useRef<HTMLDivElement | null>(null);
+  const editingTagInputRef = useRef<HTMLInputElement | null>(null);
+  const tagClickTimeoutRef = useRef<number | null>(null);
+  const [, setTagColorRevision] = useState(0);
   const isTrashMode = mode === "trash";
 
   // Reinicia o rascunho das notas ao trocar de documento (ou quando o valor
@@ -298,7 +324,17 @@ export function DocumentDetailsPanel({
   useEffect(() => {
     setNotesDraft(document.notes ?? "");
     initialNotesRef.current = document.notes ?? "";
+    setEditingTag(null);
+    setEditingTagName("");
   }, [document.id, document.notes]);
+
+  useEffect(() => {
+    return () => {
+      if (tagClickTimeoutRef.current !== null) {
+        window.clearTimeout(tagClickTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fecha o dropdown de tags ao clicar fora dele.
   useEffect(() => {
@@ -329,6 +365,76 @@ export function DocumentDetailsPanel({
       document.id,
       document.tags.filter((currentTag) => currentTag !== tag),
     );
+  }
+
+  function startRenamingTag(tag: SubjectTag) {
+    if (isTrashMode) {
+      return;
+    }
+
+    if (tagClickTimeoutRef.current !== null) {
+      window.clearTimeout(tagClickTimeoutRef.current);
+      tagClickTimeoutRef.current = null;
+    }
+
+    setIsTagDropdownOpen(false);
+    setEditingTag(tag);
+    setEditingTagName(tag);
+    window.requestAnimationFrame(() => editingTagInputRef.current?.select());
+  }
+
+  function cycleTagTone(tag: SubjectTag) {
+    const nextTone = getNextSubjectTagTone(tag);
+    registerSubjectTagTone(tag, nextTone);
+    setTagColorRevision((revision) => revision + 1);
+    onUpdateTagTone?.(tag, nextTone);
+  }
+
+  function handleTagClick(tag: SubjectTag) {
+    if (isTrashMode) {
+      return;
+    }
+
+    if (tagClickTimeoutRef.current !== null) {
+      window.clearTimeout(tagClickTimeoutRef.current);
+    }
+
+    tagClickTimeoutRef.current = window.setTimeout(() => {
+      tagClickTimeoutRef.current = null;
+      cycleTagTone(tag);
+    }, 220);
+  }
+
+  function cancelRenamingTag() {
+    setEditingTag(null);
+    setEditingTagName("");
+  }
+
+  function commitRenamedTag() {
+    if (!editingTag) {
+      return;
+    }
+
+    const normalizedTag = normalizeTag(editingTagName);
+
+    if (normalizedTag.length === 0) {
+      cancelRenamingTag();
+      return;
+    }
+
+    const existingTag = availableTags.find(
+      (tag) => tag !== editingTag && tag.toLocaleLowerCase("pt-BR") === normalizedTag.toLocaleLowerCase("pt-BR"),
+    );
+    const nextTagName = existingTag ?? normalizedTag;
+    const nextAvailableTags = availableTags.map((tag) => (tag === editingTag ? nextTagName : tag));
+    const nextDocumentTags = document.tags.map((tag) => (tag === editingTag ? nextTagName : tag));
+
+    if (!existingTag) {
+      rememberSubjectTagToneAlias(editingTag, nextTagName);
+    }
+    onAvailableTagsChange(mergeUniqueTags(nextAvailableTags));
+    onUpdateDocumentTags?.(document.id, mergeUniqueTags(nextDocumentTags));
+    cancelRenamingTag();
   }
 
   function handleTagSelectorChange(nextTags: SubjectTag[]) {
@@ -377,11 +483,42 @@ export function DocumentDetailsPanel({
             </span>
             <span className={sectionLabelClassName}>Tags</span>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="relative mt-3" ref={tagDropdownRef}>
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {document.tags.map((tag) => (
-              <span key={tag} className="group relative inline-flex">
-                <TagBadge tag={tag} />
-                {isTrashMode ? null : (
+              <span key={tag} className="group relative inline-flex min-w-0 max-w-full">
+                {editingTag === tag ? (
+                  <input
+                    ref={editingTagInputRef}
+                    value={editingTagName}
+                    onChange={(event) => setEditingTagName(event.target.value)}
+                    onBlur={commitRenamedTag}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        commitRenamedTag();
+                      }
+
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelRenamingTag();
+                      }
+                    }}
+                    className="h-7 min-w-0 max-w-full rounded-full border border-primary bg-surface-card px-2.5 text-xs font-semibold text-text-primary outline-none placeholder:text-text-subtle focus:ring-2 focus:ring-primary-soft"
+                    placeholder="Renomear tag"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="min-w-0 max-w-full rounded-full text-left"
+                    title={isTrashMode ? undefined : "Clique para trocar a cor. Dois cliques para renomear"}
+                    onClick={() => handleTagClick(tag)}
+                    onDoubleClick={() => startRenamingTag(tag)}
+                  >
+                    <TagBadge tag={tag} />
+                  </button>
+                )}
+                {isTrashMode || editingTag === tag ? null : (
                   <button
                     type="button"
                     aria-label={`Remover tag ${tag}`}
@@ -395,8 +532,7 @@ export function DocumentDetailsPanel({
               </span>
             ))}
 
-            {isTrashMode ? null : (
-              <div className="relative" ref={tagDropdownRef}>
+              {isTrashMode ? null : (
                 <button
                   type="button"
                   className="inline-flex items-center rounded-full border border-border-subtle px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:bg-surface-muted"
@@ -404,18 +540,19 @@ export function DocumentDetailsPanel({
                 >
                   + Tag
                 </button>
-                {isTagDropdownOpen ? (
-                  <div className="absolute left-0 top-full z-10 mt-1 w-64 rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
-                    <TagSelector
-                      availableTags={availableTags}
-                      selectedTags={document.tags}
-                      onAvailableTagsChange={onAvailableTagsChange}
-                      onSelectedTagsChange={handleTagSelectorChange}
-                    />
-                  </div>
-                ) : null}
+              )}
+            </div>
+
+            {isTagDropdownOpen ? (
+              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
+                <TagSelector
+                  availableTags={availableTags}
+                  selectedTags={document.tags}
+                  onAvailableTagsChange={onAvailableTagsChange}
+                  onSelectedTagsChange={handleTagSelectorChange}
+                />
               </div>
-            )}
+            ) : null}
           </div>
         </section>
 
@@ -517,6 +654,3 @@ export function DocumentDetailsPanel({
     </aside>
   );
 }
-
-
-

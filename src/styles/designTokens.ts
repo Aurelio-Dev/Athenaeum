@@ -20,6 +20,18 @@ export const subjectTagTone: Record<string, Tone> = {
   "AI Safety / Ethics": "amber",
 };
 
+export const subjectTagTones: Tone[] = ["violet", "indigo", "blue", "teal", "rose", "amber"];
+
+const registeredSubjectTagTones = new Map<string, Tone>();
+
+function normalizeSubjectTag(tag: string) {
+  return tag.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+const normalizedSubjectTagTone = Object.fromEntries(
+  Object.entries(subjectTagTone).map(([tag, tone]) => [normalizeSubjectTag(tag), tone]),
+) as Record<string, Tone>;
+
 export const toneClassNames: Record<Tone, ToneClassNames> = {
   violet: {
     badge: "bg-tag-violet text-tag-violet-text",
@@ -52,13 +64,39 @@ export function getSubjectTagTone(tag?: SubjectTag | null) {
     return "indigo";
   }
 
-  if (subjectTagTone[tag]) {
-    return subjectTagTone[tag];
+  const normalizedTag = normalizeSubjectTag(tag);
+  const registeredTone = registeredSubjectTagTones.get(normalizedTag);
+
+  if (registeredTone) {
+    return registeredTone;
   }
 
-  const tones = Object.keys(toneClassNames) as Tone[];
+  if (normalizedSubjectTagTone[normalizedTag]) {
+    return normalizedSubjectTagTone[normalizedTag];
+  }
+
+  const matchingKnownTag = Object.entries(normalizedSubjectTagTone).find(([knownTag]) => normalizedTag.includes(knownTag) || knownTag.includes(normalizedTag));
+
+  if (matchingKnownTag) {
+    return matchingKnownTag[1];
+  }
+
   const tagCodeSum = [...tag].reduce((sum, character) => sum + character.charCodeAt(0), 0);
-  return tones[tagCodeSum % tones.length];
+  return subjectTagTones[tagCodeSum % subjectTagTones.length];
+}
+
+export function registerSubjectTagTone(tag: SubjectTag, tone: Tone) {
+  registeredSubjectTagTones.set(normalizeSubjectTag(tag), tone);
+}
+
+export function rememberSubjectTagToneAlias(previousTag: SubjectTag, nextTag: SubjectTag) {
+  registerSubjectTagTone(nextTag, getSubjectTagTone(previousTag));
+}
+
+export function getNextSubjectTagTone(tag: SubjectTag) {
+  const currentTone = getSubjectTagTone(tag);
+  const currentIndex = subjectTagTones.indexOf(currentTone);
+  return subjectTagTones[(currentIndex + 1) % subjectTagTones.length];
 }
 
 export const statusTokens: Record<DocumentStatus, StatusToken> = {
