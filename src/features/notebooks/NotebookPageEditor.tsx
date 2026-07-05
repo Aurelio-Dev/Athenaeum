@@ -38,6 +38,7 @@ type LinkedPdfReference = {
 };
 
 type FigureSubtype = "image" | "diagram" | "graph-diagram" | "flowchart";
+type DiagramKind = "diagram" | "graph" | "flowchart";
 type CalloutType = "info" | "tip" | "warning" | "danger";
 type FileAttachmentAction = "open" | "reveal" | "delete";
 
@@ -69,6 +70,12 @@ type ActiveEquationControls = {
   left: number;
 };
 
+type ActiveDiagramControls = {
+  top: number;
+  left: number;
+  kind: DiagramKind;
+};
+
 export type NotebookSpacingMode = "compact" | "normal" | "comfortable" | "wide";
 
 export const notebookSpacingOptions: Array<{ value: NotebookSpacingMode; label: string }> = [
@@ -90,6 +97,24 @@ const figureSubtypeLabels: Record<FigureSubtype, string> = {
   diagram: "Diagrama",
   "graph-diagram": "Diagrama de grafo",
   flowchart: "Fluxograma",
+};
+
+const diagramKindLabels: Record<DiagramKind, string> = {
+  diagram: "Diagrama",
+  graph: "Grafo",
+  flowchart: "Fluxograma",
+};
+
+const diagramDefaultSources: Record<DiagramKind, string> = {
+  diagram: "Elemento A -> Elemento B",
+  graph: "A -- B\nB -- C",
+  flowchart: "Início -> Processo -> Fim",
+};
+
+const diagramEmptyPreviews: Record<DiagramKind, string> = {
+  diagram: "Descreva a estrutura do diagrama.",
+  graph: "Descreva vértices e conexões.",
+  flowchart: "Descreva as etapas do fluxo.",
 };
 
 const calloutLabels: Record<CalloutType, string> = {
@@ -157,6 +182,7 @@ function serializeNotebookEditorHtml(editor: HTMLElement) {
   clone.querySelectorAll("img[data-notebook-asset-id]").forEach((image) => {
     image.removeAttribute("src");
   });
+  normalizeDiagrams(clone);
   normalizeEquations(clone);
   normalizeFileAttachmentCards(clone);
   clearEquationPreviews(clone);
@@ -261,6 +287,143 @@ function clearFileAttachmentControls(editor: HTMLElement) {
 
 function isFileAttachmentAction(value: string | undefined): value is FileAttachmentAction {
   return value === "open" || value === "reveal" || value === "delete";
+}
+
+function isDiagramKind(value: string | undefined): value is DiagramKind {
+  return value === "diagram" || value === "graph" || value === "flowchart";
+}
+
+function diagramKindFromFigureSubtype(subtype: FigureSubtype): DiagramKind | null {
+  if (subtype === "diagram" || subtype === "flowchart") {
+    return subtype;
+  }
+
+  if (subtype === "graph-diagram") {
+    return "graph";
+  }
+
+  return null;
+}
+
+function getDiagramKind(diagram: HTMLElement): DiagramKind {
+  return isDiagramKind(diagram.dataset.diagramKind) ? diagram.dataset.diagramKind : "diagram";
+}
+
+function findClosestDiagram(node: Node | null, editor: HTMLElement): HTMLElement | null {
+  const element = node instanceof Element ? node : node?.parentElement;
+  const diagram = element?.closest('[data-athenaeum-block="diagram"]');
+
+  return diagram instanceof HTMLElement && editor.contains(diagram) ? diagram : null;
+}
+
+function getDiagramSource(diagram: HTMLElement): HTMLElement | null {
+  return diagram.querySelector<HTMLElement>('[data-diagram-source="true"]');
+}
+
+function createDiagramPreviewElement() {
+  const preview = document.createElement("div");
+  preview.dataset.diagramPreview = "true";
+  preview.contentEditable = "false";
+  return preview;
+}
+
+function createDiagramSourceElement(sourceText: string) {
+  const source = document.createElement("figcaption");
+  source.dataset.diagramSource = "true";
+  source.spellcheck = false;
+  source.setAttribute("spellcheck", "false");
+  source.textContent = sourceText;
+  return source;
+}
+
+function renderDiagramPreview(diagram: HTMLElement) {
+  const kind = getDiagramKind(diagram);
+  const source = getDiagramSource(diagram);
+  const preview = diagram.querySelector<HTMLElement>('[data-diagram-preview="true"]');
+
+  if (!source || !preview) {
+    return;
+  }
+
+  const sourceText = (source.textContent ?? "").trim();
+  preview.contentEditable = "false";
+
+  const label = document.createElement("strong");
+  label.textContent = diagramKindLabels[kind];
+
+  const body = document.createElement("span");
+  body.textContent = sourceText || diagramEmptyPreviews[kind];
+
+  preview.replaceChildren(label, body);
+}
+
+function setDiagramKind(diagram: HTMLElement, kind: DiagramKind) {
+  diagram.dataset.diagramKind = kind;
+  renderDiagramPreview(diagram);
+}
+
+function normalizeLegacyDiagramFigures(editor: HTMLElement) {
+  const legacySelector = [
+    '[data-athenaeum-block="figure"][data-figure-subtype="diagram"]',
+    '[data-athenaeum-block="figure"][data-figure-subtype="graph-diagram"]',
+    '[data-athenaeum-block="figure"][data-figure-subtype="flowchart"]',
+  ].join(",");
+
+  editor.querySelectorAll<HTMLElement>(legacySelector).forEach((figure) => {
+    const subtype = figure.dataset.figureSubtype as FigureSubtype | undefined;
+    const kind = subtype ? diagramKindFromFigureSubtype(subtype) : null;
+    if (!kind) {
+      return;
+    }
+
+    const sourceText = (figure.querySelector("figcaption")?.textContent ?? "").trim() || diagramDefaultSources[kind];
+    figure.dataset.athenaeumBlock = "diagram";
+    figure.dataset.diagramKind = kind;
+    delete figure.dataset.figureSubtype;
+    figure.replaceChildren(createDiagramPreviewElement(), createDiagramSourceElement(sourceText));
+    renderDiagramPreview(figure);
+  });
+}
+
+function normalizeDiagrams(editor: HTMLElement) {
+  normalizeLegacyDiagramFigures(editor);
+
+  editor.querySelectorAll<HTMLElement>('[data-athenaeum-block="diagram"]').forEach((diagram) => {
+    if (diagram.tagName.toLowerCase() !== "figure") {
+      const sourceText = (diagram.textContent ?? "").trim();
+      const nextDiagram = document.createElement("figure");
+      nextDiagram.dataset.athenaeumBlock = "diagram";
+      nextDiagram.dataset.diagramKind = "diagram";
+      nextDiagram.append(createDiagramPreviewElement(), createDiagramSourceElement(sourceText || diagramDefaultSources.diagram));
+      diagram.replaceWith(nextDiagram);
+      renderDiagramPreview(nextDiagram);
+      return;
+    }
+
+    const kind = getDiagramKind(diagram);
+    diagram.dataset.diagramKind = kind;
+
+    let preview = diagram.querySelector<HTMLElement>(':scope > [data-diagram-preview="true"]');
+    if (!preview) {
+      preview = createDiagramPreviewElement();
+      diagram.prepend(preview);
+    }
+    preview.contentEditable = "false";
+
+    let source = diagram.querySelector<HTMLElement>(':scope > [data-diagram-source="true"]');
+    if (!source) {
+      source = createDiagramSourceElement(diagram.textContent ?? "");
+      diagram.appendChild(source);
+    }
+    source.spellcheck = false;
+    source.setAttribute("spellcheck", "false");
+
+    if (sourceContainsMarkup(source)) {
+      source.textContent = source.textContent ?? "";
+    }
+
+    renderDiagramPreview(diagram);
+  });
 }
 
 function findClosestEquation(node: Node | null, editor: HTMLElement): HTMLElement | null {
@@ -803,6 +966,7 @@ export function NotebookPageEditor({
   const [assetPasteError, setAssetPasteError] = useState<string | null>(null);
   const [activeTableCell, setActiveTableCell] = useState<ActiveTableCellControls | null>(null);
   const [activeCallout, setActiveCallout] = useState<ActiveCalloutControls | null>(null);
+  const [activeDiagram, setActiveDiagram] = useState<ActiveDiagramControls | null>(null);
   const [activeEquation, setActiveEquation] = useState<ActiveEquationControls | null>(null);
   const [isEmpty, setIsEmpty] = useState(initialNotebookContentIsEmpty(initialContent));
 
@@ -817,6 +981,7 @@ export function NotebookPageEditor({
       setActiveActions(new Set());
       setActiveTableCell(null);
       setActiveCallout(null);
+      setActiveDiagram(null);
       setActiveEquation(null);
       return;
     }
@@ -878,6 +1043,22 @@ export function NotebookPageEditor({
       setActiveCallout(null);
     }
 
+    const diagram = findClosestDiagram(selection.anchorNode, editor);
+
+    if (diagram && editorShell) {
+      const shellRect = editorShell.getBoundingClientRect();
+      const diagramRect = diagram.getBoundingClientRect();
+      const maxLeft = Math.max(8, shellRect.width - 430);
+
+      setActiveDiagram({
+        top: Math.max(8, diagramRect.top - shellRect.top - 38),
+        left: Math.min(Math.max(8, diagramRect.left - shellRect.left), maxLeft),
+        kind: getDiagramKind(diagram),
+      });
+    } else {
+      setActiveDiagram(null);
+    }
+
     const equation = findClosestEquation(selection.anchorNode, editor);
 
     if (equation && editorShell) {
@@ -902,6 +1083,7 @@ export function NotebookPageEditor({
     if (editor) {
       editor.innerHTML = initialContent;
       normalizeCallouts(editor);
+      normalizeDiagrams(editor);
       normalizeEquations(editor);
       normalizeFileAttachmentCards(editor);
       prepareCodeElements(editor);
@@ -1113,12 +1295,14 @@ export function NotebookPageEditor({
     `);
   }
 
-  function insertFigureBlock(subtype: FigureSubtype) {
-    const label = figureSubtypeLabels[subtype];
+  function insertDiagramBlock(kind: DiagramKind) {
     insertBlockHtml(`
-      <figure data-athenaeum-block="figure" data-figure-subtype="${escapeHtml(subtype)}">
-        <div class="notebook-figure-placeholder">${escapeHtml(label)}</div>
-        <figcaption>${escapeHtml(label)} sem título. Adicione uma legenda...</figcaption>
+      <figure data-athenaeum-block="diagram" data-diagram-kind="${escapeHtml(kind)}">
+        <div data-diagram-preview="true" contenteditable="false">
+          <strong>${escapeHtml(diagramKindLabels[kind])}</strong>
+          <span>${escapeHtml(diagramDefaultSources[kind])}</span>
+        </div>
+        <figcaption data-diagram-source="true" spellcheck="false">${escapeHtml(diagramDefaultSources[kind])}</figcaption>
       </figure>
       <div><br></div>
     `);
@@ -1625,6 +1809,101 @@ export function NotebookPageEditor({
     return { block: fallback, created: true };
   }
 
+  function getCurrentDiagram() {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+
+    if (!editor || !selection || selection.rangeCount === 0 || !selection.anchorNode) {
+      return null;
+    }
+
+    return findClosestDiagram(selection.anchorNode, editor);
+  }
+
+  function changeCurrentDiagramKind(kind: DiagramKind) {
+    const diagram = getCurrentDiagram();
+    if (!diagram) {
+      return;
+    }
+
+    setDiagramKind(diagram, kind);
+    emitChange();
+    syncActiveActions();
+  }
+
+  function removeCurrentDiagram() {
+    const diagram = getCurrentDiagram();
+    if (!diagram) {
+      return;
+    }
+
+    const { block } = getOrCreateEditableBlockAfter(diagram);
+    diagram.remove();
+    savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
+    emitChange();
+    syncActiveActions();
+  }
+
+  function handleDiagramDeletionKey(event: React.KeyboardEvent<HTMLDivElement>) {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+
+    if (!editor || !selection || selection.rangeCount === 0 || !selection.anchorNode || !selection.focusNode) {
+      return false;
+    }
+
+    const anchorDiagram = findClosestDiagram(selection.anchorNode, editor);
+    const focusDiagram = findClosestDiagram(selection.focusNode, editor);
+
+    if (!anchorDiagram && !focusDiagram) {
+      return false;
+    }
+
+    const targetDiagram = anchorDiagram ?? focusDiagram;
+    if (!targetDiagram) {
+      return false;
+    }
+
+    const source = getDiagramSource(targetDiagram);
+
+    if (!anchorDiagram || !focusDiagram || anchorDiagram !== focusDiagram) {
+      event.preventDefault();
+      savedRangeRef.current = placeCursorAtEnd(source ?? targetDiagram)?.cloneRange() ?? null;
+      syncActiveActions();
+      return true;
+    }
+
+    const isEmptyDiagram = (source?.textContent ?? targetDiagram.textContent ?? "").trim().length === 0;
+
+    if (selection.isCollapsed && isEmptyDiagram) {
+      event.preventDefault();
+      savedRangeRef.current = placeCursorAtEnd(source ?? targetDiagram)?.cloneRange() ?? null;
+      syncActiveActions();
+      return true;
+    }
+
+    return false;
+  }
+
+  function handleDiagramEnterKey(event: React.KeyboardEvent<HTMLDivElement>) {
+    const diagram = getCurrentDiagram();
+
+    if (!diagram || event.ctrlKey || event.metaKey || event.altKey) {
+      return false;
+    }
+
+    event.preventDefault();
+    const { block, created } = getOrCreateEditableBlockAfter(diagram);
+    savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
+
+    if (created) {
+      emitChange();
+    }
+
+    syncActiveActions();
+    return true;
+  }
+
   function removeCurrentEquation() {
     const equation = getCurrentEquation();
     if (!equation) {
@@ -1919,6 +2198,7 @@ export function NotebookPageEditor({
     }
 
     normalizeCallouts(editor);
+    normalizeDiagrams(editor);
     normalizeEquations(editor);
     normalizeFileAttachmentCards(editor);
     setIsEmpty(!notebookEditorHasContent(editor));
@@ -2005,6 +2285,10 @@ export function NotebookPageEditor({
       return;
     }
 
+    if ((event.key === "Backspace" || event.key === "Delete") && handleDiagramDeletionKey(event)) {
+      return;
+    }
+
     if ((event.key === "Backspace" || event.key === "Delete") && handleEquationDeletionKey(event)) {
       return;
     }
@@ -2014,6 +2298,10 @@ export function NotebookPageEditor({
     }
 
     if (event.key === "Enter" && handleCalloutEnterKey(event)) {
+      return;
+    }
+
+    if (event.key === "Enter" && handleDiagramEnterKey(event)) {
       return;
     }
 
@@ -2325,7 +2613,10 @@ export function NotebookPageEditor({
                       return;
                     }
 
-                    insertFigureBlock(subtype);
+                    const diagramKind = diagramKindFromFigureSubtype(subtype);
+                    if (diagramKind) {
+                      insertDiagramBlock(diagramKind);
+                    }
                   }}
                 >
                   <FigureIcon />
@@ -2546,6 +2837,39 @@ export function NotebookPageEditor({
               className="rounded-md px-2 py-1 text-status-red transition hover:bg-status-red hover:text-status-red-text"
               onMouseDown={(event) => event.preventDefault()}
               onClick={removeCurrentCallout}
+            >
+              Remover
+            </button>
+          </div>
+        ) : null}
+        {activeDiagram ? (
+          <div
+            className="absolute z-30 inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-panel p-1 text-[11px] font-semibold text-text-secondary shadow-lg"
+            style={{ top: activeDiagram.top, left: activeDiagram.left }}
+          >
+            <span className="px-2 text-text-subtle">Diagrama</span>
+            {(Object.keys(diagramKindLabels) as DiagramKind[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={activeDiagram.kind === kind}
+                className={`rounded-md px-2 py-1 transition ${
+                  activeDiagram.kind === kind
+                    ? "bg-primary-soft text-primary"
+                    : "hover:bg-surface-muted hover:text-text-primary"
+                }`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => changeCurrentDiagramKind(kind)}
+              >
+                Tipo: {diagramKindLabels[kind]}
+              </button>
+            ))}
+            <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-status-red transition hover:bg-status-red hover:text-status-red-text"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={removeCurrentDiagram}
             >
               Remover
             </button>

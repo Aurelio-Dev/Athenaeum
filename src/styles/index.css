@@ -487,6 +487,76 @@ select {
   border-radius: 6px;
 }
 
+.notebook-editor [data-athenaeum-block="diagram"] {
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border-subtle));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface-card));
+  padding: 0.9em;
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.7) 0;
+}
+
+.notebook-editor [data-diagram-preview="true"] {
+  display: flex;
+  min-height: 7.5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55em;
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 42%, var(--color-border-subtle));
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--color-accent) 8%, transparent) 1px, transparent 1px),
+    var(--color-surface-card);
+  background-size: 1.35rem 1.35rem;
+  color: var(--color-text-primary);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  padding: 1em;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.notebook-editor [data-diagram-preview="true"] strong {
+  color: var(--color-accent);
+  font-size: 0.82em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.notebook-editor [data-diagram-preview="true"] span {
+  max-width: 100%;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.92em;
+  font-weight: 650;
+}
+
+.notebook-editor [data-diagram-source="true"] {
+  margin-top: 0.75em;
+  border-top: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border-subtle));
+  color: var(--color-text-secondary);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.86em;
+  font-weight: 600;
+  line-height: 1.65;
+  outline: none;
+  overflow-wrap: anywhere;
+  padding-top: 0.65em;
+  white-space: pre-wrap;
+}
+
+.notebook-editor [data-diagram-source="true"]:empty::before {
+  content: "Descreva o diagrama em texto";
+  color: var(--color-text-subtle);
+  font-family: var(--font-body);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.notebook-editor [data-diagram-source="true"]:focus {
+  color: var(--color-text-primary);
+}
+
 .notebook-editor [data-athenaeum-block="file-attachment"] {
   border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
