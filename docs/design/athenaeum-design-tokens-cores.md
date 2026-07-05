@@ -1,5 +1,22 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 05/07/2026:** o painel de Ajustes passou a organizar as
+> preferências em navegação lateral (`Geral`, `Aparência`, `Biblioteca`,
+> `Avançado`) e ganhou a opção `Linhas divisórias`, persistida em
+> `app_settings` (`show_divider_lines`), que oculta visualmente bordas/
+> separadores sem remover a estrutura dos componentes. A seção de tags
+> da sidebar de detalhes também foi refinada: pílulas e botões usam o
+> mesmo raio do `+ Tag`, o dropdown fica contido na largura do painel, o
+> texto dos inputs mantém contraste no modo escuro, a lixeira interna do
+> seletor foi removida e o `x` flutuante das tags aplicadas permanece.
+> Cards e detalhes agora compartilham o mesmo resolvedor de cor, usando
+> os tokens existentes (`violet`, `indigo`, `blue`, `teal`, `rose`,
+> `amber`) sem criar novos hex. Clique simples em uma tag aplicada cicla
+> entre esses tons e persiste em `tags.color_token`; duplo clique renomeia
+> inline e preserva o tom quando o novo nome ainda não existe. Limitação:
+> a troca de cor é global por tag, não por documento; renomear para uma
+> tag já existente assume a cor já registrada dessa tag.
+
 > **Changelog 04/07/2026:** o painel de Ajustes ganhou seleção funcional
 > de variante do ícone do app (`Frontão` / `Coluna`). Os previews agora
 > usam SVG inline compartilhado com a marca da sidebar, removendo o antigo
