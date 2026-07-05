@@ -2,26 +2,30 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { appDataDir } from "@tauri-apps/api/path";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
-import { SectionLabel } from "../../components/ui/SectionLabel";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { useDividerLines } from "../../hooks/useDividerLines";
 import { useTheme, type Theme } from "../../hooks/useTheme";
 import { AppIconPreview, useAppIcon } from "../../lib/appIcon";
 
-// Dimensoes do painel. O conteudo interno e limitado a ~480px centralizado
-// (so 3 controles em lista), entao o painel nao precisa ser largo. Exportadas
-// para o LibraryView abrir o painel centralizado.
-export const settingsPanelWidth = 560;
+export const settingsPanelWidth = 720;
 export const settingsPanelHeight = 560;
-const settingsPanelMinWidth = 420;
+const settingsPanelMinWidth = 560;
 const settingsPanelMinHeight = 360;
 const collapsedHeight = 48;
+
+type SettingsSectionId = "general" | "appearance" | "library" | "advanced";
+
+const settingsSections: { id: SettingsSectionId; label: string }[] = [
+  { id: "general", label: "Geral" },
+  { id: "appearance", label: "Aparência" },
+  { id: "library", label: "Biblioteca" },
+  { id: "advanced", label: "Avançado" },
+];
 
 function getMaximizedPanelSize() {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-// Icones locais do chrome do painel (mesmo padrao dos outros paineis, que
-// definem os seus). 16px, stroke currentColor.
 function GearIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -64,6 +68,58 @@ function CloseIcon() {
   );
 }
 
+function SettingsSectionIcon({ sectionId }: { sectionId: SettingsSectionId }) {
+  const commonProps = {
+    width: 15,
+    height: 15,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  if (sectionId === "appearance") {
+    return (
+      <svg {...commonProps}>
+        <path d="M15.5 4.5l4 4" />
+        <path d="M13 7l4 4" />
+        <path d="M4 20l4.5-1 9.5-9.5-3.5-3.5L5 15.5 4 20z" />
+      </svg>
+    );
+  }
+
+  if (sectionId === "library") {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21V5.5z" />
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 8H20" />
+      </svg>
+    );
+  }
+
+  if (sectionId === "advanced") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8 9l-3 3 3 3" />
+        <path d="M16 9l3 3-3 3" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...commonProps}>
+      <path d="M12 5v14" />
+      <path d="M5 8h14" />
+      <path d="M5 16h14" />
+      <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="16" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 type SettingsPanelProps = {
   panel: FloatingPanel;
   onClose: () => void;
@@ -73,30 +129,25 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
   const { movePanel } = useFloatingPanels();
   const { theme, setTheme } = useTheme();
   const { variant: iconVariant, setVariant: chooseIconVariant } = useAppIcon();
+  const { showDividerLines, setShowDividerLines } = useDividerLines();
 
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [panelSize, setPanelSize] = useState({ width: settingsPanelWidth, height: settingsPanelHeight });
-  // Guarda posicao/tamanho de antes de maximizar, para o restaurar voltar ao
-  // lugar exato (mesmo padrao do NotebookPanel).
   const restoreStateRef = useRef<{ position: { x: number; y: number }; size: { width: number; height: number }; collapsed: boolean } | null>(null);
 
   const [storagePath, setStoragePath] = useState("");
 
-  // Carrega o caminho de armazenamento atual. O caminho e o app_data_dir
-  // resolvido pelo Tauri (read-only por ora: nao ha conceito de biblioteca
-  // movivel ainda).
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
       const dir = await appDataDir().catch(() => "");
 
-      if (cancelled) {
-        return;
+      if (!cancelled) {
+        setStoragePath(dir);
       }
-
-      setStoragePath(dir);
     })();
 
     return () => {
@@ -132,7 +183,6 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
     setIsMaximized(true);
   }, [isCollapsed, isMaximized, movePanel, panel.id, panel.position, panelSize]);
 
-  // Mantem o painel maximizado colado na janela quando ela e redimensionada.
   useEffect(() => {
     if (!isMaximized) {
       return;
@@ -162,7 +212,6 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
       resizable={!isCollapsed && !isMaximized}
       edgeToEdge={isMaximized}
       renderHeader={(startDragging) => (
-        // Header seguindo o tema (tokens --floating-header-*), nao fixo escuro.
         <div
           className={`flex h-12 shrink-0 items-center justify-between border-b border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] px-4 text-[var(--floating-header-text)] ${
             isMaximized ? "" : "cursor-move rounded-t-xl"
@@ -208,55 +257,75 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
       )}
     >
       {isCollapsed ? null : (
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--card)]">
-          <div className="mx-auto w-full max-w-[480px] px-6 py-8">
-            {/* ================= SECAO 1: APARENCIA ================= */}
-            <section className="flex flex-col gap-6">
-              <SectionLabel>Aparência</SectionLabel>
+        <div className="flex min-h-0 flex-1 bg-[var(--card)]">
+          <nav className="flex w-40 shrink-0 flex-col gap-1 border-r border-border-subtle p-3" aria-label="Seções de ajustes">
+            {settingsSections.map((section) => {
+              const isActive = activeSection === section.id;
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-text-primary">Tema</span>
-                <SegmentedControl<Theme>
-                  ariaLabel="Tema"
-                  options={themeOptions}
-                  value={theme}
-                  onChange={setTheme}
-                />
-              </div>
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={`flex h-9 items-center gap-2 rounded-lg px-3 text-left text-xs font-medium transition ${
+                    isActive ? "bg-primary-soft text-primary" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                  }`}
+                >
+                  <SettingsSectionIcon sectionId={section.id} />
+                  <span>{section.label}</span>
+                </button>
+              );
+            })}
+          </nav>
 
-              <div className="flex flex-col gap-3">
-                <span className="text-sm font-medium text-text-primary">Ícone do app</span>
-                <div className="flex gap-4">
-                  <IconVariantCard
-                    label="Frontão"
-                    selected={iconVariant === "frontao"}
-                    onSelect={() => chooseIconVariant("frontao")}
-                  >
-                    <AppIconPreview variant="frontao" className="h-16 w-16" />
-                  </IconVariantCard>
+          <div className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+            {activeSection === "general" ? <EmptySettingsSection title="Geral" /> : null}
 
-                  <IconVariantCard
-                    label="Coluna"
-                    selected={iconVariant === "coluna"}
-                    onSelect={() => chooseIconVariant("coluna")}
-                  >
-                    <AppIconPreview variant="coluna" className="h-16 w-16" />
-                  </IconVariantCard>
+            {activeSection === "appearance" ? (
+              <section className="flex max-w-[440px] flex-col gap-5">
+                <h2 className="text-sm font-bold text-text-primary">Aparência</h2>
+
+                <SettingsRow label="Tema">
+                  <SegmentedControl<Theme> ariaLabel="Tema" options={themeOptions} value={theme} onChange={setTheme} />
+                </SettingsRow>
+
+                <SettingsRow label="Linhas divisórias">
+                  <ToggleSwitch
+                    checked={showDividerLines}
+                    onCheckedChange={setShowDividerLines}
+                    ariaLabel={showDividerLines ? "Ocultar linhas divisórias" : "Mostrar linhas divisórias"}
+                  />
+                </SettingsRow>
+
+                <div className="flex flex-col gap-3 border-t border-border-subtle pt-5">
+                  <span className="text-sm font-semibold text-text-primary">Ícone do app</span>
+                  <div className="flex gap-4">
+                    <IconVariantCard label="Frontão" selected={iconVariant === "frontao"} onSelect={() => chooseIconVariant("frontao")}>
+                      <AppIconPreview variant="frontao" className="h-16 w-16" />
+                    </IconVariantCard>
+
+                    <IconVariantCard label="Coluna" selected={iconVariant === "coluna"} onSelect={() => chooseIconVariant("coluna")}>
+                      <AppIconPreview variant="coluna" className="h-16 w-16" />
+                    </IconVariantCard>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            ) : null}
 
-            {/* ================= SECAO 2: BIBLIOTECA ================= */}
-            <section className="mt-8 flex flex-col gap-4 border-t border-border-subtle pt-8">
-              <SectionLabel>Biblioteca</SectionLabel>
+            {activeSection === "library" ? (
+              <section className="flex max-w-[440px] flex-col gap-5">
+                <h2 className="text-sm font-bold text-text-primary">Biblioteca</h2>
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-text-primary">Local de armazenamento</span>
-                <span className="truncate text-xs text-text-secondary" title={storagePath}>
-                  {storagePath || "Carregando…"}
-                </span>
-              </div>
-            </section>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-text-primary">Local de armazenamento</span>
+                  <span className="truncate text-xs text-text-secondary" title={storagePath}>
+                    {storagePath || "Carregando..."}
+                  </span>
+                </div>
+              </section>
+            ) : null}
+
+            {activeSection === "advanced" ? <EmptySettingsSection title="Avançado" /> : null}
           </div>
         </div>
       )}
@@ -264,9 +333,53 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
   );
 }
 
-// Card de escolha da variante de icone (~120x120). Reaproveita os mesmos
-// tokens dos cards de Caderno/Quadro (surface/border/radius/shadow); o anel
-// terracota de 2px marca o selecionado.
+function EmptySettingsSection({ title }: { title: string }) {
+  return (
+    <section className="flex max-w-[440px] flex-col gap-4">
+      <h2 className="text-sm font-bold text-text-primary">{title}</h2>
+      <span className="text-sm text-text-secondary">Sem ajustes por enquanto.</span>
+    </section>
+  );
+}
+
+function SettingsRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-10 items-center justify-between gap-4">
+      <span className="text-sm font-semibold text-text-primary">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function ToggleSwitch({
+  checked,
+  onCheckedChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={() => onCheckedChange(!checked)}
+      className={`relative h-7 w-12 rounded-full border border-border-subtle transition ${
+        checked ? "bg-primary" : "bg-surface-muted"
+      }`}
+    >
+      <span
+        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition ${
+          checked ? "left-[22px]" : "left-1"
+        }`}
+      />
+    </button>
+  );
+}
+
 function IconVariantCard({
   label,
   selected,

@@ -277,6 +277,34 @@ body {
   font-family: var(--font-sans);
 }
 
+html.athenaeum-hide-dividers .border-t,
+html.athenaeum-hide-dividers .border-b,
+html.athenaeum-hide-dividers .border-l,
+html.athenaeum-hide-dividers .border-r,
+html.athenaeum-hide-dividers .sm\:border-t,
+html.athenaeum-hide-dividers .sm\:border-b,
+html.athenaeum-hide-dividers .sm\:border-l,
+html.athenaeum-hide-dividers .sm\:border-r,
+html.athenaeum-hide-dividers .md\:border-t,
+html.athenaeum-hide-dividers .md\:border-b,
+html.athenaeum-hide-dividers .md\:border-l,
+html.athenaeum-hide-dividers .md\:border-r,
+html.athenaeum-hide-dividers .lg\:border-t,
+html.athenaeum-hide-dividers .lg\:border-b,
+html.athenaeum-hide-dividers .lg\:border-l,
+html.athenaeum-hide-dividers .lg\:border-r,
+html.athenaeum-hide-dividers .xl\:border-t,
+html.athenaeum-hide-dividers .xl\:border-b,
+html.athenaeum-hide-dividers .xl\:border-l,
+html.athenaeum-hide-dividers .xl\:border-r {
+  border-color: transparent !important;
+}
+
+html.athenaeum-hide-dividers [role="separator"],
+html.athenaeum-hide-dividers .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: transparent !important;
+}
+
 button,
 input,
 select {
