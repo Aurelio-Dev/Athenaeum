@@ -1,5 +1,16 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog técnico 05/07/2026:** `Inserir > Figura > Diagrama`,
+> `Diagrama de grafo` e `Fluxograma` no editor de Cadernos agora usam uma
+> base única de bloco (`data-athenaeum-block="diagram"`) com
+> `data-diagram-kind="diagram" | "graph" | "flowchart"`. Cada bloco persiste
+> HTML leve com prévia textual, fonte editável em texto puro e toolbar
+> contextual para trocar o tipo ou remover o bloco. A implementação também
+> normaliza placeholders antigos de figura/diagrama para o novo formato.
+> Limitação conhecida: esta fase ainda não renderiza SVG/canvas nem usa
+> biblioteca externa de diagramas; a prévia é textual e serve como base
+> confiável para um renderizador visual futuro.
+
 > **Changelog técnico 05/07/2026:** `Inserir > Arquivo` no editor de
 > Cadernos deixou de ser placeholder e ganhou persistência inicial de anexos.
 > A migration `v18` cria `notebook_file_attachments`; os bytes ficam em
