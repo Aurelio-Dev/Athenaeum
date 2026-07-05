@@ -1,5 +1,17 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
+> no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
+> `Equação`, `Figura` e `Arquivo`) agora contam como conteúdo real para não
+> exibir placeholder sobre blocos inseridos. A inserção de blocos passa a
+> reposicionar o cursor na linha vazia criada após o elemento, evitando que o
+> caret volte para o bloco anterior. No Windows, `Mostrar no sistema` para
+> anexos usa o caminho canonizado e chama o Explorer com `/select,` separado
+> do arquivo para evitar abrir uma pasta incorreta quando há espaços no path.
+> O visual de `Diagrama/Grafo/Fluxograma` também foi refinado para parecer um
+> card único, com preview e fonte no mesmo contêiner. Limitações mantidas:
+> diagramas seguem como prévia textual, sem SVG/canvas/renderizador visual.
+
 > **Changelog técnico 05/07/2026:** `Inserir > Figura > Diagrama`,
 > `Diagrama de grafo` e `Fluxograma` no editor de Cadernos agora usam uma
 > base única de bloco (`data-athenaeum-block="diagram"`) com
