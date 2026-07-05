@@ -376,8 +376,18 @@ fn open_file_with_system(path: &Path) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
-  Command::new("explorer")
-    .arg(format!("/select,{}", path.display()))
+  let target_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+  let mut command = Command::new("explorer");
+
+  if target_path.is_dir() {
+    command.arg(&target_path);
+  } else {
+    // Explorer espera `/select,` separado do caminho quando o path precisa de
+    // aspas; um unico argumento com tudo junto pode abrir uma pasta incorreta.
+    command.arg("/select,").arg(&target_path);
+  }
+
+  command
     .spawn()
     .map(|_| ())
     .map_err(|error| error.to_string())
