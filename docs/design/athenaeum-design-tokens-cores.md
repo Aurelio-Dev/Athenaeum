@@ -64,6 +64,14 @@
 > da aresta usa `stroke` com token válido e `marker-end` para manter seta
 > visível. Limitação conhecida: ciclos são aceitos pelo parser, mas ainda não
 > são representados como curva/retorno visual.
+>
+> **Update Diagrama SVG estados:** o preview de
+> `data-diagram-kind="diagram"` agora diferencia fonte vazia e fonte sem
+> relações válidas, exibindo mensagens curtas com exemplo de sintaxe
+> (`Entrada -> Processamento` / `Processamento -> Saída`). Quando há ao menos
+> uma relação válida, o SVG runtime continua inalterado; linhas inválidas
+> misturadas com válidas seguem sendo ignoradas com segurança. O HTML persistido
+> permanece leve e `graph`/`flowchart` continuam com preview textual.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,

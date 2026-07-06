@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { NotebookDiagramPreview } from "./NotebookDiagramPreview";
-import { parseDiagramSource } from "./notebookDiagramParser";
+import { parseDiagramSource, type ParsedDiagram } from "./notebookDiagramParser";
 import {
   diagramDefaultSources,
   diagramEmptyPreviews,
@@ -19,6 +19,9 @@ type DiagramPreviewRoot = {
 };
 
 const visualPreviewRoots = new WeakMap<HTMLElement, DiagramPreviewRoot>();
+const diagramEmptyPreviewMessage = "Digite relações no formato: Entrada -> Processamento";
+const diagramInvalidPreviewMessage = "Nenhuma relação válida encontrada. Use o formato: A -> B";
+const diagramSyntaxExample = "Entrada -> Processamento\nProcessamento -> Saída";
 
 export function getDiagramKind(diagram: HTMLElement): DiagramKind {
   return isDiagramKind(diagram.dataset.diagramKind) ? diagram.dataset.diagramKind : "diagram";
@@ -158,9 +161,25 @@ function renderTextDiagramPreview(preview: HTMLElement, labelText: string, bodyT
   preview.replaceChildren(label, body);
 }
 
-function renderVisualDiagramPreview(preview: HTMLElement, sourceText: string) {
-  const parsedDiagram = parseDiagramSource(sourceText);
-  if (parsedDiagram.edges.length === 0 || !document.body.contains(preview)) {
+function renderDiagramGuidancePreview(preview: HTMLElement, labelText: string, messageText: string) {
+  unmountVisualPreview(preview);
+
+  const label = document.createElement("strong");
+  label.textContent = labelText;
+
+  const message = document.createElement("span");
+  message.className = "notebook-diagram-guidance-message";
+  message.textContent = messageText;
+
+  const example = document.createElement("code");
+  example.className = "notebook-diagram-guidance-example";
+  example.textContent = diagramSyntaxExample;
+
+  preview.replaceChildren(label, message, example);
+}
+
+function renderVisualDiagramPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+  if (!document.body.contains(preview)) {
     return false;
   }
 
@@ -194,7 +213,23 @@ export function renderDiagramPreview(diagram: HTMLElement) {
   const sourceText = readDiagramSourceText(sources);
   preview.contentEditable = "false";
 
-  if (kind === "diagram" && renderVisualDiagramPreview(preview, sourceText)) {
+  if (kind === "diagram") {
+    const parsedDiagram = parseDiagramSource(sourceText);
+
+    if (parsedDiagram.edges.length > 0) {
+      if (renderVisualDiagramPreview(preview, parsedDiagram)) {
+        return;
+      }
+
+      renderTextDiagramPreview(preview, diagramKindLabels.diagram, sourceText);
+      return;
+    }
+
+    renderDiagramGuidancePreview(
+      preview,
+      diagramKindLabels.diagram,
+      sourceText.length === 0 ? diagramEmptyPreviewMessage : diagramInvalidPreviewMessage,
+    );
     return;
   }
 
