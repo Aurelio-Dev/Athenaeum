@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 import type { ParsedDiagram } from "./notebookDiagramParser";
 
 type NotebookDiagramPreviewProps = {
@@ -14,7 +16,6 @@ const maxLabelCharacters = 20;
 const estimatedCharacterWidth = 7.2;
 const nodeHorizontalPadding = 32;
 const arrowInset = 5;
-const arrowSize = 9;
 
 function truncateLabel(label: string) {
   const normalizedLabel = label.replace(/\s+/g, " ").trim();
@@ -37,6 +38,7 @@ function getNodeWidth(labels: string[]) {
 }
 
 export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps) {
+  const arrowMarkerId = `notebook-diagram-arrow-${useId().replace(/:/g, "")}`;
   const displayNodes = diagram.nodes.map((node) => ({
     ...node,
     displayLabel: truncateLabel(node.label),
@@ -63,8 +65,6 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
     const direction = target.x >= source.x ? 1 : -1;
     const startX = source.x + direction * (nodeWidth / 2 + arrowInset);
     const endX = target.x - direction * (nodeWidth / 2 + arrowInset);
-    const arrowTip = `${endX},${target.y}`;
-    const arrowBaseX = endX - direction * arrowSize;
 
     return [
       {
@@ -73,7 +73,6 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
         startY: source.y,
         endX,
         endY: target.y,
-        arrowPoints: `${arrowTip} ${arrowBaseX},${target.y - 5} ${arrowBaseX},${target.y + 5}`,
       },
     ];
   });
@@ -90,6 +89,19 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
         preserveAspectRatio="xMidYMid meet"
       >
         <title>{`Diagrama com ${diagram.nodes.length} nos e ${diagram.edges.length} conexoes`}</title>
+        <defs>
+          <marker
+            id={arrowMarkerId}
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="5"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path className="notebook-diagram-visual-arrowhead" d="M 0 0 L 10 5 L 0 10 z" />
+          </marker>
+        </defs>
         <g>
           {positionedEdges.map((edge) => (
             <g key={edge.id}>
@@ -99,8 +111,8 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
                 y1={edge.startY}
                 x2={edge.endX}
                 y2={edge.endY}
+                markerEnd={`url(#${arrowMarkerId})`}
               />
-              <polygon className="notebook-diagram-visual-arrow" points={edge.arrowPoints} />
             </g>
           ))}
         </g>

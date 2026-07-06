@@ -55,6 +55,15 @@
 > têm truncamento visual seguro, o SVG fica contido no card existente e casos
 > inválidos continuam caindo no fallback textual. `graph` e `flowchart` seguem
 > com o preview textual anterior.
+>
+> **Update Diagrama SVG multiline:** fontes com múltiplas relações no mesmo
+> bloco agora são consolidadas como uma única área `data-diagram-source`, com
+> suporte a `Shift+Enter` para quebra de linha dentro da fonte. O preview passa
+> a renderizar todas as relações válidas do texto completo, por exemplo
+> `Entrada -> Processamento -> Saída -> Revisão` como 4 nós e 3 setas. A linha
+> da aresta usa `stroke` com token válido e `marker-end` para manter seta
+> visível. Limitação conhecida: ciclos são aceitos pelo parser, mas ainda não
+> são representados como curva/retorno visual.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,

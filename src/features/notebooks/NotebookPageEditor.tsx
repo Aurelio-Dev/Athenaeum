@@ -24,6 +24,7 @@ import {
 } from "./notebookEditorCalloutDom";
 import {
   findClosestDiagram,
+  findClosestDiagramSource,
   getDiagramKind,
   getDiagramSource,
   normalizeDiagrams,
@@ -1302,6 +1303,31 @@ export function NotebookPageEditor({
 
     if (!diagram || event.ctrlKey || event.metaKey || event.altKey) {
       return false;
+    }
+
+    if (event.shiftKey) {
+      const selection = window.getSelection();
+      const source = selection?.anchorNode ? findClosestDiagramSource(selection.anchorNode, diagram) : null;
+
+      if (!selection || selection.rangeCount === 0 || !source) {
+        return false;
+      }
+
+      event.preventDefault();
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+
+      const lineBreak = document.createTextNode("\n");
+      range.insertNode(lineBreak);
+      range.setStart(lineBreak, lineBreak.length);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      savedRangeRef.current = range.cloneRange();
+
+      emitChange();
+      syncActiveActions();
+      return true;
     }
 
     event.preventDefault();
