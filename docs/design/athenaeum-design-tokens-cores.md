@@ -88,6 +88,21 @@
 > múltiplas relações, ordem de nós únicos, linhas inválidas, mistura de linhas
 > válidas/inválidas, labels com acentos/Unicode e relações malformadas sem nós
 > vazios. O parser permanece sem mudança de comportamento.
+>
+> ### Segurança / Dependências
+>
+> - Investigado `npm audit`: 9 vulnerabilidades reportadas, sendo 8 moderate e
+>   1 high.
+> - A origem principal está em dependências transitivas de
+>   `@excalidraw/excalidraw@0.18.1`, especialmente
+>   `@excalidraw/mermaid-to-excalidraw`, `@mermaid-js/parser`, `langium`,
+>   `chevrotain`, `lodash-es` e `nanoid`.
+> - `npm audit --omit=dev` reporta o mesmo conjunto, então o problema não vem
+>   do Vitest.
+> - `npm audit fix --force` foi descartado porque faria downgrade para
+>   `@excalidraw/excalidraw@0.17.6`, com breaking change.
+> - Decisão: manter como risco conhecido e reavaliar quando houver nova versão
+>   do Excalidraw ou de suas dependências transitivas.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
