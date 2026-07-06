@@ -364,6 +364,7 @@ export function NotebookPageEditor({
   const [activeTableCell, setActiveTableCell] = useState<ActiveTableCellControls | null>(null);
   const [activeCallout, setActiveCallout] = useState<ActiveCalloutControls | null>(null);
   const [activeDiagram, setActiveDiagram] = useState<ActiveDiagramControls | null>(null);
+  const [isDiagramCleanMode, setIsDiagramCleanMode] = useState(false);
   const [activeEquation, setActiveEquation] = useState<ActiveEquationControls | null>(null);
   const [isEmpty, setIsEmpty] = useState(initialNotebookContentIsEmpty(initialContent));
 
@@ -445,7 +446,7 @@ export function NotebookPageEditor({
     if (diagram && editorShell) {
       const shellRect = editorShell.getBoundingClientRect();
       const diagramRect = diagram.getBoundingClientRect();
-      const maxLeft = Math.max(8, shellRect.width - 430);
+      const maxLeft = Math.max(8, shellRect.width - 540);
 
       setActiveDiagram({
         top: Math.max(8, diagramRect.top - shellRect.top - 38),
@@ -2278,6 +2279,18 @@ export function NotebookPageEditor({
             <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
             <button
               type="button"
+              aria-pressed={isDiagramCleanMode}
+              className={`rounded-md px-2 py-1 transition ${
+                isDiagramCleanMode ? "bg-primary-soft text-primary" : "hover:bg-surface-muted hover:text-text-primary"
+              }`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setIsDiagramCleanMode((current) => !current)}
+            >
+              Modo limpo
+            </button>
+            <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
+            <button
+              type="button"
               className="rounded-md px-2 py-1 text-status-red transition hover:bg-status-red hover:text-status-red-text"
               onMouseDown={(event) => event.preventDefault()}
               onClick={removeCurrentDiagram}
@@ -2326,7 +2339,7 @@ export function NotebookPageEditor({
           onKeyDown={handleKeyDown}
           onScroll={syncActiveActions}
           style={editorStyle}
-          className={`notebook-editor notebook-editor--spaced ${isFocusMode ? "notebook-editor--focus" : ""} ${isCtrlPressed ? "notebook-editor--link-nav" : ""} h-full w-full overflow-y-auto break-words border-0 bg-transparent py-4 pr-5 text-sm leading-7 text-[var(--foreground)] outline-none ${contentInsetClassName}`}
+          className={`notebook-editor notebook-editor--spaced ${isFocusMode ? "notebook-editor--focus" : ""} ${isCtrlPressed ? "notebook-editor--link-nav" : ""} ${isDiagramCleanMode ? "notebook-editor--diagram-clean-mode" : ""} h-full w-full overflow-y-auto break-words border-0 bg-transparent py-4 pr-5 text-sm leading-7 text-[var(--foreground)] outline-none ${contentInsetClassName}`}
         />
       </div>
     </div>

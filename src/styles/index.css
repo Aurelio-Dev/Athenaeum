@@ -170,30 +170,30 @@
   --color-accent-tint-bg: #EFE2D8;
 
   --diagram-accent: var(--color-primary);
-  --diagram-card-bg: color-mix(in srgb, var(--diagram-accent) 5%, var(--color-surface-card));
-  --diagram-card-border: color-mix(in srgb, var(--diagram-accent) 24%, var(--color-border-subtle));
+  --diagram-card-bg: color-mix(in srgb, var(--diagram-accent) 3%, var(--color-surface-card));
+  --diagram-card-border: color-mix(in srgb, var(--diagram-accent) 16%, var(--color-border-subtle));
   --diagram-card-highlight: color-mix(in srgb, var(--color-surface-card) 72%, transparent);
   --diagram-card-radius: 8px;
-  --diagram-card-padding: 0.8em;
-  --diagram-preview-bg: color-mix(in srgb, var(--color-surface-card) 88%, var(--color-surface-muted));
-  --diagram-preview-border: color-mix(in srgb, var(--diagram-accent) 14%, var(--color-border-subtle));
+  --diagram-card-padding: 0.72em;
+  --diagram-preview-bg: color-mix(in srgb, var(--color-surface-card) 92%, var(--color-surface-muted));
+  --diagram-preview-border: color-mix(in srgb, var(--diagram-accent) 8%, var(--color-border-subtle));
   --diagram-preview-radius: 7px 7px 5px 5px;
   --diagram-preview-min-height: 4.25rem;
-  --diagram-preview-padding: 0.75em 0.85em;
-  --diagram-preview-gap: 0.35em;
+  --diagram-preview-padding: 0.62em 0.7em;
+  --diagram-preview-gap: 0.25em;
   --diagram-node-bg: color-mix(in srgb, var(--color-surface-card) 93%, var(--color-surface-muted));
   --diagram-node-terminal-bg: color-mix(in srgb, var(--diagram-accent) 8%, var(--color-surface-card));
-  --diagram-node-border: color-mix(in srgb, var(--diagram-accent) 38%, var(--color-border-subtle));
+  --diagram-node-border: color-mix(in srgb, var(--diagram-accent) 30%, var(--color-border-subtle));
   --diagram-node-text: var(--color-text-primary);
-  --diagram-node-muted-text: color-mix(in srgb, var(--diagram-accent) 82%, var(--color-text-secondary));
+  --diagram-node-muted-text: color-mix(in srgb, var(--diagram-accent) 72%, var(--color-text-secondary));
   --diagram-node-radius: 8px;
   --diagram-flowchart-terminal-radius: 18px;
-  --diagram-node-font-size: 12.5px;
+  --diagram-node-font-size: 12.25px;
   --diagram-node-stroke-width: 1.5px;
   --diagram-visual-height: 5.5rem;
   --diagram-graph-visual-height: 14rem;
   --diagram-flowchart-visual-height: min(24rem, 48vh);
-  --diagram-edge: color-mix(in srgb, var(--diagram-accent) 88%, var(--color-text-secondary));
+  --diagram-edge: color-mix(in srgb, var(--diagram-accent) 82%, var(--color-text-secondary));
   --diagram-edge-active: var(--diagram-accent);
   --diagram-edge-width: 2px;
   --diagram-edge-opacity: 0.9;
@@ -203,8 +203,8 @@
   --diagram-invalid-text: var(--color-text-secondary);
   --diagram-guidance-bg: color-mix(in srgb, var(--color-surface-muted) 64%, var(--color-surface-card));
   --diagram-guidance-text: var(--color-text-primary);
-  --diagram-source-bg: color-mix(in srgb, var(--color-surface-muted) 52%, var(--color-surface-card));
-  --diagram-source-border: color-mix(in srgb, var(--diagram-accent) 16%, var(--color-border-subtle));
+  --diagram-source-bg: color-mix(in srgb, var(--color-surface-muted) 38%, var(--color-surface-card));
+  --diagram-source-border: color-mix(in srgb, var(--diagram-accent) 8%, var(--color-border-subtle));
   --diagram-source-text: var(--color-text-secondary);
   --diagram-source-placeholder-text: var(--color-text-subtle);
 
@@ -530,7 +530,7 @@ select {
   --notebook-diagram-accent: var(--diagram-accent);
   display: grid;
   width: min(100%, 52rem);
-  gap: 0.55em;
+  gap: 0.45em;
   border: 1px solid var(--diagram-card-border);
   border-radius: var(--diagram-card-radius);
   background: var(--diagram-card-bg);
@@ -559,9 +559,9 @@ select {
 
 .notebook-editor [data-diagram-preview="true"] strong {
   color: var(--diagram-node-muted-text);
-  font-size: 0.78em;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 0.72em;
+  font-weight: 750;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -640,9 +640,9 @@ select {
 .notebook-editor .notebook-diagram-visual-label {
   pointer-events: none;
   fill: var(--diagram-node-text);
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: var(--font-body);
   font-size: var(--diagram-node-font-size);
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .notebook-editor .notebook-flowchart-visual-host {
@@ -689,9 +689,9 @@ select {
 .notebook-editor .notebook-flowchart-visual-label {
   pointer-events: none;
   fill: var(--diagram-node-text);
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: var(--font-body);
   font-size: var(--diagram-node-font-size);
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .notebook-editor [data-diagram-source="true"] {
@@ -702,7 +702,7 @@ select {
   background: var(--diagram-source-bg);
   color: var(--diagram-source-text);
   font-family: "IBM Plex Mono", Consolas, monospace;
-  font-size: 0.86em;
+  font-size: 0.82em;
   font-weight: 600;
   line-height: 1.5;
   margin: 0;
@@ -718,9 +718,9 @@ select {
   margin-bottom: 0.35em;
   color: var(--diagram-node-muted-text);
   font-family: var(--font-body);
-  font-size: 0.78em;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 0.72em;
+  font-weight: 750;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -734,6 +734,24 @@ select {
 
 .notebook-editor [data-diagram-source="true"]:focus {
   color: var(--color-text-primary);
+}
+
+.notebook-editor--diagram-clean-mode [data-athenaeum-block="diagram"] {
+  gap: 0;
+  border-color: color-mix(in srgb, var(--diagram-accent) 10%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--diagram-accent) 2%, var(--color-surface-card));
+  box-shadow: none;
+  padding: 0.58em;
+}
+
+.notebook-editor--diagram-clean-mode [data-diagram-preview="true"] {
+  border-color: transparent;
+  background: transparent;
+  padding: 0.4em 0.25em;
+}
+
+.notebook-editor--diagram-clean-mode [data-diagram-source="true"] {
+  display: none;
 }
 
 .notebook-editor [data-athenaeum-block="file-attachment"] {

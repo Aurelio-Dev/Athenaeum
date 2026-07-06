@@ -38,29 +38,26 @@ export function parseDiagramSource(source: string): ParsedDiagram {
       return;
     }
 
-    const relationParts = trimmedLine.split("->");
-    if (relationParts.length !== 2) {
+    const relationParts = trimmedLine.split("->").map((part) => part.trim());
+    if (relationParts.length < 2 || relationParts.some((part) => part.length === 0)) {
       return;
     }
 
-    const sourceLabel = relationParts[0].trim();
-    const targetLabel = relationParts[1].trim();
-    if (!sourceLabel || !targetLabel) {
-      return;
-    }
+    relationParts.slice(0, -1).forEach((sourceLabel, index) => {
+      const targetLabel = relationParts[index + 1];
+      const sourceId = getOrCreateNodeId(sourceLabel);
+      const targetId = getOrCreateNodeId(targetLabel);
+      const edgeKey = `${sourceId}->${targetId}`;
+      if (edgeKeys.has(edgeKey)) {
+        return;
+      }
 
-    const sourceId = getOrCreateNodeId(sourceLabel);
-    const targetId = getOrCreateNodeId(targetLabel);
-    const edgeKey = `${sourceId}->${targetId}`;
-    if (edgeKeys.has(edgeKey)) {
-      return;
-    }
-
-    edgeKeys.add(edgeKey);
-    edges.push({
-      id: `edge-${edges.length + 1}`,
-      sourceId,
-      targetId,
+      edgeKeys.add(edgeKey);
+      edges.push({
+        id: `edge-${edges.length + 1}`,
+        sourceId,
+        targetId,
+      });
     });
   });
 

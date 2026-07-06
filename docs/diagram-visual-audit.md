@@ -34,11 +34,17 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 6B | Concluida | Tokens visuais de diagramas e ajustes nao destrutivos nos previews SVG. | `src/styles/index.css` recebeu tokens para card, preview, nos, linhas, setas, textos, fonte e estados discretos. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6C | Concluida | Ajuste de escala, responsividade e legibilidade dos previews SVG existentes. | `diagram` ganhou truncamento menos agressivo em diagramas pequenos; `flowchart` ganhou nos mais largos e altura runtime proporcional com teto seguro. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6D | Concluida | Preview SVG runtime para `data-diagram-kind="graph"`. | `graph` passou a renderizar relacoes `A -> B` em grade deterministica, usando os mesmos tokens visuais de diagramas; fontes invalidas ou legadas seguem no fallback textual. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6E | Concluida | Polimento visual conjunto e modo limpo runtime. | Bordas, fonte, titulos internos, labels SVG e espacamentos foram suavizados; a toolbar contextual ganhou `Modo limpo`, que oculta `Fonte` apenas em runtime sem salvar estado no bloco. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6E.1 | Concluida | Hotfix do modo limpo e cadeias em linha unica. | O botao `Modo limpo` foi movido da toolbar de callout para a toolbar contextual de diagrama, e `parseDiagramSource` passou a aceitar cadeias como `Elemento A -> Elemento B -> Elemento C`. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 6D:
+Ressalvas mantidas apos a Fase 6E.1:
 
 - `graph` agora tem preview SVG runtime para relacoes `A -> B`, mas fontes
   legadas no formato textual antigo, como `A -- B`, seguem no fallback textual.
+- O `Modo limpo` e global do editor enquanto a pagina esta aberta; ele nao e
+  persistido em `data-*`, `app_settings` ou HTML salvo.
+- Cadeias em linha unica no formato `A -> B -> C` sao expandidas em relacoes
+  consecutivas; linhas legadas `A -- B` seguem no fallback textual/invalido.
 - `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito
   longos ainda precisam reduzir escala para caber no card.
 - Labels longos truncam de forma menos agressiva, mas continuam truncados para
@@ -57,6 +63,8 @@ O Notebook usa uma base unica para diagramas:
 - preview marcado por `data-diagram-preview="true"`;
 - fonte textual editavel em `data-diagram-source="true"`;
 - HTML salvo leve, sem SVG runtime persistido.
+- modo limpo aplicado por classe runtime no editor, sem atributo persistido no
+  bloco.
 
 `NotebookPageEditor.tsx` ainda coordena a insercao, toolbar contextual,
 remocao, eventos de teclado e chamada de `normalizeDiagrams`. A logica DOM
@@ -255,11 +263,12 @@ A recomendacao original da auditoria era executar a **Fase 6B - Tokens visuais
 de diagramas e ajustes nao destrutivos no preview SVG**. Depois dela, a
 **Fase 6C - Ajustes responsivos e estados consistentes para diagramas** foi
 parcialmente executada no eixo de escala e legibilidade, e a **Fase 6D -
-Preview visual runtime para graph** adicionou SVG runtime para `graph`. O
-escopo seguro foi mantido:
+Preview visual runtime para graph** adicionou SVG runtime para `graph`. A
+**Fase 6E - Polimento visual e modo limpo runtime** suavizou o bloco e adicionou
+um toggle visual temporario na toolbar contextual. O escopo seguro foi mantido:
 
 - tokens CSS de diagrama foram adicionados no tema global;
-- `diagram` e `flowchart` passaram a usar tokens para card, preview, nos,
+- `diagram`, `graph` e `flowchart` passaram a usar tokens para card, preview, nos,
   bordas, linhas, setas, textos e fonte;
 - `diagram` passou a ajustar limite de label e largura maxima por quantidade
   de nos;
@@ -267,13 +276,15 @@ escopo seguro foi mantido:
   teto para manter o card contido;
 - `graph` passou a usar `parseDiagramSource` e layout em grade deterministica
   para relacoes `A -> B`;
+- o modo limpo oculta a fonte visualmente e suaviza bordas internas apenas em
+  runtime;
 - o parser, o HTML persistido, o autosave, o paste, a selecao/range e a toolbar
   contextual nao foram alterados;
 - fontes de `graph` sem relacoes validas continuam no fallback textual.
 
 Proxima fase pequena sugerida:
 
-**Fase 6E - Estados consistentes e validacao visual dos diagramas**
+**Fase 6F - Estados consistentes e validacao visual dos diagramas**
 
 Escopo recomendado:
 
@@ -283,11 +294,13 @@ Escopo recomendado:
 - manter SVG runtime fora do HTML persistido;
 - nao alterar parser, autosave, selecao/range, paste, assets ou toolbar.
 
-Validacao minima da Fase 6E:
+Validacao minima da Fase 6F:
 
 - `diagram` simples e com multiplas relacoes continua renderizando igual;
 - `graph` com 2 a 8 nos continua contido no card;
 - `flowchart` de 4 a 8 etapas continua legivel;
+- modo limpo continua ocultando apenas a fonte, sem remover preview, nos,
+  setas ou conexoes;
 - conteudo invalido continua seguro e orientativo;
 - HTML salvo continua sem SVG runtime;
 - `npm run typecheck`, `npm test -- --run` e `git diff --check` passam.
