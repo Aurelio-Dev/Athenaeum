@@ -22,6 +22,14 @@
 > `data-diagram-kind`, a fonte editável e o preview textual continuam com o
 > mesmo HTML persistido e sem renderizador visual novo. Inserção, seleção,
 > autosave, paste, remoção e toolbar contextual permanecem no editor.
+>
+> **Update Fase 3C:** helpers DOM de `Callout` foram isolados em
+> `notebookEditorCalloutDom.ts`. A detecção de
+> `data-athenaeum-block="callout"`, a leitura/atualização de
+> `data-callout-type`, a atualização do ícone e a normalização da estrutura
+> interna (`data-callout-icon` e `data-callout-content`) seguem com os mesmos
+> atributos e HTML persistido. Inserção, remoção, seleção, autosave, paste e
+> toolbar contextual permanecem no editor.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
