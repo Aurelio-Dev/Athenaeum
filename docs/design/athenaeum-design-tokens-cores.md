@@ -1,5 +1,14 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Update técnico 06/07/2026:** refatoração incremental do
+> `NotebookPageEditor.tsx` sem mudança de comportamento. A Fase 1 extraiu
+> ícones e metadata estática da toolbar/menu para
+> `notebookEditorToolbar.tsx`; a Fase 2 extraiu constants, allowlists,
+> type guards e formatadores puros para `notebookEditorUtils.ts`. Foram
+> preservados handlers, seleção/range, autosave, paste, HTML persistido,
+> atributos `data-*`, toolbars contextuais, imagens/assets, anexos, tabelas,
+> callouts, equações e diagramas.
+
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
 > `Equação`, `Figura` e `Arquivo`) agora contam como conteúdo real para não
