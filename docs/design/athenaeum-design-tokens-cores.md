@@ -82,6 +82,12 @@
 > **Ressalvas futuras (não bloqueiam MVP):** o preview de `flowchart` está
 > funcional, mas visualmente pequeno em fluxos com várias etapas. Labels longos
 > são truncados corretamente, mas o truncamento ainda está agressivo.
+>
+> **Update Fase 5A:** o parser `parseDiagramSource` ganhou cobertura mínima
+> com Vitest. Os testes cobrem texto vazio, linhas vazias, relação simples,
+> múltiplas relações, ordem de nós únicos, linhas inválidas, mistura de linhas
+> válidas/inválidas, labels com acentos/Unicode e relações malformadas sem nós
+> vazios. O parser permanece sem mudança de comportamento.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
