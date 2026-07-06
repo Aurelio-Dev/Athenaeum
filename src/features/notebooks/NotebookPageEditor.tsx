@@ -13,6 +13,12 @@ import {
 } from "../../lib/database";
 import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, wrapSelectionInCode } from "../reader/richTextShared";
 import {
+  clearFileAttachmentControls,
+  fileAttachmentActionsHtml,
+  findFileAttachmentActionFromTarget,
+  normalizeFileAttachmentCards,
+} from "./notebookEditorAttachmentDom";
+import {
   AttachmentIcon,
   CalloutIcon,
   ChevronDownIcon,
@@ -40,7 +46,6 @@ import {
   formatAttachmentMeta,
   isCalloutType,
   isDiagramKind,
-  isFileAttachmentAction,
   notebookRichContentSelector,
   supportedNotebookImageAccept,
   supportedNotebookImageMimeTypes,
@@ -190,42 +195,6 @@ function hydrateNotebookAssetImages(editor: HTMLElement, assets: NotebookAssetDa
     }
 
     image.src = `data:${asset.mimeType};base64,${asset.dataBase64}`;
-  });
-}
-
-function fileAttachmentActionsHtml() {
-  return `
-    <div data-file-attachment-actions="true" contenteditable="false">
-      <button type="button" data-file-attachment-action="open">Abrir</button>
-      <button type="button" data-file-attachment-action="reveal">Mostrar no sistema</button>
-      <button type="button" data-file-attachment-action="delete">Remover</button>
-    </div>
-  `;
-}
-
-function normalizeFileAttachmentCards(editor: HTMLElement) {
-  editor.querySelectorAll<HTMLElement>('[data-athenaeum-block="file-attachment"]').forEach((attachment) => {
-    let card = attachment.querySelector<HTMLElement>(':scope > [data-file-attachment-card="true"]');
-
-    if (!card) {
-      card = document.createElement("div");
-      card.dataset.fileAttachmentCard = "true";
-      card.contentEditable = "false";
-      attachment.prepend(card);
-    }
-
-    card.contentEditable = "false";
-    card.setAttribute("contenteditable", "false");
-
-    if (!card.querySelector('[data-file-attachment-actions="true"]')) {
-      card.insertAdjacentHTML("beforeend", fileAttachmentActionsHtml());
-    }
-  });
-}
-
-function clearFileAttachmentControls(editor: HTMLElement) {
-  editor.querySelectorAll('[data-file-attachment-actions="true"]').forEach((actions) => {
-    actions.remove();
   });
 }
 
@@ -1741,33 +1710,6 @@ export function NotebookPageEditor({
     return editor && link instanceof HTMLAnchorElement && editor.contains(link) ? link : null;
   }
 
-  function findFileAttachmentActionFromTarget(target: EventTarget | null) {
-    const editor = editorRef.current;
-    const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
-    const actionElement = element?.closest("[data-file-attachment-action]");
-
-    if (!editor || !(actionElement instanceof HTMLElement) || !editor.contains(actionElement)) {
-      return null;
-    }
-
-    const action = actionElement.dataset.fileAttachmentAction;
-    if (!isFileAttachmentAction(action)) {
-      return null;
-    }
-
-    const attachmentBlock = actionElement.closest('[data-athenaeum-block="file-attachment"]');
-    if (!(attachmentBlock instanceof HTMLElement) || !editor.contains(attachmentBlock)) {
-      return null;
-    }
-
-    const attachmentId = attachmentBlock.dataset.notebookAttachmentId;
-    if (!attachmentId) {
-      return null;
-    }
-
-    return { action, attachmentBlock, attachmentId };
-  }
-
   function fileAttachmentActionErrorMessage(action: FileAttachmentAction, error: unknown) {
     const message = String(error).toLowerCase();
 
@@ -1814,7 +1756,7 @@ export function NotebookPageEditor({
   }
 
   function handleEditorClick(event: React.MouseEvent<HTMLDivElement>) {
-    const attachmentAction = findFileAttachmentActionFromTarget(event.target);
+    const attachmentAction = findFileAttachmentActionFromTarget(editorRef.current, event.target);
     if (attachmentAction) {
       event.preventDefault();
       event.stopPropagation();

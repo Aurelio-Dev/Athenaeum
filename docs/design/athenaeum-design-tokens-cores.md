@@ -8,6 +8,13 @@
 > preservados handlers, seleção/range, autosave, paste, HTML persistido,
 > atributos `data-*`, toolbars contextuais, imagens/assets, anexos, tabelas,
 > callouts, equações e diagramas.
+>
+> **Update Fase 3A:** helpers DOM específicos de anexos foram isolados em
+> `notebookEditorAttachmentDom.ts`, mantendo no editor os handlers e a ação
+> assíncrona de remoção. A normalização do card, os controles `Abrir`,
+> `Mostrar no sistema`/`Remover`, a limpeza dos controles antes da serialização
+> e a localização segura do bloco de anexo seguem com o mesmo HTML persistido
+> e os mesmos atributos `data-*`.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
