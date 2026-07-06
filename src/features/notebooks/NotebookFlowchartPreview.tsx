@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { type CSSProperties, useId } from "react";
 
 import type { ParsedDiagram } from "./notebookDiagramParser";
 
@@ -6,16 +6,23 @@ type NotebookFlowchartPreviewProps = {
   flowchart: ParsedDiagram;
 };
 
-const minNodeWidth = 156;
-const maxNodeWidth = 220;
-const nodeHeight = 38;
-const nodeGap = 28;
-const horizontalPadding = 30;
-const verticalPadding = 16;
-const maxLabelCharacters = 24;
-const estimatedCharacterWidth = 7;
-const nodeHorizontalPadding = 34;
+type FlowchartVisualStyle = CSSProperties & {
+  "--notebook-flowchart-visual-height": string;
+};
+
+const minNodeWidth = 176;
+const maxNodeWidth = 280;
+const nodeHeight = 42;
+const nodeGap = 24;
+const horizontalPadding = 42;
+const verticalPadding = 18;
+const maxLabelCharacters = 34;
+const estimatedCharacterWidth = 7.1;
+const nodeHorizontalPadding = 40;
 const arrowInset = 5;
+const sideLaneOffset = 22;
+const sideLaneBendOffset = 12;
+const maxVisualHeight = 384;
 
 function truncateLabel(label: string) {
   const normalizedLabel = label.replace(/\s+/g, " ").trim();
@@ -44,7 +51,12 @@ function isTerminalLabel(label: string) {
     .trim()
     .toLowerCase();
 
-  return normalizedLabel === "inicio" || normalizedLabel === "fim" || normalizedLabel === "start" || normalizedLabel === "end";
+  return (
+    normalizedLabel === "inicio" ||
+    normalizedLabel === "fim" ||
+    normalizedLabel === "start" ||
+    normalizedLabel === "end"
+  );
 }
 
 export function NotebookFlowchartPreview({ flowchart }: NotebookFlowchartPreviewProps) {
@@ -90,9 +102,9 @@ export function NotebookFlowchartPreview({ flowchart }: NotebookFlowchartPreview
       ];
     }
 
-    const sideX = centerX + nodeWidth / 2 + 18;
-    const midStartY = startY + direction * 12;
-    const midEndY = endY - direction * 12;
+    const sideX = centerX + nodeWidth / 2 + sideLaneOffset;
+    const midStartY = startY + direction * sideLaneBendOffset;
+    const midEndY = endY - direction * sideLaneBendOffset;
 
     return [
       {
@@ -101,6 +113,9 @@ export function NotebookFlowchartPreview({ flowchart }: NotebookFlowchartPreview
       },
     ];
   });
+  const visualStyle: FlowchartVisualStyle = {
+    "--notebook-flowchart-visual-height": `${Math.min(svgHeight, maxVisualHeight)}px`,
+  };
 
   return (
     <div
@@ -111,6 +126,7 @@ export function NotebookFlowchartPreview({ flowchart }: NotebookFlowchartPreview
         role="img"
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
         className="notebook-flowchart-visual"
+        style={visualStyle}
         preserveAspectRatio="xMidYMid meet"
       >
         <title>{`Fluxograma com ${flowchart.nodes.length} etapas e ${flowchart.edges.length} conexoes`}</title>

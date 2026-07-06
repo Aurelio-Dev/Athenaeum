@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { type CSSProperties, useId } from "react";
 
 import type { ParsedDiagram } from "./notebookDiagramParser";
 
@@ -6,18 +6,44 @@ type NotebookDiagramPreviewProps = {
   diagram: ParsedDiagram;
 };
 
-const minNodeWidth = 132;
-const maxNodeWidth = 176;
-const nodeHeight = 44;
-const nodeGap = 56;
-const horizontalPadding = 24;
-const verticalPadding = 18;
-const maxLabelCharacters = 20;
-const estimatedCharacterWidth = 7.2;
-const nodeHorizontalPadding = 32;
+type DiagramVisualStyle = CSSProperties & {
+  "--notebook-diagram-visual-height": string;
+};
+
+const minNodeWidth = 144;
+const nodeHeight = 46;
+const nodeGap = 52;
+const horizontalPadding = 28;
+const verticalPadding = 20;
+const estimatedCharacterWidth = 7.3;
+const nodeHorizontalPadding = 40;
 const arrowInset = 5;
 
-function truncateLabel(label: string) {
+function getLabelCharacterLimit(nodeCount: number) {
+  if (nodeCount <= 3) {
+    return 30;
+  }
+
+  if (nodeCount <= 5) {
+    return 26;
+  }
+
+  return 22;
+}
+
+function getMaxNodeWidth(nodeCount: number) {
+  if (nodeCount <= 3) {
+    return 236;
+  }
+
+  if (nodeCount <= 5) {
+    return 216;
+  }
+
+  return 192;
+}
+
+function truncateLabel(label: string, maxLabelCharacters: number) {
   const normalizedLabel = label.replace(/\s+/g, " ").trim();
   const labelCharacters = Array.from(normalizedLabel);
 
@@ -32,18 +58,26 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getNodeWidth(labels: string[]) {
+function getNodeWidth(labels: string[], nodeCount: number) {
   const longestLabelLength = Math.max(...labels.map((label) => Array.from(label).length), 1);
-  return clamp(longestLabelLength * estimatedCharacterWidth + nodeHorizontalPadding, minNodeWidth, maxNodeWidth);
+  return clamp(
+    longestLabelLength * estimatedCharacterWidth + nodeHorizontalPadding,
+    minNodeWidth,
+    getMaxNodeWidth(nodeCount),
+  );
 }
 
 export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps) {
   const arrowMarkerId = `notebook-diagram-arrow-${useId().replace(/:/g, "")}`;
+  const maxLabelCharacters = getLabelCharacterLimit(diagram.nodes.length);
   const displayNodes = diagram.nodes.map((node) => ({
     ...node,
-    displayLabel: truncateLabel(node.label),
+    displayLabel: truncateLabel(node.label, maxLabelCharacters),
   }));
-  const nodeWidth = getNodeWidth(displayNodes.map((node) => node.displayLabel));
+  const nodeWidth = getNodeWidth(
+    displayNodes.map((node) => node.displayLabel),
+    diagram.nodes.length,
+  );
   const svgHeight = nodeHeight + verticalPadding * 2;
   const svgWidth =
     horizontalPadding * 2 + diagram.nodes.length * nodeWidth + Math.max(0, diagram.nodes.length - 1) * nodeGap;
@@ -76,6 +110,9 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
       },
     ];
   });
+  const visualStyle: DiagramVisualStyle = {
+    "--notebook-diagram-visual-height": `${svgHeight}px`,
+  };
 
   return (
     <div
@@ -86,6 +123,7 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
         role="img"
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
         className="notebook-diagram-visual"
+        style={visualStyle}
         preserveAspectRatio="xMidYMid meet"
       >
         <title>{`Diagrama com ${diagram.nodes.length} nos e ${diagram.edges.length} conexoes`}</title>

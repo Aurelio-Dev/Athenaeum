@@ -31,12 +31,15 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 5A | Concluida | Testes unitarios para `parseDiagramSource` com Vitest. | Cobertura minima para texto vazio, linhas invalidas, multiplas relacoes, Unicode e nos malformados. | `npm test -- --run` e `npm run typecheck`. |
 | Fase 6A | Concluida | Auditoria tecnica e visual sem alterar comportamento. | Este documento mapeou arquitetura, riscos, hardcoded visual, limitacoes e matriz trabalho x resultado. | Apenas documentacao. |
 | Fase 6B | Concluida | Tokens visuais de diagramas e ajustes nao destrutivos nos previews SVG. | `src/styles/index.css` recebeu tokens para card, preview, nos, linhas, setas, textos, fonte e estados discretos. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6C | Concluida | Ajuste de escala, responsividade e legibilidade dos previews SVG existentes. | `diagram` ganhou truncamento menos agressivo em diagramas pequenos; `flowchart` ganhou nos mais largos e altura runtime proporcional com teto seguro. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 6B:
+Ressalvas mantidas apos a Fase 6C:
 
 - `graph` ainda usa preview textual.
-- `flowchart` segue funcional, mas pode ficar pequeno em fluxos longos.
-- Labels longos continuam truncados para proteger o layout.
+- `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito
+  longos ainda precisam reduzir escala para caber no card.
+- Labels longos truncam de forma menos agressiva, mas continuam truncados para
+  proteger o layout.
 - Nao ha auto-layout avancado para ciclos, bifurcacoes complexas ou arestas
   cruzadas.
 - O SVG continua sendo runtime; a decisao de nao persistir SVG no HTML salvo
@@ -232,32 +235,38 @@ Prioridade sugerida:
 ## Recomendacao
 
 A recomendacao original da auditoria era executar a **Fase 6B - Tokens visuais
-de diagramas e ajustes nao destrutivos no preview SVG**. Essa fase foi
-executada e manteve o escopo seguro:
+de diagramas e ajustes nao destrutivos no preview SVG**. Depois dela, a
+**Fase 6C - Ajustes responsivos e estados consistentes para diagramas** foi
+parcialmente executada no eixo de escala e legibilidade. O escopo seguro foi
+mantido:
 
 - tokens CSS de diagrama foram adicionados no tema global;
 - `diagram` e `flowchart` passaram a usar tokens para card, preview, nos,
   bordas, linhas, setas, textos e fonte;
+- `diagram` passou a ajustar limite de label e largura maxima por quantidade
+  de nos;
+- `flowchart` passou a usar altura SVG runtime proporcional ao conteudo, com
+  teto para manter o card contido;
 - o parser, o HTML persistido, o autosave, o paste, a selecao/range e a toolbar
   contextual nao foram alterados;
 - `graph` continuou textual.
 
 Proxima fase pequena sugerida:
 
-**Fase 6C - Ajustes responsivos e estados consistentes para diagramas**
+**Fase 6D - Estados consistentes e preparacao segura para `graph`**
 
 Escopo recomendado:
 
-- melhorar escala do `flowchart` em fluxos longos sem reescrever o layout;
-- reduzir truncamento agressivo de labels quando houver espaco seguro;
 - padronizar estados vazio/invalido entre `diagram`, `flowchart` e `graph`;
+- manter `graph` textual, mas preparar mensagens e exemplos mais claros;
+- avaliar sintaxe minima de `graph` em documentacao antes de qualquer preview
+  visual;
 - manter SVG runtime fora do HTML persistido;
 - nao alterar parser, autosave, selecao/range, paste, assets ou toolbar.
 
-Validacao minima da Fase 6C:
+Validacao minima da Fase 6D:
 
 - `diagram` simples e com multiplas relacoes continua renderizando igual;
-- `flowchart` longo fica mais legivel sem sair do card;
 - conteudo invalido continua seguro e orientativo;
 - HTML salvo continua sem SVG runtime;
 - `graph` permanece textual, salvo se uma fase futura for aberta

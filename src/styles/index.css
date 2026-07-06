@@ -188,7 +188,10 @@
   --diagram-node-muted-text: color-mix(in srgb, var(--diagram-accent) 82%, var(--color-text-secondary));
   --diagram-node-radius: 8px;
   --diagram-flowchart-terminal-radius: 18px;
+  --diagram-node-font-size: 12.5px;
   --diagram-node-stroke-width: 1.5px;
+  --diagram-visual-height: 5.5rem;
+  --diagram-flowchart-visual-height: min(24rem, 48vh);
   --diagram-edge: color-mix(in srgb, var(--diagram-accent) 88%, var(--color-text-secondary));
   --diagram-edge-active: var(--diagram-accent);
   --diagram-edge-width: 2px;
@@ -601,7 +604,7 @@ select {
   display: block;
   width: 100%;
   max-width: 100%;
-  height: 5.25rem;
+  height: var(--notebook-diagram-visual-height, var(--diagram-visual-height));
 }
 
 .notebook-editor .notebook-diagram-visual-edge {
@@ -629,7 +632,7 @@ select {
   pointer-events: none;
   fill: var(--diagram-node-text);
   font-family: "IBM Plex Mono", Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--diagram-node-font-size);
   font-weight: 700;
 }
 
@@ -643,7 +646,7 @@ select {
   display: block;
   width: 100%;
   max-width: 100%;
-  height: min(15rem, 40vh);
+  height: var(--notebook-flowchart-visual-height, var(--diagram-flowchart-visual-height));
 }
 
 .notebook-editor .notebook-flowchart-visual-edge {
@@ -678,7 +681,7 @@ select {
   pointer-events: none;
   fill: var(--diagram-node-text);
   font-family: "IBM Plex Mono", Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--diagram-node-font-size);
   font-weight: 700;
 }
 
