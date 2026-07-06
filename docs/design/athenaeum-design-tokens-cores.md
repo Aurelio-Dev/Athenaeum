@@ -1,7 +1,7 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
 > **Changelog técnico 06/07/2026 — Diagramas no Notebook:** as Fases
-> 6A, 6B e 6C consolidaram a auditoria e o refinamento visual dos previews
+> 6A, 6B, 6C e 6D consolidaram a auditoria e o refinamento visual dos previews
 > SVG runtime de `data-athenaeum-block="diagram"`. A Fase 6A criou
 > `docs/diagram-visual-audit.md` com arquitetura, riscos, hardcoded visual,
 > matriz trabalho x resultado e ressalvas. A Fase 6B adicionou tokens CSS
@@ -10,10 +10,13 @@
 > paleta paralela. A Fase 6C ajustou escala e legibilidade dos previews:
 > `diagram` passou a adaptar limite de label/largura máxima pela quantidade
 > de nós, enquanto `flowchart` ganhou nós mais largos e altura runtime
-> proporcional com teto seguro. O SVG continua apenas runtime; o HTML salvo
-> permanece leve e sem SVG persistido. `graph` segue textual. Não foram
-> alterados parser, autosave, paste, seleção/range, toolbar contextual,
-> backend, migrations ou dependências.
+> proporcional com teto seguro. A Fase 6D adicionou preview visual runtime
+> para `data-diagram-kind="graph"` em `NotebookGraphPreview.tsx`, usando
+> `parseDiagramSource` com relações `A -> B`, layout em grade determinística
+> e os mesmos tokens visuais; fontes inválidas ou legadas continuam no
+> fallback textual. O SVG continua apenas runtime; o HTML salvo permanece leve
+> e sem SVG persistido. Não foram alterados parser, autosave, paste,
+> seleção/range, toolbar contextual, backend, migrations ou dependências.
 >
 > **Update técnico 06/07/2026:** refatoração incremental do
 > `NotebookPageEditor.tsx` sem mudança de comportamento. A Fase 1 extraiu

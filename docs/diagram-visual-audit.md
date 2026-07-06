@@ -12,8 +12,9 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Arquivo | Papel atual | Observacoes |
 | --- | --- | --- |
 | `src/features/notebooks/notebookEditorDiagramDom.ts` | Normalizacao DOM, leitura da fonte textual, render runtime do preview e migracao de figuras antigas para o bloco unificado. | Contem o ponto mais sensivel: decide entre SVG runtime, fallback textual e estados vazio/invalido. |
-| `src/features/notebooks/notebookDiagramParser.ts` | Parser puro de relacoes `A -> B`. | Compartilhado por `diagram` e `flowchart`; ja possui testes minimos com Vitest. |
+| `src/features/notebooks/notebookDiagramParser.ts` | Parser puro de relacoes `A -> B`. | Compartilhado por `diagram`, `graph` e `flowchart`; ja possui testes minimos com Vitest. |
 | `src/features/notebooks/NotebookDiagramPreview.tsx` | Preview SVG runtime para `data-diagram-kind="diagram"`. | Layout horizontal deterministico, sem biblioteca externa. |
+| `src/features/notebooks/NotebookGraphPreview.tsx` | Preview SVG runtime para `data-diagram-kind="graph"`. | Layout em grade deterministica, sem force-directed, canvas ou biblioteca externa. |
 | `src/features/notebooks/NotebookFlowchartPreview.tsx` | Preview SVG runtime para `data-diagram-kind="flowchart"`. | Layout vertical deterministico, com tratamento visual simples para inicio/fim. |
 | `src/features/notebooks/notebookEditorUtils.ts` | Tipos, labels, fontes default, previews vazios e type guards. | Define `DiagramKind`, `diagramKindLabels`, `diagramDefaultSources`, `diagramEmptyPreviews` e `isDiagramKind`. |
 | `src/features/notebooks/NotebookPageEditor.tsx` | Integracao com insercao, toolbar contextual, serializacao, autosave e handlers de teclado. | Deve continuar sendo tocado com muito cuidado; os pontos de diagrama estao bem localizados. |
@@ -32,10 +33,12 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 6A | Concluida | Auditoria tecnica e visual sem alterar comportamento. | Este documento mapeou arquitetura, riscos, hardcoded visual, limitacoes e matriz trabalho x resultado. | Apenas documentacao. |
 | Fase 6B | Concluida | Tokens visuais de diagramas e ajustes nao destrutivos nos previews SVG. | `src/styles/index.css` recebeu tokens para card, preview, nos, linhas, setas, textos, fonte e estados discretos. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6C | Concluida | Ajuste de escala, responsividade e legibilidade dos previews SVG existentes. | `diagram` ganhou truncamento menos agressivo em diagramas pequenos; `flowchart` ganhou nos mais largos e altura runtime proporcional com teto seguro. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6D | Concluida | Preview SVG runtime para `data-diagram-kind="graph"`. | `graph` passou a renderizar relacoes `A -> B` em grade deterministica, usando os mesmos tokens visuais de diagramas; fontes invalidas ou legadas seguem no fallback textual. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 6C:
+Ressalvas mantidas apos a Fase 6D:
 
-- `graph` ainda usa preview textual.
+- `graph` agora tem preview SVG runtime para relacoes `A -> B`, mas fontes
+  legadas no formato textual antigo, como `A -- B`, seguem no fallback textual.
 - `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito
   longos ainda precisam reduzir escala para caber no card.
 - Labels longos truncam de forma menos agressiva, mas continuam truncados para
@@ -76,12 +79,12 @@ na fonte textual e em um preview leve derivado dela.
 | --- | --- | --- | --- |
 | `diagram` | Relacoes `A -> B`, uma por linha. | SVG runtime horizontal com caixas e setas. | Mensagens orientativas quando vazio ou sem relacoes validas. |
 | `flowchart` | Relacoes `A -> B`, uma por linha. | SVG runtime vertical com caixas, setas e terminais simples. | Ainda usa fallback textual quando nao ha relacoes validas. |
-| `graph` | Texto livre atual, default `A -- B`. | Preview textual. | Preview textual simples. |
+| `graph` | Relacoes `A -> B`, uma por linha. | SVG runtime em grade deterministica com caixas e setas. | Fallback textual quando nao ha relacoes validas. |
 
-`diagram` e `flowchart` compartilham `parseDiagramSource`. O parser ignora
-linhas vazias, linhas invalidas, relacoes malformadas e nos vazios. Nos sao
-deduplicados preservando a ordem de aparicao, e arestas repetidas tambem sao
-deduplicadas.
+`diagram`, `graph` e `flowchart` compartilham `parseDiagramSource`. O parser
+ignora linhas vazias, linhas invalidas, relacoes malformadas e nos vazios. Nos
+sao deduplicados preservando a ordem de aparicao, e arestas repetidas tambem
+sao deduplicadas.
 
 ## Persistencia Leve
 
@@ -167,6 +170,19 @@ Em `NotebookFlowchartPreview.tsx`:
 - inset da seta: `5`;
 - rota lateral simples com deslocamento fixo para arestas nao adjacentes.
 
+Em `NotebookGraphPreview.tsx`:
+
+- layout em grade com ate 3 colunas;
+- largura minima do no: `136`;
+- altura do no: `42`;
+- distancia entre colunas/linhas: `44` / `42`;
+- padding horizontal/vertical do SVG: `28` / `20`;
+- limite de label por quantidade de nos: `30`, `24` ou `20` caracteres;
+- largura estimada de caractere: `7.1`;
+- padding horizontal interno do no: `38`;
+- inset da seta: `5`;
+- altura visual maxima: `320`.
+
 Esses valores nao sao necessariamente errados; eles apenas ainda nao estao
 centralizados como tokens de diagrama.
 
@@ -181,7 +197,8 @@ centralizados como tokens de diagrama.
 - Ciclos, arestas cruzadas e relacoes nao adjacentes sao tratados de forma
   simples. O resultado e previsivel, mas nao tenta auto-layout.
 - Arestas de um no para ele mesmo sao ignoradas no preview visual.
-- `graph` ainda nao tem preview visual.
+- `graph` usa grade deterministica simples; relacoes cruzadas, ciclos e
+  grafos densos continuam sem layout force-directed.
 - Estados vazio/invalido estao mais orientativos em `diagram` do que em
   `flowchart` e `graph`.
 - Parte da legibilidade depende de `color-mix`; e bom manter validacao visual
@@ -223,7 +240,7 @@ centralizados como tokens de diagrama.
 | Melhorar responsividade do SVG dentro do card | medio | alto | medio | P1 | Exige cuidado com viewBox, altura e escala para nao piorar fluxos longos. |
 | Reduzir truncamento agressivo de labels | medio | alto | medio | P1 | Pode envolver largura de no, limite por tipo e tooltip/titulo acessivel. |
 | Melhorar escala do flowchart em fluxos longos | medio | alto | medio | P1 | Candidato forte depois dos tokens; precisa preservar previsibilidade. |
-| Criar preview visual para `graph` | alto | muito alto | alto | P2 | Maior ganho funcional, mas exige decisao de sintaxe/layout e mais testes. |
+| Criar preview visual para `graph` | alto | muito alto | alto | P2 | Concluido na Fase 6D com sintaxe `A -> B` e layout em grade deterministica. |
 
 Prioridade sugerida:
 
@@ -237,8 +254,9 @@ Prioridade sugerida:
 A recomendacao original da auditoria era executar a **Fase 6B - Tokens visuais
 de diagramas e ajustes nao destrutivos no preview SVG**. Depois dela, a
 **Fase 6C - Ajustes responsivos e estados consistentes para diagramas** foi
-parcialmente executada no eixo de escala e legibilidade. O escopo seguro foi
-mantido:
+parcialmente executada no eixo de escala e legibilidade, e a **Fase 6D -
+Preview visual runtime para graph** adicionou SVG runtime para `graph`. O
+escopo seguro foi mantido:
 
 - tokens CSS de diagrama foram adicionados no tema global;
 - `diagram` e `flowchart` passaram a usar tokens para card, preview, nos,
@@ -247,28 +265,29 @@ mantido:
   de nos;
 - `flowchart` passou a usar altura SVG runtime proporcional ao conteudo, com
   teto para manter o card contido;
+- `graph` passou a usar `parseDiagramSource` e layout em grade deterministica
+  para relacoes `A -> B`;
 - o parser, o HTML persistido, o autosave, o paste, a selecao/range e a toolbar
   contextual nao foram alterados;
-- `graph` continuou textual.
+- fontes de `graph` sem relacoes validas continuam no fallback textual.
 
 Proxima fase pequena sugerida:
 
-**Fase 6D - Estados consistentes e preparacao segura para `graph`**
+**Fase 6E - Estados consistentes e validacao visual dos diagramas**
 
 Escopo recomendado:
 
 - padronizar estados vazio/invalido entre `diagram`, `flowchart` e `graph`;
-- manter `graph` textual, mas preparar mensagens e exemplos mais claros;
-- avaliar sintaxe minima de `graph` em documentacao antes de qualquer preview
-  visual;
+- documentar exemplos curtos para cada tipo no proprio bloco ou na ajuda futura;
+- validar visualmente `diagram`, `graph` e `flowchart` em claro/escuro;
 - manter SVG runtime fora do HTML persistido;
 - nao alterar parser, autosave, selecao/range, paste, assets ou toolbar.
 
-Validacao minima da Fase 6D:
+Validacao minima da Fase 6E:
 
 - `diagram` simples e com multiplas relacoes continua renderizando igual;
+- `graph` com 2 a 8 nos continua contido no card;
+- `flowchart` de 4 a 8 etapas continua legivel;
 - conteudo invalido continua seguro e orientativo;
 - HTML salvo continua sem SVG runtime;
-- `graph` permanece textual, salvo se uma fase futura for aberta
-  explicitamente para ele;
 - `npm run typecheck`, `npm test -- --run` e `git diff --check` passam.

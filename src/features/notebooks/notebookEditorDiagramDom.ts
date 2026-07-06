@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { NotebookDiagramPreview } from "./NotebookDiagramPreview";
 import { NotebookFlowchartPreview } from "./NotebookFlowchartPreview";
+import { NotebookGraphPreview } from "./NotebookGraphPreview";
 import { parseDiagramSource, type ParsedDiagram } from "./notebookDiagramParser";
 import {
   diagramDefaultSources,
@@ -218,6 +219,14 @@ function renderVisualFlowchartPreview(preview: HTMLElement, parsedDiagram: Parse
   );
 }
 
+function renderVisualGraphPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+  return renderReactDiagramPreview(
+    preview,
+    diagramKindLabels.graph,
+    createElement(NotebookGraphPreview, { graph: parsedDiagram }),
+  );
+}
+
 export function renderDiagramPreview(diagram: HTMLElement) {
   const kind = getDiagramKind(diagram);
   const sources = getDirectDiagramSources(diagram);
@@ -247,6 +256,22 @@ export function renderDiagramPreview(diagram: HTMLElement) {
       diagramKindLabels.diagram,
       sourceText.length === 0 ? diagramEmptyPreviewMessage : diagramInvalidPreviewMessage,
     );
+    return;
+  }
+
+  if (kind === "graph") {
+    const parsedDiagram = parseDiagramSource(sourceText);
+
+    if (parsedDiagram.edges.length > 0) {
+      if (renderVisualGraphPreview(preview, parsedDiagram)) {
+        return;
+      }
+
+      renderTextDiagramPreview(preview, diagramKindLabels.graph, sourceText);
+      return;
+    }
+
+    renderTextDiagramPreview(preview, diagramKindLabels.graph, sourceText || diagramEmptyPreviews.graph);
     return;
   }
 

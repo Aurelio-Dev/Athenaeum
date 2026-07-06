@@ -191,6 +191,7 @@
   --diagram-node-font-size: 12.5px;
   --diagram-node-stroke-width: 1.5px;
   --diagram-visual-height: 5.5rem;
+  --diagram-graph-visual-height: 14rem;
   --diagram-flowchart-visual-height: min(24rem, 48vh);
   --diagram-edge: color-mix(in srgb, var(--diagram-accent) 88%, var(--color-text-secondary));
   --diagram-edge-active: var(--diagram-accent);
@@ -594,10 +595,18 @@ select {
   white-space: pre-wrap;
 }
 
-.notebook-editor .notebook-diagram-visual-host {
+.notebook-editor .notebook-diagram-visual-host,
+.notebook-editor .notebook-graph-visual-host {
   width: 100%;
   max-width: 100%;
   overflow: hidden;
+}
+
+.notebook-editor .notebook-graph-visual {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: var(--notebook-graph-visual-height, var(--diagram-graph-visual-height));
 }
 
 .notebook-editor .notebook-diagram-visual {

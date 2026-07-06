@@ -24,7 +24,7 @@ export const diagramKindLabels: Record<DiagramKind, string> = {
 
 export const diagramDefaultSources: Record<DiagramKind, string> = {
   diagram: "Elemento A -> Elemento B",
-  graph: "A -- B\nB -- C",
+  graph: "A -> B\nB -> C",
   flowchart: "Início -> Processo\nProcesso -> Fim",
 };
 
