@@ -532,6 +532,47 @@ select {
   font-weight: 650;
 }
 
+.notebook-editor .notebook-diagram-visual-host {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.notebook-editor .notebook-diagram-visual {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 5.25rem;
+}
+
+.notebook-editor .notebook-diagram-visual-edge {
+  vector-effect: non-scaling-stroke;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  stroke-width: 2;
+  opacity: 0.78;
+}
+
+.notebook-editor .notebook-diagram-visual-arrow {
+  fill: var(--color-accent);
+  opacity: 0.86;
+}
+
+.notebook-editor .notebook-diagram-visual-node {
+  vector-effect: non-scaling-stroke;
+  fill: color-mix(in srgb, var(--color-surface-card) 92%, var(--color-surface-muted));
+  stroke: color-mix(in srgb, var(--color-accent) 34%, var(--color-border-subtle));
+  stroke-width: 1.5;
+}
+
+.notebook-editor .notebook-diagram-visual-label {
+  pointer-events: none;
+  fill: var(--color-text-primary);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .notebook-editor [data-diagram-source="true"] {
   display: block;
   min-height: 3em;

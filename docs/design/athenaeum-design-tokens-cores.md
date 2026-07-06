@@ -46,6 +46,15 @@
 > seguem preservando o HTML salvo sem `data:image`, mantendo no editor os fluxos
 > de clipboard, seletor de arquivo, `saveNotebookAsset`, `loadNotebookAssets`,
 > seleção, autosave, paste e toolbars.
+>
+> **Update Diagrama SVG:** `data-diagram-kind="diagram"` ganhou preview visual
+> runtime em SVG, sem dependência externa e sem alterar o HTML persistido. A
+> fonte textual continua em `data-diagram-source`; relações `origem -> destino`
+> são parseadas por `notebookDiagramParser.ts` e renderizadas por
+> `NotebookDiagramPreview.tsx` como caixas conectadas por setas. Labels longos
+> têm truncamento visual seguro, o SVG fica contido no card existente e casos
+> inválidos continuam caindo no fallback textual. `graph` e `flowchart` seguem
+> com o preview textual anterior.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,

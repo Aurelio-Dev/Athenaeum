@@ -1,3 +1,8 @@
+import { createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+
+import { NotebookDiagramPreview } from "./NotebookDiagramPreview";
+import { parseDiagramSource } from "./notebookDiagramParser";
 import {
   diagramDefaultSources,
   diagramEmptyPreviews,
@@ -7,6 +12,13 @@ import {
   type DiagramKind,
   type FigureSubtype,
 } from "./notebookEditorUtils";
+
+type DiagramPreviewRoot = {
+  host: HTMLDivElement;
+  root: Root;
+};
+
+const visualPreviewRoots = new WeakMap<HTMLElement, DiagramPreviewRoot>();
 
 export function getDiagramKind(diagram: HTMLElement): DiagramKind {
   return isDiagramKind(diagram.dataset.diagramKind) ? diagram.dataset.diagramKind : "diagram";
@@ -43,6 +55,52 @@ function sourceContainsMarkup(source: HTMLElement) {
   return Array.from(source.childNodes).some((child) => child.nodeType !== Node.TEXT_NODE);
 }
 
+function unmountVisualPreview(preview: HTMLElement) {
+  const mountedPreview = visualPreviewRoots.get(preview);
+  if (!mountedPreview) {
+    return;
+  }
+
+  mountedPreview.root.unmount();
+  visualPreviewRoots.delete(preview);
+}
+
+function renderTextDiagramPreview(preview: HTMLElement, labelText: string, bodyText: string) {
+  unmountVisualPreview(preview);
+
+  const label = document.createElement("strong");
+  label.textContent = labelText;
+
+  const body = document.createElement("span");
+  body.textContent = bodyText;
+
+  preview.replaceChildren(label, body);
+}
+
+function renderVisualDiagramPreview(preview: HTMLElement, sourceText: string) {
+  const parsedDiagram = parseDiagramSource(sourceText);
+  if (parsedDiagram.edges.length === 0 || !document.body.contains(preview)) {
+    return false;
+  }
+
+  const label = document.createElement("strong");
+  label.textContent = diagramKindLabels.diagram;
+
+  const mountedPreview = visualPreviewRoots.get(preview);
+  const host = mountedPreview?.host.parentElement === preview ? mountedPreview.host : document.createElement("div");
+  let root = mountedPreview?.host.parentElement === preview ? mountedPreview.root : null;
+
+  if (!root) {
+    unmountVisualPreview(preview);
+    root = createRoot(host);
+    visualPreviewRoots.set(preview, { host, root });
+  }
+
+  preview.replaceChildren(label, host);
+  root.render(createElement(NotebookDiagramPreview, { diagram: parsedDiagram }));
+  return true;
+}
+
 export function renderDiagramPreview(diagram: HTMLElement) {
   const kind = getDiagramKind(diagram);
   const source = getDiagramSource(diagram);
@@ -55,13 +113,11 @@ export function renderDiagramPreview(diagram: HTMLElement) {
   const sourceText = (source.textContent ?? "").trim();
   preview.contentEditable = "false";
 
-  const label = document.createElement("strong");
-  label.textContent = diagramKindLabels[kind];
+  if (kind === "diagram" && renderVisualDiagramPreview(preview, sourceText)) {
+    return;
+  }
 
-  const body = document.createElement("span");
-  body.textContent = sourceText || diagramEmptyPreviews[kind];
-
-  preview.replaceChildren(label, body);
+  renderTextDiagramPreview(preview, diagramKindLabels[kind], sourceText || diagramEmptyPreviews[kind]);
 }
 
 export function setDiagramKind(diagram: HTMLElement, kind: DiagramKind) {
