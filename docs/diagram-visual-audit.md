@@ -36,13 +36,16 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 6D | Concluida | Preview SVG runtime para `data-diagram-kind="graph"`. | `graph` passou a renderizar relacoes `A -> B` em grade deterministica, usando os mesmos tokens visuais de diagramas; fontes invalidas ou legadas seguem no fallback textual. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E | Concluida | Polimento visual conjunto e modo limpo runtime. | Bordas, fonte, titulos internos, labels SVG e espacamentos foram suavizados; a toolbar contextual ganhou `Modo limpo`, que oculta `Fonte` apenas em runtime sem salvar estado no bloco. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E.1 | Concluida | Hotfix do modo limpo e cadeias em linha unica. | O botao `Modo limpo` foi movido da toolbar de callout para a toolbar contextual de diagrama, e `parseDiagramSource` passou a aceitar cadeias como `Elemento A -> Elemento B -> Elemento C`. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6E.2 | Concluida | Refinamento minimalista do modo limpo. | No modo limpo, o titulo interno do preview e ocultado, a moldura principal do preview e removida e o bloco fica mais editorial, mantendo nos, setas e conexoes visiveis. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 6E.1:
+Ressalvas mantidas apos a Fase 6E.2:
 
 - `graph` agora tem preview SVG runtime para relacoes `A -> B`, mas fontes
   legadas no formato textual antigo, como `A -- B`, seguem no fallback textual.
 - O `Modo limpo` e global do editor enquanto a pagina esta aberta; ele nao e
   persistido em `data-*`, `app_settings` ou HTML salvo.
+- No modo limpo, o titulo interno e a area `Fonte` somem visualmente, mas a
+  fonte textual segue no DOM editavel e volta ao desativar o modo.
 - Cadeias em linha unica no formato `A -> B -> C` sao expandidas em relacoes
   consecutivas; linhas legadas `A -- B` seguem no fallback textual/invalido.
 - `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito

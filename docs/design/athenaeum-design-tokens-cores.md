@@ -1,7 +1,7 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
 > **Changelog técnico 06/07/2026 — Diagramas no Notebook:** as Fases
-> 6A, 6B, 6C, 6D, 6E e 6E.1 consolidaram a auditoria e o refinamento visual dos previews
+> 6A, 6B, 6C, 6D, 6E, 6E.1 e 6E.2 consolidaram a auditoria e o refinamento visual dos previews
 > SVG runtime de `data-athenaeum-block="diagram"`. A Fase 6A criou
 > `docs/diagram-visual-audit.md` com arquitetura, riscos, hardcoded visual,
 > matriz trabalho x resultado e ressalvas. A Fase 6B adicionou tokens CSS
@@ -19,9 +19,12 @@
 > contextual de diagrama para ocultar visualmente `Fonte` sem salvar estado no
 > bloco. A Fase 6E.1 corrigiu o botão, que havia entrado na toolbar de Callout,
 > e passou a aceitar cadeias em linha única como `A -> B -> C`, mantendo
-> `A -- B` no fallback textual/inválido. O SVG continua apenas runtime; o HTML
-> salvo permanece leve e sem SVG persistido. Não foram alterados autosave,
-> paste, seleção/range, backend, migrations ou dependências.
+> `A -- B` no fallback textual/inválido. A Fase 6E.2 refinou o Modo limpo para
+> um visual mais editorial: o título interno do preview e a moldura principal
+> somem visualmente, a área `Fonte` continua oculta e nós, setas e conexões
+> permanecem legíveis. O SVG continua apenas runtime; o HTML salvo permanece
+> leve e sem SVG persistido. Não foram alterados autosave, paste,
+> seleção/range, backend, migrations ou dependências.
 >
 > **Update técnico 06/07/2026:** refatoração incremental do
 > `NotebookPageEditor.tsx` sem mudança de comportamento. A Fase 1 extraiu

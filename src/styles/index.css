@@ -738,16 +738,27 @@ select {
 
 .notebook-editor--diagram-clean-mode [data-athenaeum-block="diagram"] {
   gap: 0;
-  border-color: color-mix(in srgb, var(--diagram-accent) 10%, var(--color-border-subtle));
-  background: color-mix(in srgb, var(--diagram-accent) 2%, var(--color-surface-card));
+  border-color: transparent;
+  background: transparent;
   box-shadow: none;
-  padding: 0.58em;
+  padding: 0.3em 0.2em;
 }
 
 .notebook-editor--diagram-clean-mode [data-diagram-preview="true"] {
+  min-height: 0;
   border-color: transparent;
   background: transparent;
-  padding: 0.4em 0.25em;
+  padding: 0.15em 0;
+}
+
+.notebook-editor--diagram-clean-mode [data-diagram-preview="true"] strong {
+  display: none;
+}
+
+.notebook-editor--diagram-clean-mode .notebook-diagram-visual,
+.notebook-editor--diagram-clean-mode .notebook-graph-visual,
+.notebook-editor--diagram-clean-mode .notebook-flowchart-visual {
+  margin-inline: auto;
 }
 
 .notebook-editor--diagram-clean-mode [data-diagram-source="true"] {
