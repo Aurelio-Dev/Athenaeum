@@ -72,6 +72,16 @@
 > uma relação válida, o SVG runtime continua inalterado; linhas inválidas
 > misturadas com válidas seguem sendo ignoradas com segurança. O HTML persistido
 > permanece leve e `graph`/`flowchart` continuam com preview textual.
+>
+> **Update Diagrama 3:** `data-diagram-kind="flowchart"` ganhou preview visual
+> runtime em SVG com sintaxe simples `A -> B`, reutilizando o parser de relações
+> e mantendo `graph` no preview textual. O layout do fluxograma é vertical e
+> determinístico, com nós terminais arredondados para `Início`/`Fim`; o HTML
+> persistido segue leve, sem SVG runtime.
+>
+> **Ressalvas futuras (não bloqueiam MVP):** o preview de `flowchart` está
+> funcional, mas visualmente pequeno em fluxos com várias etapas. Labels longos
+> são truncados corretamente, mas o truncamento ainda está agressivo.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,

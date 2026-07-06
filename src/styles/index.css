@@ -597,6 +597,53 @@ select {
   font-weight: 700;
 }
 
+.notebook-editor .notebook-flowchart-visual-host {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.notebook-editor .notebook-flowchart-visual {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: min(15rem, 40vh);
+}
+
+.notebook-editor .notebook-flowchart-visual-edge {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  stroke: var(--notebook-diagram-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  opacity: 0.8;
+}
+
+.notebook-editor .notebook-flowchart-visual-arrowhead {
+  fill: var(--notebook-diagram-accent);
+  opacity: 0.88;
+}
+
+.notebook-editor .notebook-flowchart-visual-node {
+  vector-effect: non-scaling-stroke;
+  fill: color-mix(in srgb, var(--color-surface-card) 94%, var(--color-surface-muted));
+  stroke: color-mix(in srgb, var(--notebook-diagram-accent) 36%, var(--color-border-subtle));
+  stroke-width: 1.5;
+}
+
+.notebook-editor .notebook-flowchart-visual-node--terminal {
+  fill: color-mix(in srgb, var(--notebook-diagram-accent) 8%, var(--color-surface-card));
+}
+
+.notebook-editor .notebook-flowchart-visual-label {
+  pointer-events: none;
+  fill: var(--color-text-primary);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .notebook-editor [data-diagram-source="true"] {
   display: block;
   min-height: 3em;

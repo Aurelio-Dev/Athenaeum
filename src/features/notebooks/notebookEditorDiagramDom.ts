@@ -1,7 +1,8 @@
-import { createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { NotebookDiagramPreview } from "./NotebookDiagramPreview";
+import { NotebookFlowchartPreview } from "./NotebookFlowchartPreview";
 import { parseDiagramSource, type ParsedDiagram } from "./notebookDiagramParser";
 import {
   diagramDefaultSources,
@@ -178,13 +179,13 @@ function renderDiagramGuidancePreview(preview: HTMLElement, labelText: string, m
   preview.replaceChildren(label, message, example);
 }
 
-function renderVisualDiagramPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+function renderReactDiagramPreview(preview: HTMLElement, labelText: string, visualElement: ReactElement) {
   if (!document.body.contains(preview)) {
     return false;
   }
 
   const label = document.createElement("strong");
-  label.textContent = diagramKindLabels.diagram;
+  label.textContent = labelText;
 
   const mountedPreview = visualPreviewRoots.get(preview);
   const host = mountedPreview?.host.parentElement === preview ? mountedPreview.host : document.createElement("div");
@@ -197,8 +198,24 @@ function renderVisualDiagramPreview(preview: HTMLElement, parsedDiagram: ParsedD
   }
 
   preview.replaceChildren(label, host);
-  root.render(createElement(NotebookDiagramPreview, { diagram: parsedDiagram }));
+  root.render(visualElement);
   return true;
+}
+
+function renderVisualDiagramPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+  return renderReactDiagramPreview(
+    preview,
+    diagramKindLabels.diagram,
+    createElement(NotebookDiagramPreview, { diagram: parsedDiagram }),
+  );
+}
+
+function renderVisualFlowchartPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+  return renderReactDiagramPreview(
+    preview,
+    diagramKindLabels.flowchart,
+    createElement(NotebookFlowchartPreview, { flowchart: parsedDiagram }),
+  );
 }
 
 export function renderDiagramPreview(diagram: HTMLElement) {
@@ -230,6 +247,22 @@ export function renderDiagramPreview(diagram: HTMLElement) {
       diagramKindLabels.diagram,
       sourceText.length === 0 ? diagramEmptyPreviewMessage : diagramInvalidPreviewMessage,
     );
+    return;
+  }
+
+  if (kind === "flowchart") {
+    const parsedDiagram = parseDiagramSource(sourceText);
+
+    if (parsedDiagram.edges.length > 0) {
+      if (renderVisualFlowchartPreview(preview, parsedDiagram)) {
+        return;
+      }
+
+      renderTextDiagramPreview(preview, diagramKindLabels.flowchart, sourceText);
+      return;
+    }
+
+    renderTextDiagramPreview(preview, diagramKindLabels.flowchart, sourceText || diagramEmptyPreviews.flowchart);
     return;
   }
 
