@@ -15,6 +15,13 @@
 > `Mostrar no sistema`/`Remover`, a limpeza dos controles antes da serialização
 > e a localização segura do bloco de anexo seguem com o mesmo HTML persistido
 > e os mesmos atributos `data-*`.
+>
+> **Update Fase 3B:** helpers DOM de `Diagrama/Grafo/Fluxograma` foram
+> isolados em `notebookEditorDiagramDom.ts`. A normalização de blocos legados,
+> a detecção de `data-athenaeum-block="diagram"`, a atualização de
+> `data-diagram-kind`, a fonte editável e o preview textual continuam com o
+> mesmo HTML persistido e sem renderizador visual novo. Inserção, seleção,
+> autosave, paste, remoção e toolbar contextual permanecem no editor.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
