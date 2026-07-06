@@ -7,7 +7,6 @@ import {
   revealNotebookFileAttachment,
   saveNotebookAsset,
   saveNotebookFileAttachment,
-  type NotebookAssetData,
   type NotebookAssetMetadata,
 } from "../../lib/database";
 import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, wrapSelectionInCode } from "../reader/richTextShared";
@@ -36,6 +35,7 @@ import {
   getEquationSource,
   normalizeEquations,
 } from "./notebookEditorEquationDom";
+import { hydrateNotebookAssetImages, removeNotebookAssetImageSources } from "./notebookEditorFigureDom";
 import {
   AttachmentIcon,
   CalloutIcon,
@@ -172,9 +172,7 @@ function readFileAsDataBase64(file: File, itemLabel = "imagem do clipboard"): Pr
 function serializeNotebookEditorHtml(editor: HTMLElement) {
   const clone = editor.cloneNode(true) as HTMLElement;
 
-  clone.querySelectorAll("img[data-notebook-asset-id]").forEach((image) => {
-    image.removeAttribute("src");
-  });
+  removeNotebookAssetImageSources(clone);
   normalizeDiagrams(clone);
   normalizeEquations(clone);
   normalizeFileAttachmentCards(clone);
@@ -196,21 +194,6 @@ function initialNotebookContentIsEmpty(content: string) {
     (template.content.textContent ?? "").trim().length === 0 &&
     template.content.querySelector(notebookRichContentSelector) === null
   );
-}
-
-function hydrateNotebookAssetImages(editor: HTMLElement, assets: NotebookAssetData[]) {
-  const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
-
-  editor.querySelectorAll<HTMLImageElement>("img[data-notebook-asset-id]").forEach((image) => {
-    const assetId = image.dataset.notebookAssetId;
-    const asset = assetId ? assetsById.get(assetId) : undefined;
-
-    if (!asset) {
-      return;
-    }
-
-    image.src = `data:${asset.mimeType};base64,${asset.dataBase64}`;
-  });
 }
 
 function findClosestTableCell(node: Node | null, editor: HTMLElement): HTMLTableCellElement | null {

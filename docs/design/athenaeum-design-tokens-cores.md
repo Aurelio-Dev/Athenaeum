@@ -39,6 +39,13 @@
 > persistido. A renderização KaTeX mantém `displayMode: true`,
 > `throwOnError: false` e `trust: false`; inserção, remoção, seleção, autosave,
 > paste e toolbar contextual permanecem no editor.
+>
+> **Update Fase 3E:** helpers DOM de `Figura/Imagem` foram isolados em
+> `notebookEditorFigureDom.ts`. A hidratação runtime de
+> `img[data-notebook-asset-id]` e a remoção do `src` antes da serialização
+> seguem preservando o HTML salvo sem `data:image`, mantendo no editor os fluxos
+> de clipboard, seletor de arquivo, `saveNotebookAsset`, `loadNotebookAssets`,
+> seleção, autosave, paste e toolbars.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
