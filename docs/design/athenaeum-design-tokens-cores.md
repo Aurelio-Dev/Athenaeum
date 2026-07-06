@@ -30,6 +30,15 @@
 > interna (`data-callout-icon` e `data-callout-content`) seguem com os mesmos
 > atributos e HTML persistido. Inserção, remoção, seleção, autosave, paste e
 > toolbar contextual permanecem no editor.
+>
+> **Update Fase 3D:** helpers DOM de `Equação` foram isolados em
+> `notebookEditorEquationDom.ts`. A detecção de
+> `data-athenaeum-block="equation"`, a fonte `data-equation-source`, o preview
+> `data-equation-preview`, a normalização de blocos incompletos e a limpeza do
+> HTML renderizado antes da serialização seguem com os mesmos atributos e HTML
+> persistido. A renderização KaTeX mantém `displayMode: true`,
+> `throwOnError: false` e `trust: false`; inserção, remoção, seleção, autosave,
+> paste e toolbar contextual permanecem no editor.
 
 > **Update técnico 05/07/2026:** revisão de regressões da categoria `Inserir`
 > no editor de Cadernos. Blocos ricos vazios (`Tabela`, `Callout`, `Diagrama`,
