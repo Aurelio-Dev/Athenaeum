@@ -613,6 +613,7 @@ export type NotebookInfo = {
   title: string;
   collectionId: string;
   collectionName: string;
+  favorite: boolean;
   readingStatus: NotebookReadingStatus;
   authorDiscipline: string;
   description: string;
@@ -756,6 +757,7 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
       id: number;
       title: string;
       collection_id: string;
+      favorite: number;
       reading_status: NotebookReadingStatus;
       author_discipline: string;
       description: string;
@@ -768,6 +770,7 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
        notebooks.id,
        notebooks.title,
        notebooks.collection_id,
+       notebooks.favorite,
        notebooks.reading_status,
        notebooks.author_discipline,
        notebooks.description,
@@ -795,6 +798,7 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
     title: row.title,
     collectionId: row.collection_id,
     collectionName: row.collection_name,
+    favorite: row.favorite === 1,
     readingStatus: row.reading_status,
     authorDiscipline: row.author_discipline,
     description: row.description,

@@ -1,5 +1,19 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 07/07/2026 — Caderno, painel Detalhes e toolbar do editor:**
+> a rodada de UI do Caderno deixou a sidebar `Detalhes` mais robusta, com
+> status de leitura visual, descrição, campo de autor/disciplina reposicionado,
+> `+ Tag` no mesmo padrão do painel de documentos, menu `Mais opções` fixo no
+> rodapé e botão de opções também no cabeçalho. O menu ganhou ações reais para
+> renomear, mover para coleção, fixar nos favoritos, contagem detalhada e mover
+> para a lixeira, mantendo placeholders desabilitados onde ainda não há lógica.
+> O editor também reorganizou a toolbar: `Link`, `Anexar` e `PDF` ficaram como
+> botões diretos; `Inserir` concentra Tabela, Callout, Imagem, Equação,
+> Separador e Diagramas; `Layout` concentra Alinhamento e Espaçamento; e `...`
+> ficou restrito a manutenção de formatação (`Limpar formatação` e `Remover
+> link`). Não houve alteração de tokens de cor, paleta de tags, tipografia,
+> tema claro/escuro ou formato HTML persistido.
+>
 > **Changelog 06/07/2026 — Tela inicial e painel Detalhes:** a rodada de UI
 > da Home ajustou tokens de texto e previews sem mudar o accent principal nem
 > a paleta de tags. `sidebar-text` passou a usar `#2C1810` no modo claro e

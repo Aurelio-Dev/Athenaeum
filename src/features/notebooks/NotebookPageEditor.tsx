@@ -118,6 +118,14 @@ type ActiveDiagramControls = {
 };
 
 export type NotebookSpacingMode = "compact" | "normal" | "comfortable" | "wide";
+type AlignmentCommand = "justifyLeft" | "justifyCenter" | "justifyRight" | "justifyFull";
+
+const alignmentOptions: Array<{ command: AlignmentCommand; label: string }> = [
+  { command: "justifyLeft", label: "Alinhar à esquerda" },
+  { command: "justifyCenter", label: "Centralizar" },
+  { command: "justifyRight", label: "Alinhar à direita" },
+  { command: "justifyFull", label: "Justificar" },
+];
 
 export const notebookSpacingOptions: Array<{ value: NotebookSpacingMode; label: string }> = [
   { value: "compact", label: "Compacto" },
@@ -132,6 +140,8 @@ const notebookSpacingConfig: Record<NotebookSpacingMode, { lineHeight: number; p
   comfortable: { lineHeight: 1.85, paragraphGap: "1.8rem" },
   wide: { lineHeight: 2, paragraphGap: "2.2rem" },
 };
+
+const diagramInsertSubtypes: Array<Exclude<FigureSubtype, "image">> = ["diagram", "graph-diagram", "flowchart"];
 
 function getSupportedImageFilesFromClipboard(dataTransfer: DataTransfer): File[] {
   const files = Array.from(dataTransfer.files).filter((file) => supportedNotebookImageMimeTypes.has(file.type));
@@ -357,8 +367,11 @@ export function NotebookPageEditor({
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
+  const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isCiteMenuOpen, setIsCiteMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [activeAlignment, setActiveAlignment] = useState<AlignmentCommand | null>(null);
+  const [isSelectionInLink, setIsSelectionInLink] = useState(false);
   const [showAttachmentNotice, setShowAttachmentNotice] = useState(false);
   const [assetPasteError, setAssetPasteError] = useState<string | null>(null);
   const [activeTableCell, setActiveTableCell] = useState<ActiveTableCellControls | null>(null);
@@ -377,6 +390,8 @@ export function NotebookPageEditor({
 
     if (!isSelectionInEditor || !editor || !selection) {
       setActiveActions(new Set());
+      setActiveAlignment(null);
+      setIsSelectionInLink(false);
       setActiveTableCell(null);
       setActiveCallout(null);
       setActiveDiagram(null);
@@ -404,6 +419,20 @@ export function NotebookPageEditor({
 
     if (findEnclosingTag(selection.anchorNode, "code", editor)) {
       nextActive.add("code");
+    }
+
+    setIsSelectionInLink(Boolean(
+      findEnclosingTag(selection.anchorNode, "a", editor) || findEnclosingTag(selection.focusNode, "a", editor),
+    ));
+
+    if (document.queryCommandState("justifyCenter")) {
+      setActiveAlignment("justifyCenter");
+    } else if (document.queryCommandState("justifyRight")) {
+      setActiveAlignment("justifyRight");
+    } else if (document.queryCommandState("justifyFull")) {
+      setActiveAlignment("justifyFull");
+    } else {
+      setActiveAlignment("justifyLeft");
     }
 
     const tableCell = findClosestTableCell(selection.anchorNode, editor);
@@ -523,6 +552,18 @@ export function NotebookPageEditor({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsTextMenuOpen(false);
+        setIsInsertMenuOpen(false);
+        setIsLayoutMenuOpen(false);
+        setIsLinkPopoverOpen(false);
+        setIsCiteMenuOpen(false);
+        setIsMoreMenuOpen(false);
+        setShowAttachmentNotice(false);
+        setAssetPasteError(null);
+        return;
+      }
+
       if (event.key === "Control") {
         setIsCtrlPressed(true);
       }
@@ -549,7 +590,7 @@ export function NotebookPageEditor({
   }, []);
 
   useEffect(() => {
-    if (!isTextMenuOpen && !isInsertMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError) {
+    if (!isTextMenuOpen && !isInsertMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError) {
       return;
     }
 
@@ -560,6 +601,7 @@ export function NotebookPageEditor({
 
       setIsTextMenuOpen(false);
       setIsInsertMenuOpen(false);
+      setIsLayoutMenuOpen(false);
       setIsLinkPopoverOpen(false);
       setIsCiteMenuOpen(false);
       setIsMoreMenuOpen(false);
@@ -569,7 +611,7 @@ export function NotebookPageEditor({
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isTextMenuOpen, isInsertMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError]);
+  }, [isTextMenuOpen, isInsertMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError]);
 
   function isSelectionInsideEditor(selection: Selection | null) {
     const editor = editorRef.current;
@@ -678,6 +720,7 @@ export function NotebookPageEditor({
     insertHtml(html, { placeCursorInTrailingBlock: true });
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -788,6 +831,7 @@ export function NotebookPageEditor({
     saveCurrentRangeOrEditorEnd();
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -862,6 +906,7 @@ export function NotebookPageEditor({
     saveCurrentRangeOrEditorEnd();
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -1536,6 +1581,7 @@ export function NotebookPageEditor({
     setLinkUrl("");
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
     setShowAttachmentNotice(false);
@@ -1561,6 +1607,7 @@ export function NotebookPageEditor({
     saveCurrentRange();
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsMoreMenuOpen(false);
     setShowAttachmentNotice(false);
@@ -1582,24 +1629,67 @@ export function NotebookPageEditor({
     restoreSavedRange();
     insertHtml(`<span data-citation-document-id="${escapeHtml(document.id)}">${escapeHtml(citationText(document))}</span>`);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsCiteMenuOpen(false);
   }
 
-  function applyMoreCommand(command: "clear-formatting" | "unlink" | "separator") {
+  function openPdfPickerFromToolbar() {
+    saveCurrentRangeOrEditorEnd();
+    setIsTextMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
+    setIsLinkPopoverOpen(false);
+    setIsCiteMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setShowAttachmentNotice(false);
+    setAssetPasteError(null);
+    onOpenPdfPicker?.();
+  }
+
+  function insertSeparatorBlock() {
+    restoreSavedRangeOrEditorEnd();
+    document.execCommand("insertHorizontalRule", false);
+    emitChange();
+    syncActiveActions();
+    setIsTextMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  }
+
+  function applyMaintenanceCommand(command: "clear-formatting" | "unlink") {
     restoreSavedRange();
 
     if (command === "clear-formatting") {
       document.execCommand("removeFormat", false);
-    } else if (command === "unlink") {
-      document.execCommand("unlink", false);
     } else {
-      document.execCommand("insertHorizontalRule", false);
+      document.execCommand("unlink", false);
     }
 
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
     setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  }
+
+  function applyAlignmentCommand(command: AlignmentCommand) {
+    restoreSavedRangeOrEditorEnd();
+    document.execCommand(command, false);
+    emitChange();
+    syncActiveActions();
+    setIsTextMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  }
+
+  function applySpacingMode(mode: NotebookSpacingMode) {
+    onSpacingModeChange?.(mode);
+    setIsTextMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
 
@@ -1650,6 +1740,9 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
+    setIsMoreMenuOpen(false);
   }
 
   // Cola imagens suportadas como assets; se nao houver imagem real, mantem o
@@ -1743,6 +1836,275 @@ export function NotebookPageEditor({
     syncActiveActions();
   }
 
+  const toolbarButtonClassName = "inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-[13px] font-semibold text-text-primary transition hover:bg-surface-muted";
+  const toolbarIconButtonClassName = "inline-flex h-8 w-8 items-center justify-center rounded-md text-text-primary transition hover:bg-surface-muted";
+  const toolbarChipButtonClassName = "inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 text-xs font-semibold text-text-primary transition hover:bg-surface-muted";
+  const activeToolbarButtonClassName = "bg-primary-soft text-primary";
+  const toolbarSeparator = <span className="mx-1 h-6 w-px bg-border-subtle" aria-hidden="true" />;
+  const menuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg";
+  const compactMenuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-56 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg";
+  const menuSectionLabelClassName = "px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle";
+  const menuItemClassName = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
+  const plainMenuItemClassName = "block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
+  const disabledMenuItemClassName = "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary";
+  const activeMenuItemClassName = "bg-primary-soft text-primary";
+
+  const insertMenu = isInsertMenuOpen ? (
+    <div className={menuPanelClassName}>
+      <p className={menuSectionLabelClassName}>Inserir</p>
+      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertTableBlock}>
+        <TableIcon />
+        Tabela
+      </button>
+      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertCalloutBlock}>
+        <CalloutIcon />
+        Callout
+      </button>
+      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openLocalImagePicker}>
+        <FigureIcon />
+        Imagem
+      </button>
+      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertEquationBlock}>
+        <EquationIcon />
+        Equação
+      </button>
+      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertSeparatorBlock}>
+        <span className="h-[15px] w-[15px] border-t border-current" aria-hidden="true" />
+        Separador
+      </button>
+      <div className="my-1 h-px bg-border-subtle" />
+      <p className={menuSectionLabelClassName}>Diagramas</p>
+      {diagramInsertSubtypes.map((subtype) => {
+        const diagramKind = diagramKindFromFigureSubtype(subtype);
+
+        if (!diagramKind) {
+          return null;
+        }
+
+        return (
+          <button
+            key={subtype}
+            type="button"
+            className={menuItemClassName}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => insertDiagramBlock(diagramKind)}
+          >
+            <FigureIcon />
+            {figureSubtypeLabels[subtype]}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
+  const layoutMenu = isLayoutMenuOpen ? (
+    <div className={menuPanelClassName}>
+      <p className={menuSectionLabelClassName}>Layout</p>
+      <p className={menuSectionLabelClassName}>Alinhamento</p>
+      {alignmentOptions.map((option) => {
+        const isActive = activeAlignment === option.command;
+
+        return (
+          <button
+            key={option.command}
+            type="button"
+            role="menuitemradio"
+            aria-checked={isActive}
+            className={`${plainMenuItemClassName} ${isActive ? activeMenuItemClassName : ""}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applyAlignmentCommand(option.command)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+      <div className="my-1 h-px bg-border-subtle" />
+      <p className={menuSectionLabelClassName}>Espaçamento</p>
+      <div className="grid grid-cols-2 gap-1">
+        {notebookSpacingOptions.map((option) => {
+          const isActive = spacingMode === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={isActive}
+              className={`rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
+                isActive ? activeMenuItemClassName : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+              }`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applySpacingMode(option.value)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
+  const moreMenu = isMoreMenuOpen ? (
+    <div className={compactMenuPanelClassName}>
+      <button
+        type="button"
+        className={plainMenuItemClassName}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyMaintenanceCommand("clear-formatting")}
+      >
+        Limpar formatação
+      </button>
+      <button
+        type="button"
+        disabled={!isSelectionInLink}
+        className={`${plainMenuItemClassName} ${disabledMenuItemClassName}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyMaintenanceCommand("unlink")}
+      >
+        Remover link
+      </button>
+    </div>
+  ) : null;
+
+  const citeToolbarButton = (
+    <button
+      type="button"
+      title="Inserir citação"
+      aria-label="Inserir citação"
+      className={toolbarChipButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openCiteMenu}
+    >
+      <CitationIcon />
+      Cite
+    </button>
+  );
+
+  const linkToolbarButton = (
+    <button
+      type="button"
+      title="Link"
+      aria-label="Link"
+      className={toolbarIconButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openLinkPopover}
+    >
+      <LinkIcon />
+    </button>
+  );
+
+  const attachmentToolbarButton = (
+    <button
+      type="button"
+      title="Anexar"
+      aria-label="Anexar"
+      className={toolbarIconButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openLocalAttachmentPicker}
+    >
+      <AttachmentIcon />
+    </button>
+  );
+
+  const pdfToolbarButton = (
+    <button
+      type="button"
+      title="PDF"
+      aria-label="PDF"
+      className={toolbarChipButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openPdfPickerFromToolbar}
+    >
+      <PdfToolbarIcon />
+      PDF
+    </button>
+  );
+
+  const insertMenuButton = (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isInsertMenuOpen}
+        className={toolbarChipButtonClassName}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveCurrentRange();
+        }}
+        onClick={() => {
+          setIsTextMenuOpen(false);
+          setIsLayoutMenuOpen(false);
+          setIsLinkPopoverOpen(false);
+          setIsCiteMenuOpen(false);
+          setIsMoreMenuOpen(false);
+          setShowAttachmentNotice(false);
+          setIsInsertMenuOpen((current) => !current);
+        }}
+      >
+        Inserir
+        <ChevronDownIcon />
+      </button>
+      {insertMenu}
+    </div>
+  );
+
+  const layoutMenuButton = (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isLayoutMenuOpen}
+        className={toolbarChipButtonClassName}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveCurrentRange();
+        }}
+        onClick={() => {
+          setIsTextMenuOpen(false);
+          setIsInsertMenuOpen(false);
+          setIsLinkPopoverOpen(false);
+          setIsCiteMenuOpen(false);
+          setIsMoreMenuOpen(false);
+          setShowAttachmentNotice(false);
+          setIsLayoutMenuOpen((current) => !current);
+        }}
+      >
+        Layout
+        <ChevronDownIcon />
+      </button>
+      {layoutMenu}
+    </div>
+  );
+
+  const moreMenuButton = (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        title="Mais opções"
+        aria-label="Mais opções"
+        aria-haspopup="menu"
+        aria-expanded={isMoreMenuOpen}
+        className={toolbarIconButtonClassName}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveCurrentRange();
+        }}
+        onClick={() => {
+          setIsTextMenuOpen(false);
+          setIsInsertMenuOpen(false);
+          setIsLayoutMenuOpen(false);
+          setIsLinkPopoverOpen(false);
+          setIsCiteMenuOpen(false);
+          setShowAttachmentNotice(false);
+          setIsMoreMenuOpen((current) => !current);
+        }}
+      >
+        <MoreIcon />
+      </button>
+      {moreMenu}
+    </div>
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <input
@@ -1763,8 +2125,8 @@ export function NotebookPageEditor({
       <div className="shrink-0 border-b border-border-subtle py-2">
         <div
           ref={toolbarRef}
-          className={`relative flex h-9 items-center overflow-visible border border-border-subtle bg-[var(--card)] shadow-sm ${
-            isFocusMode ? "mx-auto w-fit max-w-full justify-center gap-1 rounded-full px-2" : `gap-1 rounded-md pr-2 ${contentInsetClassName}`
+          className={`relative flex h-11 items-center overflow-visible border border-border-subtle bg-[var(--card)] shadow-sm ${
+            isFocusMode ? "mx-auto w-fit max-w-full justify-center gap-1 rounded-lg px-2" : `gap-1 rounded-lg pr-2 ${contentInsetClassName}`
           }`}
         >
           {isFocusMode ? (
@@ -1773,13 +2135,14 @@ export function NotebookPageEditor({
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded={isTextMenuOpen}
-                className="inline-flex h-7 items-center rounded-md px-3 text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
+                className={toolbarButtonClassName}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   saveCurrentRange();
                 }}
                 onClick={() => {
                   setIsInsertMenuOpen(false);
+                  setIsLayoutMenuOpen(false);
                   setIsLinkPopoverOpen(false);
                   setIsCiteMenuOpen(false);
                   setIsMoreMenuOpen(false);
@@ -1789,133 +2152,50 @@ export function NotebookPageEditor({
               >
                 Texto
               </button>
-              <button
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={isInsertMenuOpen}
-                className="inline-flex h-7 items-center rounded-md px-3 text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  saveCurrentRange();
-                }}
-                onClick={() => {
-                  setIsTextMenuOpen(false);
-                  setIsLinkPopoverOpen(false);
-                  setIsCiteMenuOpen(false);
-                  setIsMoreMenuOpen(false);
-                  setShowAttachmentNotice(false);
-                  setIsInsertMenuOpen((current) => !current);
-                }}
-              >
-                Inserir
-                <ChevronDownIcon />
-              </button>
-              <button
-                type="button"
-                title="Mais opções"
-                aria-label="Mais opções"
-                aria-haspopup="menu"
-                aria-expanded={isMoreMenuOpen}
-                className="inline-flex h-7 w-8 items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  saveCurrentRange();
-                }}
-                onClick={() => {
-                  setIsTextMenuOpen(false);
-                  setIsInsertMenuOpen(false);
-                  setIsLinkPopoverOpen(false);
-                  setIsCiteMenuOpen(false);
-                  setShowAttachmentNotice(false);
-                  setIsMoreMenuOpen((current) => !current);
-                }}
-              >
-                <MoreIcon />
-              </button>
+              {toolbarSeparator}
+              {citeToolbarButton}
+              {linkToolbarButton}
+              {attachmentToolbarButton}
+              {pdfToolbarButton}
+              {toolbarSeparator}
+              {insertMenuButton}
+              {layoutMenuButton}
+              {moreMenuButton}
             </>
           ) : (
             <>
-          {toolbarButtonGroups.map((group, groupIndex) => (
-            <div key={groupIndex} className="flex items-center gap-1">
-              {groupIndex > 0 ? <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" /> : null}
-              {group.map((button) => (
-                <button
-                  key={button.action}
-                  type="button"
-                  title={button.title}
-                  aria-label={button.title}
-                  aria-pressed={activeActions.has(button.action)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => applyAction(button.action)}
-                  className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
-                    activeActions.has(button.action)
-                      ? "bg-primary-soft text-primary"
-                      : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-                  }`}
-                >
-                  {button.icon}
-                </button>
+              {toolbarButtonGroups.map((group, groupIndex) => (
+                <div key={groupIndex} className="flex items-center gap-1">
+                  {groupIndex > 0 ? <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" /> : null}
+                  {group.map((button) => (
+                    <button
+                      key={button.action}
+                      type="button"
+                      title={button.title}
+                      aria-label={button.title}
+                      aria-pressed={activeActions.has(button.action)}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyAction(button.action)}
+                      className={`${toolbarButtonClassName} ${activeActions.has(button.action) ? activeToolbarButtonClassName : ""}`}
+                    >
+                      {button.icon}
+                    </button>
+                  ))}
+                </div>
               ))}
-            </div>
-          ))}
 
-          <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" />
-          <button
-            type="button"
-            title="Inserir citação"
-            aria-label="Inserir citação"
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border-subtle px-2 text-[11px] font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={openCiteMenu}
-          >
-            <CitationIcon />
-            Cite
-          </button>
+              <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" />
+              {citeToolbarButton}
 
-          <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" />
-          <button
-            type="button"
-            title="Inserir"
-            aria-label="Inserir"
-            aria-haspopup="menu"
-            aria-expanded={isInsertMenuOpen}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border-subtle px-2 text-[11px] font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              saveCurrentRange();
-            }}
-            onClick={() => {
-              setIsTextMenuOpen(false);
-              setIsLinkPopoverOpen(false);
-              setIsCiteMenuOpen(false);
-              setIsMoreMenuOpen(false);
-              setShowAttachmentNotice(false);
-              setIsInsertMenuOpen((current) => !current);
-            }}
-          >
-            Inserir
-            <ChevronDownIcon />
-          </button>
+              <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" />
+              {linkToolbarButton}
+              {attachmentToolbarButton}
+              {pdfToolbarButton}
 
-          <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" />
-          <button
-            type="button"
-            title="Mais opções"
-            aria-label="Mais opções"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              saveCurrentRange();
-            }}
-            onClick={() => {
-              setIsLinkPopoverOpen(false);
-              setIsCiteMenuOpen(false);
-              setShowAttachmentNotice(false);
-              setIsMoreMenuOpen((current) => !current);
-            }}
-          >
-            <MoreIcon />
-          </button>
+              <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden="true" />
+              {insertMenuButton}
+              {layoutMenuButton}
+              {moreMenuButton}
             </>
           )}
 
@@ -1941,131 +2221,6 @@ export function NotebookPageEditor({
                   </button>
                 ))}
               </div>
-              <div className="my-2 h-px bg-border-subtle" />
-              <p className="px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle">Espaçamento</p>
-              <div className="grid grid-cols-2 gap-1">
-                {notebookSpacingOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={spacingMode === option.value}
-                    className={`rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
-                      spacingMode === option.value
-                        ? "bg-primary-soft text-primary"
-                        : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-                    }`}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      onSpacingModeChange?.(option.value);
-                      setIsTextMenuOpen(false);
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {isInsertMenuOpen ? (
-            <div className={`absolute top-[calc(100%+6px)] z-40 max-h-[26rem] w-72 overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg ${
-              isFocusMode ? "left-1/2 -translate-x-1/2" : "right-8"
-            }`}>
-              <p className="px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle">Inserir</p>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={openLinkPopover}
-              >
-                <LinkIcon />
-                Link
-              </button>
-              {isFocusMode ? (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={openCiteMenu}
-                >
-                  <CitationIcon />
-                  Citação
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={insertTableBlock}
-              >
-                <TableIcon />
-                Tabela
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={insertCalloutBlock}
-              >
-                <CalloutIcon />
-                Callout
-              </button>
-              <div className="my-1 h-px bg-border-subtle" />
-              <p className="px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle">Figura</p>
-              {(Object.keys(figureSubtypeLabels) as FigureSubtype[]).map((subtype) => (
-                <button
-                  key={subtype}
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    if (subtype === "image") {
-                      openLocalImagePicker();
-                      return;
-                    }
-
-                    const diagramKind = diagramKindFromFigureSubtype(subtype);
-                    if (diagramKind) {
-                      insertDiagramBlock(diagramKind);
-                    }
-                  }}
-                >
-                  <FigureIcon />
-                  {figureSubtypeLabels[subtype]}
-                </button>
-              ))}
-              <div className="my-1 h-px bg-border-subtle" />
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={insertEquationBlock}
-              >
-                <EquationIcon />
-                Equação
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  setIsInsertMenuOpen(false);
-                  onOpenPdfPicker?.();
-                }}
-              >
-                <PdfToolbarIcon />
-                PDF
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={openLocalAttachmentPicker}
-              >
-                <AttachmentIcon />
-                Arquivo
-              </button>
             </div>
           ) : null}
 
@@ -2132,48 +2287,6 @@ export function NotebookPageEditor({
             </div>
           ) : null}
 
-          {isMoreMenuOpen ? (
-            <div className={`absolute top-[calc(100%+6px)] z-40 rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg ${
-              isFocusMode ? "left-1/2 -translate-x-1/2" : "right-0"
-            } ${isFocusMode ? "w-44" : "w-64"}`}>
-              <button type="button" className="block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary hover:bg-surface-muted hover:text-text-primary" onClick={() => applyMoreCommand("clear-formatting")}>
-                Limpar formatação
-              </button>
-              <button type="button" className="block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary hover:bg-surface-muted hover:text-text-primary" onClick={() => applyMoreCommand("unlink")}>
-                Remover link
-              </button>
-              <button type="button" className="block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary hover:bg-surface-muted hover:text-text-primary" onClick={() => applyMoreCommand("separator")}>
-                Inserir separador
-              </button>
-              {!isFocusMode ? (
-                <>
-                  <div className="my-1 h-px bg-border-subtle" />
-                  <p className="px-3 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle">Espaçamento</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {notebookSpacingOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={spacingMode === option.value}
-                        className={`rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
-                          spacingMode === option.value
-                            ? "bg-primary-soft text-primary"
-                            : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-                        }`}
-                        onClick={() => {
-                          onSpacingModeChange?.(option.value);
-                          setIsMoreMenuOpen(false);
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
 

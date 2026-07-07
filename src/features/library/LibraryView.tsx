@@ -226,6 +226,7 @@ export function LibraryView() {
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
+  const [initialMaximizedNotebookIds, setInitialMaximizedNotebookIds] = useState<Set<number>>(() => new Set());
   const libraryAreaContextMenu = useContextMenu();
   const hasAutoSelectedFirstDocumentRef = useRef(false);
 
@@ -353,6 +354,7 @@ export function LibraryView() {
     }
 
     const notebook = await createPersistedNotebook(activeCollection.id);
+    setInitialMaximizedNotebookIds((currentIds) => new Set(currentIds).add(notebook.id));
     await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
     // Centralizado (nao cascata): o layout de 3 colunas e bem mais largo
     // (1680px) que o antigo painel de coluna unica — a cascata de canto
@@ -949,8 +951,20 @@ export function LibraryView() {
             documents={allDocuments}
             availableTags={availableTags}
             onAvailableTagsChange={updateAvailableTags}
-            onClose={() => closeFloatingPanel(floatingPanel.id)}
+            initialMaximized={initialMaximizedNotebookIds.has(Number(floatingPanel.entityId))}
+            onClose={() => {
+              closeFloatingPanel(floatingPanel.id);
+              setInitialMaximizedNotebookIds((currentIds) => {
+                const nextIds = new Set(currentIds);
+                nextIds.delete(Number(floatingPanel.entityId));
+                return nextIds;
+              });
+            }}
             onNotebookChanged={() => void queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] })}
+            onNotebookMovedToTrash={() => {
+              void queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
+              void queryClient.invalidateQueries({ queryKey: libraryQueryKeys.trashCount() });
+            }}
           />
         ))}
 

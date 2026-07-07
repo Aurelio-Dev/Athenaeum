@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
+import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
 import { TrashIcon } from "../../components/ui/SharedIcons";
 import { SectionLabel } from "../../components/ui/SectionLabel";
 import { TagBadge } from "../../components/TagBadge";
-import { TagInput } from "../../components/ui/TagInput";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
 import {
@@ -16,8 +17,10 @@ import {
   listNotebookLinkedDocuments,
   listNotebookPages,
   listNotebookTags,
+  moveNotebookToTrash as movePersistedNotebookToTrash,
   saveNotebookPage,
   saveNotebookTags,
+  setNotebookFavorite,
   setSetting,
   unlinkDocumentFromNotebook,
   updateNotebookInfo,
@@ -54,7 +57,37 @@ type EditorStats = {
   characters: number;
 };
 
+type NotebookSaveStatus = "saved" | "dirty" | "saving" | "error";
+
 const editorZoomOptions = [75, 90, 100, 110, 125, 150] as const;
+
+function getNotebookSaveStatusLabel(status: NotebookSaveStatus) {
+  if (status === "dirty") {
+    return "Alterações não salvas";
+  }
+
+  if (status === "saving") {
+    return "Salvando...";
+  }
+
+  if (status === "error") {
+    return "Erro ao salvar";
+  }
+
+  return "Salvo agora";
+}
+
+function getReadingStatusPercent(status: NotebookReadingStatus) {
+  if (status === "completed") {
+    return 100;
+  }
+
+  if (status === "in-progress") {
+    return 65;
+  }
+
+  return 0;
+}
 
 function parseNotebookSpacingMode(value: string | null, fallback: NotebookSpacingMode) {
   return notebookSpacingOptions.some((option) => option.value === value) ? (value as NotebookSpacingMode) : fallback;
@@ -205,6 +238,134 @@ function PdfIcon() {
   );
 }
 
+function AttachIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m21.4 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l8.5-8.5a4 4 0 0 1 5.7 5.7l-8.6 8.5a2 2 0 0 1-2.8-2.8l7.8-7.8" />
+    </svg>
+  );
+}
+
+function OpenBookIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 7v14" />
+      <path d="M4 5a7 7 0 0 1 8 2 7 7 0 0 1 8-2v14a7 7 0 0 0-8 2 7 7 0 0 0-8-2z" />
+    </svg>
+  );
+}
+
+function MoreVerticalIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </svg>
+  );
+}
+
+function MenuGlyph({
+  name,
+}: {
+  name: "edit" | "folder" | "copy" | "pin" | "export" | "print" | "link" | "history" | "stats";
+}) {
+  const commonProps = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  if (name === "edit") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+      </svg>
+    );
+  }
+
+  if (name === "folder") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3 7a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+      </svg>
+    );
+  }
+
+  if (name === "copy") {
+    return (
+      <svg {...commonProps}>
+        <rect x="8" y="8" width="12" height="12" rx="2" />
+        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+      </svg>
+    );
+  }
+
+  if (name === "pin") {
+    return (
+      <svg {...commonProps}>
+        <path d="m16 3 5 5" />
+        <path d="M12 7 5 14l5 1 1 5 7-7" />
+      </svg>
+    );
+  }
+
+  if (name === "export") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 3v12" />
+        <path d="m7 8 5-5 5 5" />
+        <path d="M5 21h14" />
+      </svg>
+    );
+  }
+
+  if (name === "print") {
+    return (
+      <svg {...commonProps}>
+        <path d="M6 9V3h12v6" />
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+        <path d="M6 14h12v7H6z" />
+      </svg>
+    );
+  }
+
+  if (name === "link") {
+    return (
+      <svg {...commonProps}>
+        <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1 1" />
+        <path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1-1" />
+      </svg>
+    );
+  }
+
+  if (name === "history") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3 12a9 9 0 1 0 3-6.7" />
+        <path d="M3 4v5h5" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...commonProps}>
+      <path d="M4 19V5" />
+      <path d="M9 19v-8" />
+      <path d="M14 19V9" />
+      <path d="M19 19V4" />
+    </svg>
+  );
+}
+
 // Icone do botao que mostra/esconde a coluna de Paginas (esquerda): retangulo
 // do painel com a coluna ESQUERDA destacada. Espelho do DetailsToggleIcon.
 function PagesToggleIcon() {
@@ -297,6 +458,29 @@ const notebookReadingStatusOptions: Array<{ value: NotebookReadingStatus; label:
   { value: "completed", label: "Concluído" },
 ];
 
+const notebookSelectOptionClassName = "bg-surface-panel text-text-primary";
+const notebookSelectOptionStyle = {
+  backgroundColor: "var(--color-surface-panel)",
+  color: "var(--color-text-primary)",
+};
+const notebookOptionsMenuWidth = 220;
+const notebookOptionsMenuEstimatedHeight = 390;
+const notebookOptionsMenuViewportMargin = 8;
+
+function getNotebookOptionsMenuPosition(rect: DOMRect, placement: "header" | "footer") {
+  const left = Math.max(
+    notebookOptionsMenuViewportMargin,
+    Math.min(rect.right - notebookOptionsMenuWidth, window.innerWidth - notebookOptionsMenuWidth - notebookOptionsMenuViewportMargin),
+  );
+  const preferredTop = placement === "footer" ? rect.top - notebookOptionsMenuEstimatedHeight - 6 : rect.bottom + 6;
+  const top = Math.max(
+    notebookOptionsMenuViewportMargin,
+    Math.min(preferredTop, window.innerHeight - notebookOptionsMenuEstimatedHeight - notebookOptionsMenuViewportMargin),
+  );
+
+  return { left, top };
+}
+
 // Wrapper generico (rotulo + conteudo) para os campos da coluna de Detalhes.
 // Definido aqui (Parte 2) mas so ganha uso real na Parte 3, quando os campos
 // de Colecao/Tags/PDFs vinculados/Descricao forem implementados de verdade.
@@ -319,11 +503,23 @@ type NotebookPanelProps = {
   availableTags: SubjectTag[];
   onAvailableTagsChange: (tags: SubjectTag[]) => void;
   onClose: () => void;
+  initialMaximized?: boolean;
   // Avisa a listagem (contagem de paginas / "Editado ha X") apos cada save.
   onNotebookChanged: () => void;
+  onNotebookMovedToTrash?: () => void;
 };
 
-export function NotebookPanel({ panel, collections, documents, availableTags, onAvailableTagsChange, onClose, onNotebookChanged }: NotebookPanelProps) {
+export function NotebookPanel({
+  panel,
+  collections,
+  documents,
+  availableTags,
+  onAvailableTagsChange,
+  onClose,
+  initialMaximized = false,
+  onNotebookChanged,
+  onNotebookMovedToTrash,
+}: NotebookPanelProps) {
   const notebookId = Number(panel.entityId);
   const { panels, movePanel } = useFloatingPanels();
 
@@ -334,8 +530,9 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
   const [loadError, setLoadError] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [contextPageId, setContextPageId] = useState<number | null>(null);
-  const [panelSize, setPanelSize] = useState(getInitialPanelSize);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const initialPanelSizeRef = useRef(getInitialPanelSize());
+  const [panelSize, setPanelSize] = useState(() => (initialMaximized ? getMaximizedPanelSize() : initialPanelSizeRef.current));
+  const [isMaximized, setIsMaximized] = useState(initialMaximized);
   const [pageSearchTerm, setPageSearchTerm] = useState("");
   const pageContextMenu = useContextMenu();
   const [draftTitle, setDraftTitle] = useState("");
@@ -343,6 +540,8 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
   const [editorZoomPercent, setEditorZoomPercent] = useState(100);
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<NotebookSaveStatus>("saved");
+  const [isStatsDialogOpen, setIsStatsDialogOpen] = useState(false);
   const [normalSpacingMode, setNormalSpacingMode] = useState<NotebookSpacingMode>("normal");
   const [focusSpacingMode, setFocusSpacingMode] = useState<NotebookSpacingMode>("comfortable");
   const [openedAt] = useState(() => new Date().toISOString());
@@ -350,7 +549,8 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     position: { x: number; y: number };
     size: { width: number; height: number };
     collapsed: boolean;
-  } | null>(null);
+  } | null>(initialMaximized ? { position: panel.position, size: initialPanelSizeRef.current, collapsed: false } : null);
+  const hasAppliedInitialMaximizedRef = useRef(initialMaximized);
 
   // Coluna de Paginas (esquerda): sempre visivel por padrao. Diferente da de
   // Detalhes, ela NUNCA colapsa sozinha pelo breakpoint (tem prioridade de
@@ -381,14 +581,14 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
   const infoDraftAuthorDisciplineRef = useRef("");
   const isInfoDirtyRef = useRef(false);
 
-  // Tags do caderno + PDFs vinculados (colunas de Detalhes). O boundaryRef e a
-  // propria coluna: o dropdown do TagInput so fecha ao clicar FORA dela (rolar
-  // dentro nao fecha).
+  // Tags do caderno + PDFs vinculados na coluna de Detalhes.
   const [notebookTags, setNotebookTags] = useState<SubjectTag[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
+  const notebookOptionsContextMenu = useContextMenu();
   const detailsColumnRef = useRef<HTMLElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
   const notebookTagDropdownRef = useRef<HTMLDivElement | null>(null);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -410,6 +610,7 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     draftContentRef.current = page.content;
     setEditorStats(getEditorStatsFromHtml(page.content));
     isDirtyRef.current = false;
+    setSaveStatus("saved");
   }
 
   useEffect(() => {
@@ -507,15 +708,18 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     const title = trimmedTitle.length > 0 ? trimmedTitle : null;
     const content = draftContentRef.current;
     isDirtyRef.current = false;
+    setSaveStatus("saving");
 
     try {
       await saveNotebookPage(pageId, { title, content });
       setPages((currentPages) => currentPages.map((page) => (page.id === pageId ? { ...page, title, content } : page)));
       setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: new Date().toISOString() } : currentInfo));
+      setSaveStatus("saved");
       onNotebookChangedRef.current();
     } catch (error) {
       console.warn("Nao foi possivel salvar a pagina do caderno.", error);
       isDirtyRef.current = true;
+      setSaveStatus("error");
     }
   }, []);
 
@@ -535,6 +739,7 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     }
 
     isInfoDirtyRef.current = false;
+    setSaveStatus("saving");
 
     try {
       const updatedInfo = await updateNotebookInfo(notebookId, {
@@ -556,20 +761,25 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
       infoDraftCollectionIdRef.current = updatedInfo.collectionId;
       infoDraftReadingStatusRef.current = updatedInfo.readingStatus;
       infoDraftAuthorDisciplineRef.current = updatedInfo.authorDiscipline;
+      setSaveStatus("saved");
       onNotebookChangedRef.current();
     } catch (error) {
       console.warn("Nao foi possivel salvar as informacoes do caderno.", error);
       isInfoDirtyRef.current = true;
+      setSaveStatus("error");
     }
   }, [collections, notebookId, notebookInfo?.collectionId]);
 
   const handleTagsChange = useCallback(
     async (nextTags: SubjectTag[]) => {
       setNotebookTags(nextTags); // otimista: a UI reflete na hora
+      setSaveStatus("saving");
       try {
         await saveNotebookTags(notebookId, nextTags);
+        setSaveStatus("saved");
       } catch (error) {
         console.warn("Nao foi possivel salvar as tags do caderno.", error);
+        setSaveStatus("error");
       }
     },
     [notebookId],
@@ -592,11 +802,14 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
         ]);
       }
 
+      setSaveStatus("saving");
       try {
         await linkDocumentToNotebook(notebookId, documentId);
+        setSaveStatus("saved");
       } catch (error) {
         console.warn("Nao foi possivel vincular o documento.", error);
         setLinkedDocuments((current) => current.filter((document) => document.id !== documentId));
+        setSaveStatus("error");
       }
     },
     [documents, linkedDocuments, notebookId],
@@ -605,11 +818,14 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
   const handleUnlinkDocument = useCallback(
     async (documentId: string) => {
       setLinkedDocuments((current) => current.filter((document) => document.id !== documentId));
+      setSaveStatus("saving");
 
       try {
         await unlinkDocumentFromNotebook(notebookId, documentId);
+        setSaveStatus("saved");
       } catch (error) {
         console.warn("Nao foi possivel desvincular o documento.", error);
+        setSaveStatus("error");
         // Recarrega do banco para reconciliar (mais seguro que remontar o item
         // otimisticamente removido a partir de um estado ja defasado).
         try {
@@ -621,6 +837,77 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     },
     [notebookId],
   );
+
+  function focusNotebookTitle() {
+    notebookOptionsContextMenu.close();
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }
+
+  async function moveNotebookFromOptions(collectionId: string) {
+    if (collectionId === infoDraftCollectionIdRef.current) {
+      notebookOptionsContextMenu.close();
+      return;
+    }
+
+    setInfoDraftCollectionId(collectionId);
+    infoDraftCollectionIdRef.current = collectionId;
+    isInfoDirtyRef.current = true;
+    setSaveStatus("dirty");
+    notebookOptionsContextMenu.close();
+    await saveNotebookInfoDraft();
+  }
+
+  async function pinNotebookFavorite() {
+    notebookOptionsContextMenu.close();
+
+    if (notebookInfo?.favorite) {
+      return;
+    }
+
+    setSaveStatus("saving");
+    try {
+      await setNotebookFavorite(notebookId, true);
+      setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, favorite: true } : currentInfo));
+      setSaveStatus("saved");
+      onNotebookChangedRef.current();
+    } catch (error) {
+      console.warn("Nao foi possivel fixar o caderno nos favoritos.", error);
+      setSaveStatus("error");
+    }
+  }
+
+  function openDetailedCount() {
+    notebookOptionsContextMenu.close();
+    setIsStatsDialogOpen(true);
+  }
+
+  function openNotebookOptionsMenu(event: ReactMouseEvent<HTMLElement>, placement: "header" | "footer") {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = getNotebookOptionsMenuPosition(rect, placement);
+    notebookOptionsContextMenu.openAt(position.left, position.top);
+  }
+
+  async function moveNotebookToTrashFromOptions() {
+    notebookOptionsContextMenu.close();
+    await saveNotebookInfoDraft();
+    await saveActivePage();
+
+    setSaveStatus("saving");
+    try {
+      await movePersistedNotebookToTrash(notebookId);
+      setSaveStatus("saved");
+      onNotebookMovedToTrash?.();
+      onNotebookChangedRef.current();
+      onClose();
+    } catch (error) {
+      console.warn("Nao foi possivel mover o caderno para a lixeira.", error);
+      setSaveStatus("error");
+    }
+  }
 
   async function switchToPage(pageId: number) {
     if (pageId === activePageIdRef.current) {
@@ -640,13 +927,16 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     await saveActivePage();
 
     try {
+      setSaveStatus("saving");
       const page = await createNotebookPage(notebookId);
       setPages((currentPages) => [...currentPages, page]);
       setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: page.createdAt } : currentInfo));
       setActivePageDrafts(page);
+      setSaveStatus("saved");
       onNotebookChangedRef.current();
     } catch (error) {
       console.warn("Nao foi possivel criar a pagina.", error);
+      setSaveStatus("error");
     }
   }
 
@@ -665,6 +955,7 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
     }
 
     try {
+      setSaveStatus("saving");
       await deleteNotebookPage(notebookId, page.id);
 
       let nextPages = await listNotebookPages(notebookId);
@@ -681,9 +972,11 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
       }
 
       setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: new Date().toISOString() } : currentInfo));
+      setSaveStatus("saved");
       onNotebookChangedRef.current();
     } catch (error) {
       console.warn("Nao foi possivel excluir a pagina do caderno.", error);
+      setSaveStatus("error");
     }
   }
 
@@ -746,9 +1039,27 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
   }, [isCollapsed, isMaximized, movePanel, panel.id, panel.position, panelSize]);
 
   useEffect(() => {
+    if (!initialMaximized || hasAppliedInitialMaximizedRef.current) {
+      return;
+    }
+
+    restoreStateRef.current = {
+      position: panel.position,
+      size: panelSize,
+      collapsed: isCollapsed,
+    };
+    hasAppliedInitialMaximizedRef.current = true;
+    setIsCollapsed(false);
+    setIsMaximized(true);
+  }, [initialMaximized, isCollapsed, panel.position, panelSize]);
+
+  useEffect(() => {
     if (!isMaximized) {
       return;
     }
+
+    setPanelSize(getMaximizedPanelSize());
+    movePanel(panel.id, { x: 0, y: 0 });
 
     function handleWindowResize() {
       setPanelSize(getMaximizedPanelSize());
@@ -847,6 +1158,8 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
   }, [pages, pageSearchTerm]);
   const currentCollectionName = collections.find((collection) => collection.id === infoDraftCollectionId)?.name ?? notebookInfo?.collectionName ?? "Sem título";
   const notebookSummary = `${pages.length} ${pages.length === 1 ? "página" : "páginas"} - ${formatEditedAgo(notebookInfo?.updatedAt)}`;
+  const saveStatusText = getNotebookSaveStatusLabel(saveStatus);
+  const readingStatusPercent = getReadingStatusPercent(infoDraftReadingStatus);
   const editorZoomScale = editorZoomPercent / 100;
   const activeSpacingMode = isFocusMode ? focusSpacingMode : normalSpacingMode;
   const activeContentInset = isFocusMode ? focusContentInset : contentInset;
@@ -1101,6 +1414,7 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
                   setDraftTitle(event.target.value);
                   draftTitleRef.current = event.target.value;
                   isDirtyRef.current = true;
+                  setSaveStatus("dirty");
                 }}
                 onBlur={() => void saveActivePage()}
                 placeholder={`Página sem título ${activePage.position}`}
@@ -1110,8 +1424,8 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
               />
               {!isFocusMode ? (
                 <span className="mt-8 hidden shrink-0 items-center gap-1 text-xs font-medium text-text-subtle md:inline-flex">
-                  Salvo agora
-                  <SavedIcon />
+                  {saveStatusText}
+                  {saveStatus === "saved" ? <SavedIcon /> : null}
                 </span>
               ) : null}
             </div>
@@ -1132,6 +1446,7 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
                 draftContentRef.current = html;
                 setEditorStats(getEditorStatsFromHtml(html));
                 isDirtyRef.current = true;
+                setSaveStatus("dirty");
               }}
               onBlur={() => void saveActivePage()}
             />
@@ -1141,8 +1456,8 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
                 <>
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="inline-flex items-center gap-1">
-                      Salvo agora
-                      <SavedIcon />
+                      {saveStatusText}
+                      {saveStatus === "saved" ? <SavedIcon /> : null}
                     </span>
                     <span className="text-text-subtle" aria-hidden="true">·</span>
                     <span>{formatCount(editorStats.words)} palavras</span>
@@ -1188,19 +1503,35 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
             <aside
               ref={detailsColumnRef}
               style={{ width: notebookDetailsColumnWidth, maxWidth: shouldRenderDetailsAsDrawer ? "calc(100% - 3rem)" : undefined }}
-              className={`flex flex-col overflow-y-auto border-l border-border-subtle bg-[var(--card)] px-5 py-5 ${
+              className={`flex flex-col overflow-hidden border-l border-border-subtle bg-[var(--card)] ${
                 shouldRenderDetailsAsDrawer ? "absolute bottom-0 right-0 top-0 z-30 shadow-2xl" : "shrink-0"
               }`}
             >
-              <SectionLabel>Detalhes</SectionLabel>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <SectionLabel>Detalhes</SectionLabel>
+                <button
+                  type="button"
+                  aria-label="Mais opções"
+                  title="Mais opções"
+                  aria-haspopup="menu"
+                  aria-expanded={notebookOptionsContextMenu.isOpen}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
+                  onClick={(event) => openNotebookOptionsMenu(event, "header")}
+                >
+                  <MoreVerticalIcon />
+                </button>
+              </div>
 
               <NotebookInfoField label="Caderno">
                 <input
+                  ref={titleInputRef}
                   value={infoDraftTitle}
                   onChange={(event) => {
                     setInfoDraftTitle(event.target.value);
                     infoDraftTitleRef.current = event.target.value;
                     isInfoDirtyRef.current = true;
+                    setSaveStatus("dirty");
                   }}
                   onBlur={() => void saveNotebookInfoDraft()}
                   placeholder="Caderno sem título"
@@ -1209,42 +1540,71 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
               </NotebookInfoField>
 
               <NotebookInfoField label="Coleção">
-                <select
-                  value={infoDraftCollectionId}
-                  onChange={(event) => {
-                    setInfoDraftCollectionId(event.target.value);
-                    infoDraftCollectionIdRef.current = event.target.value;
-                    isInfoDirtyRef.current = true;
-                    void saveNotebookInfoDraft();
-                  }}
-                  className="min-h-10 w-full appearance-none rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2.5 text-sm font-medium text-text-primary outline-none focus:border-primary"
-                >
-                  {collections.map((collection) => (
-                    <option key={collection.id} value={collection.id}>
-                      {collection.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative flex min-h-10 items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 text-text-secondary focus-within:border-primary">
+                  <MenuGlyph name="folder" />
+                  <select
+                    value={infoDraftCollectionId}
+                    onChange={(event) => {
+                      setInfoDraftCollectionId(event.target.value);
+                      infoDraftCollectionIdRef.current = event.target.value;
+                      isInfoDirtyRef.current = true;
+                      setSaveStatus("dirty");
+                      void saveNotebookInfoDraft();
+                    }}
+                    className="min-w-0 flex-1 appearance-none border-0 bg-transparent py-2.5 pr-7 text-sm font-medium text-text-primary outline-none"
+                  >
+                    {collections.map((collection) => (
+                      <option key={collection.id} value={collection.id} className={notebookSelectOptionClassName} style={notebookSelectOptionStyle}>
+                        {collection.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-3 text-text-subtle">
+                    <ChevronDownIcon />
+                  </span>
+                </div>
               </NotebookInfoField>
 
-              <NotebookInfoField label="Status de leitura">
-                <select
-                  value={infoDraftReadingStatus}
-                  onChange={(event) => {
-                    const nextStatus = event.target.value as NotebookReadingStatus;
-                    setInfoDraftReadingStatus(nextStatus);
-                    infoDraftReadingStatusRef.current = nextStatus;
-                    isInfoDirtyRef.current = true;
-                    void saveNotebookInfoDraft();
-                  }}
-                  className="min-h-10 w-full appearance-none rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2.5 text-sm font-medium text-text-primary outline-none focus:border-primary"
-                >
-                  {notebookReadingStatusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+              <NotebookInfoField label="Tags">
+                <div className="relative" ref={notebookTagDropdownRef}>
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                    {notebookTags.map((tag) => (
+                      <span key={tag} className="group relative inline-flex min-w-0 max-w-full">
+                        <button type="button" className="min-w-0 max-w-full rounded-full text-left" title={tag}>
+                          <TagBadge tag={tag} size="compact" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Remover tag ${tag}`}
+                          title={`Remover tag ${tag}`}
+                          className="absolute -right-1.5 -top-1.5 hidden h-[14px] w-[14px] items-center justify-center rounded-full bg-status-red text-[10px] font-bold leading-none text-status-red-text shadow-sm group-hover:flex"
+                          onClick={() => void handleTagsChange(notebookTags.filter((currentTag) => currentTag !== tag))}
+                        >
+                          <span aria-hidden="true">×</span>
+                        </button>
+                      </span>
+                    ))}
+
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full border border-dashed border-[#D6C8BB] bg-[#E8DDD4] px-2 py-0.5 text-[11px] font-medium text-text-secondary transition hover:brightness-95 dark:border-[#4A3A2F] dark:bg-[#332820]"
+                      onClick={() => setIsTagDropdownOpen((current) => !current)}
+                    >
+                      + Tag
+                    </button>
+                  </div>
+
+                  {isTagDropdownOpen ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
+                      <TagSelector
+                        availableTags={availableTags}
+                        selectedTags={notebookTags}
+                        onAvailableTagsChange={onAvailableTagsChange}
+                        onSelectedTagsChange={(tags) => void handleTagsChange(tags)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
               </NotebookInfoField>
 
               <NotebookInfoField label="PDFs vinculados">
@@ -1286,51 +1646,63 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
                   onClick={() => setIsPickerOpen(true)}
                   className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary"
                 >
-                  <PlusIcon size={12} />
+                  <AttachIcon size={13} />
                   Vincular PDF
                 </button>
               </NotebookInfoField>
 
-              <NotebookInfoField label="Tags">
-                <div className="relative" ref={notebookTagDropdownRef}>
-                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                    {notebookTags.map((tag) => (
-                      <span key={tag} className="group relative inline-flex min-w-0 max-w-full">
-                        <button type="button" className="min-w-0 max-w-full rounded-full text-left" title={tag}>
-                          <TagBadge tag={tag} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Remover tag ${tag}`}
-                          title={`Remover tag ${tag}`}
-                          className="absolute -right-1.5 -top-1.5 hidden h-[14px] w-[14px] items-center justify-center rounded-full bg-status-red text-[10px] font-bold leading-none text-status-red-text shadow-sm group-hover:flex"
-                          onClick={() => void handleTagsChange(notebookTags.filter((currentTag) => currentTag !== tag))}
-                        >
-                          <span aria-hidden="true">×</span>
-                        </button>
+              <NotebookInfoField label="Reading Status">
+                <div className="rounded-md border border-border-subtle bg-[var(--card)] p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-text-secondary">
+                      <OpenBookIcon />
+                    </span>
+                    <div className="relative min-w-0 flex-1">
+                      <select
+                        value={infoDraftReadingStatus}
+                        onChange={(event) => {
+                          const nextStatus = event.target.value as NotebookReadingStatus;
+                          setInfoDraftReadingStatus(nextStatus);
+                          infoDraftReadingStatusRef.current = nextStatus;
+                          isInfoDirtyRef.current = true;
+                          setSaveStatus("dirty");
+                          void saveNotebookInfoDraft();
+                        }}
+                        className="w-full appearance-none border-0 bg-transparent py-1 pr-6 text-sm font-medium text-text-primary outline-none"
+                      >
+                        {notebookReadingStatusOptions.map((option) => (
+                          <option key={option.value} value={option.value} className={notebookSelectOptionClassName} style={notebookSelectOptionStyle}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-text-subtle">
+                        <ChevronDownIcon />
                       </span>
-                    ))}
-
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-full border border-border-subtle px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:bg-surface-muted"
-                      onClick={() => setIsTagDropdownOpen((current) => !current)}
-                    >
-                      + Tag
-                    </button>
-                  </div>
-
-                  {isTagDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
-                      <TagSelector
-                        availableTags={availableTags}
-                        selectedTags={notebookTags}
-                        onAvailableTagsChange={onAvailableTagsChange}
-                        onSelectedTagsChange={(tags) => void handleTagsChange(tags)}
-                      />
                     </div>
-                  ) : null}
+                    <span className="shrink-0 rounded-md bg-surface-app px-2 py-1 text-xs font-semibold text-text-secondary">
+                      {readingStatusPercent}%
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-sm bg-surface-app">
+                    <div className="h-full rounded-sm bg-primary" style={{ width: `${readingStatusPercent}%` }} />
+                  </div>
                 </div>
+              </NotebookInfoField>
+
+              <NotebookInfoField label="Descrição">
+                <textarea
+                  value={infoDraftDescription}
+                  onChange={(event) => {
+                    setInfoDraftDescription(event.target.value);
+                    infoDraftDescriptionRef.current = event.target.value;
+                    isInfoDirtyRef.current = true;
+                    setSaveStatus("dirty");
+                  }}
+                  onBlur={() => void saveNotebookInfoDraft()}
+                  placeholder="Descreva seu caderno..."
+                  className="h-24 w-full resize-y rounded-md border border-border-subtle bg-surface-app px-3 py-3 text-sm font-normal text-text-primary outline-none placeholder:text-text-subtle focus:border-primary"
+                />
               </NotebookInfoField>
 
               <NotebookInfoField label="Autor / disciplina">
@@ -1340,6 +1712,7 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
                     setInfoDraftAuthorDiscipline(event.target.value);
                     infoDraftAuthorDisciplineRef.current = event.target.value;
                     isInfoDirtyRef.current = true;
+                    setSaveStatus("dirty");
                   }}
                   onBlur={() => void saveNotebookInfoDraft()}
                   placeholder="Autor ou disciplina..."
@@ -1368,136 +1741,97 @@ export function NotebookPanel({ panel, collections, documents, availableTags, on
                 </dl>
               </div>
 
-              <div className="hidden" aria-hidden="true">
-
-              {/* 1. Titulo */}
-              <label className="mt-5 block text-xs font-bold text-text-secondary">
-                Título
-                <input
-                  value={infoDraftTitle}
-                  onChange={(event) => {
-                    setInfoDraftTitle(event.target.value);
-                    infoDraftTitleRef.current = event.target.value;
-                    isInfoDirtyRef.current = true;
-                  }}
-                  onBlur={() => void saveNotebookInfoDraft()}
-                  placeholder="Caderno sem título"
-                  className="mt-2 h-10 w-full rounded-lg border border-border-subtle bg-transparent px-3 text-sm font-medium text-text-primary outline-none focus:border-primary"
-                />
-              </label>
-
-              {/* 2. Colecao */}
-              <div className="mt-5 text-xs font-bold text-text-secondary">
-                Coleção
-                <select
-                  value={infoDraftCollectionId}
-                  onChange={(event) => {
-                    setInfoDraftCollectionId(event.target.value);
-                    infoDraftCollectionIdRef.current = event.target.value;
-                    isInfoDirtyRef.current = true;
-                    void saveNotebookInfoDraft();
-                  }}
-                  className="mt-2 min-h-10 w-full appearance-none rounded-full border-0 bg-primary-soft px-4 py-2.5 text-sm font-medium text-text-primary outline-none"
-                >
-                  {collections.map((collection) => (
-                    <option key={collection.id} value={collection.id}>
-                      {collection.name}
-                    </option>
-                  ))}
-                </select>
               </div>
 
-              {/* 3. Tags — TagInput compartilhado (mesmo vocabulario dos documentos) */}
-              <NotebookInfoField label="Tags">
-                <TagInput
-                  availableTags={availableTags}
-                  selectedTags={notebookTags}
-                  onSelectedTagsChange={(tags) => void handleTagsChange(tags)}
-                  onAvailableTagsChange={onAvailableTagsChange}
-                  boundaryRef={detailsColumnRef}
-                  placeholder="Adicionar tag..."
-                />
-              </NotebookInfoField>
-
-              {/* 4. PDFs vinculados */}
-              <NotebookInfoField label="PDFs vinculados">
-                {linkedDocuments.length === 0 ? (
-                  <p className="text-sm text-text-secondary">Nenhum PDF vinculado</p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {linkedDocuments.map((document) => (
-                      <li
-                        key={document.id}
-                        className="group flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-card px-3 py-2"
-                      >
-                        <span className="mt-0.5 shrink-0 text-text-subtle">
-                          <PdfIcon />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-text-primary" title={document.title}>
-                            {document.title}
-                          </p>
-                          <p className="truncate text-xs text-text-secondary">
-                            {document.authors.length > 0 ? document.authors.join(", ") : "Sem autor"} · {document.year}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Desvincular ${document.title}`}
-                          title="Desvincular"
-                          className="shrink-0 rounded-md p-1 text-text-subtle opacity-0 transition hover:bg-surface-muted hover:text-status-red-text group-hover:opacity-100"
-                          onClick={() => void handleUnlinkDocument(document.id)}
-                        >
-                          <CloseIcon />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <footer className="shrink-0 border-t border-border-subtle bg-[var(--card)] px-5 py-4">
                 <button
                   type="button"
-                  onClick={() => setIsPickerOpen(true)}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary transition hover:underline"
+                  aria-haspopup="menu"
+                  aria-expanded={notebookOptionsContextMenu.isOpen}
+                  className="grid w-full grid-cols-[16px_1fr_16px] items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-text-secondary transition hover:border-primary hover:text-text-primary"
+                  onClick={(event) => openNotebookOptionsMenu(event, "footer")}
                 >
-                  <PlusIcon size={12} />
-                  Vincular PDF
+                  <span aria-hidden="true" />
+                  <span>Mais opções</span>
+                  <MoreVerticalIcon />
                 </button>
-              </NotebookInfoField>
+              </footer>
 
-              {/* 5. Descricao (generico — ligado a coluna description existente) */}
-              <label className="mt-5 block text-xs font-bold text-text-secondary">
-                Descrição
-                <textarea
-                  value={infoDraftDescription}
-                  onChange={(event) => {
-                    setInfoDraftDescription(event.target.value);
-                    infoDraftDescriptionRef.current = event.target.value;
-                    isInfoDirtyRef.current = true;
-                  }}
-                  onBlur={() => void saveNotebookInfoDraft()}
-                  placeholder="Descreva seu caderno..."
-                  className="mt-2 h-24 w-full resize-y rounded-lg border border-border-subtle bg-transparent px-3 py-3 text-sm font-normal text-text-primary outline-none placeholder:text-text-subtle focus:border-primary"
+              <ContextMenu
+                isOpen={notebookOptionsContextMenu.isOpen}
+                x={notebookOptionsContextMenu.x}
+                y={notebookOptionsContextMenu.y}
+                onClose={notebookOptionsContextMenu.close}
+              >
+                <ContextMenuItem icon={<MenuGlyph name="edit" />} label="Renomear caderno" onSelect={focusNotebookTitle} />
+                <ContextMenuSubmenu
+                  icon={<MenuGlyph name="folder" />}
+                  label="Mover para coleção"
+                  collections={collections}
+                  onSelect={(collectionId) => void moveNotebookFromOptions(collectionId)}
+                  onClose={notebookOptionsContextMenu.close}
                 />
-              </label>
-
-              {/* 6. Metadados read-only: Criado + Atualizado (os DOIS) */}
-              <div className="mt-6 border-t border-dashed border-border-subtle pt-2">
-                <NotebookInfoField label="Criado em">
-                  <span className="text-sm font-medium text-text-primary">
-                    {notebookInfo ? formatNotebookDate(notebookInfo.createdAt) : "--"}
-                  </span>
-                </NotebookInfoField>
-                <NotebookInfoField label="Atualizado em">
-                  <span className="text-sm font-medium text-text-primary">
-                    {notebookInfo ? formatNotebookDate(notebookInfo.updatedAt) : "--"}
-                  </span>
-                </NotebookInfoField>
-              </div>
-              </div>
+                <ContextMenuItem icon={<MenuGlyph name="copy" />} label="Duplicar" onSelect={() => undefined} disabled />
+                <ContextMenuItem icon={<MenuGlyph name="pin" />} label="Fixar nos favoritos" onSelect={() => void pinNotebookFavorite()} disabled={Boolean(notebookInfo?.favorite)} />
+                <ContextMenuDivider />
+                <ContextMenuItem icon={<MenuGlyph name="export" />} label="Exportar" onSelect={() => undefined} disabled />
+                <ContextMenuItem icon={<MenuGlyph name="print" />} label="Imprimir" onSelect={() => undefined} disabled />
+                <ContextMenuItem icon={<MenuGlyph name="link" />} label="Copiar link interno" onSelect={() => undefined} disabled />
+                <ContextMenuDivider />
+                <ContextMenuItem icon={<MenuGlyph name="history" />} label="Histórico de alterações" onSelect={() => undefined} disabled />
+                <ContextMenuItem icon={<MenuGlyph name="stats" />} label="Contagem detalhada" onSelect={openDetailedCount} />
+                <ContextMenuDivider />
+                <ContextMenuItem icon={<TrashIcon size={16} />} label="Mover para a lixeira" variant="danger" onSelect={() => void moveNotebookToTrashFromOptions()} />
+              </ContextMenu>
             </aside>
           ) : null}
         </div>
       )}
+
+      {isStatsDialogOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={() => setIsStatsDialogOpen(false)}>
+          <section
+            className="w-full max-w-sm rounded-xl bg-surface-panel shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="notebook-stats-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="border-b border-border-subtle px-6 py-5">
+              <h2 id="notebook-stats-title" className="text-lg font-bold text-text-primary">
+                Contagem detalhada
+              </h2>
+            </header>
+            <dl className="grid gap-3 px-6 py-5 text-sm">
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <dt className="font-semibold text-text-secondary">Palavras</dt>
+                <dd className="font-semibold text-text-primary">{formatCount(editorStats.words)}</dd>
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <dt className="font-semibold text-text-secondary">Caracteres</dt>
+                <dd className="font-semibold text-text-primary">{formatCount(editorStats.characters)}</dd>
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <dt className="font-semibold text-text-secondary">Páginas</dt>
+                <dd className="font-semibold text-text-primary">{formatCount(pages.length)}</dd>
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <dt className="font-semibold text-text-secondary">PDFs vinculados</dt>
+                <dd className="font-semibold text-text-primary">{formatCount(linkedDocuments.length)}</dd>
+              </div>
+            </dl>
+            <footer className="flex justify-end border-t border-border-subtle px-6 py-4">
+              <button
+                type="button"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+                onClick={() => setIsStatsDialogOpen(false)}
+              >
+                Fechar
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       <ContextMenu isOpen={pageContextMenu.isOpen} x={pageContextMenu.x} y={pageContextMenu.y} onClose={pageContextMenu.close}>
         <ContextMenuItem

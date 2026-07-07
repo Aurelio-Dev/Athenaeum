@@ -27,6 +27,14 @@ export function useContextMenu() {
     });
   }, []);
 
+  const openAt = useCallback((x: number, y: number) => {
+    setState({
+      isOpen: true,
+      x,
+      y,
+    });
+  }, []);
+
   useEffect(() => {
     if (!state.isOpen) {
       return;
@@ -52,6 +60,7 @@ export function useContextMenu() {
   return {
     ...state,
     open,
+    openAt,
     close,
   };
 }
