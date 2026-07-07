@@ -6,6 +6,15 @@ import { NotebookFlowchartPreview } from "./NotebookFlowchartPreview";
 import { NotebookGraphPreview } from "./NotebookGraphPreview";
 import { parseDiagramSource, parseGraphSource, type ParsedDiagram, type ParsedGraph } from "./notebookDiagramParser";
 import {
+  applyDiagramScale,
+  clampDiagramScale,
+  legacyDiagramWidthCssVariable,
+  parseDiagramScale,
+  parseLegacyDiagramWidthPercent,
+} from "./notebookDiagramScale";
+
+export { clearDiagramScaleRuntimeStyles } from "./notebookDiagramScale";
+import {
   diagramDefaultSources,
   diagramEmptyPreviews,
   diagramKindFromFigureSubtype,
@@ -299,6 +308,25 @@ export function setDiagramKind(diagram: HTMLElement, kind: DiagramKind) {
   renderDiagramPreview(diagram);
 }
 
+// Escala manual: valida data-diagram-scale (inválidos e 100 são removidos) e
+// migra o atributo legado data-diagram-width (Macrofase 8, nunca lançado com
+// compatibilidade externa) para uma escala inicial aproximada — largura NN%
+// vira escala NN% com clamp para o intervalo 50..160, uma única vez; depois
+// disso só data-diagram-scale existe.
+function normalizeDiagramScale(diagram: HTMLElement) {
+  const scale = parseDiagramScale(diagram.dataset.diagramScale);
+  const legacyWidth = parseLegacyDiagramWidthPercent(diagram.dataset.diagramWidth);
+  const resolvedScale = scale ?? (legacyWidth !== null ? clampDiagramScale(legacyWidth) : null);
+
+  delete diagram.dataset.diagramWidth;
+  diagram.style.removeProperty(legacyDiagramWidthCssVariable);
+  if (!diagram.getAttribute("style")) {
+    diagram.removeAttribute("style");
+  }
+
+  applyDiagramScale(diagram, resolvedScale);
+}
+
 function normalizeLegacyDiagramFigures(editor: HTMLElement) {
   const legacySelector = [
     '[data-athenaeum-block="figure"][data-figure-subtype="diagram"]',
@@ -339,6 +367,8 @@ export function normalizeDiagrams(editor: HTMLElement) {
 
     const kind = getDiagramKind(diagram);
     diagram.dataset.diagramKind = kind;
+
+    normalizeDiagramScale(diagram);
 
     let preview = diagram.querySelector<HTMLElement>(':scope > [data-diagram-preview="true"]');
     if (!preview) {

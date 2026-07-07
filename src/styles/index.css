@@ -170,6 +170,19 @@
   --color-accent-tint-bg: #EFE2D8;
 
   --diagram-accent: var(--color-primary);
+  /* Tipografia dos diagramas: UI (sans) para nós de diagram/grade/flowchart,
+     serif de leitura (Lora) para o Cycle Graph e sua descrição matemática,
+     mono para a fonte editável e fallbacks textuais. */
+  --diagram-font-ui: var(--font-sans);
+  --diagram-font-math: var(--font-serif);
+  --diagram-font-source: "IBM Plex Mono", Consolas, monospace;
+  --diagram-cycle-ink: var(--color-text-primary);
+  --diagram-cycle-edge: var(--diagram-cycle-ink);
+  --diagram-cycle-vertex-stroke: var(--diagram-cycle-ink);
+  --diagram-cycle-vertex-fill: var(--diagram-node-bg);
+  --diagram-cycle-vertex-label: var(--diagram-cycle-ink);
+  --diagram-cycle-math-text: var(--diagram-cycle-ink);
+  --diagram-math-font-size: 0.88em;
   --diagram-card-bg: color-mix(in srgb, var(--diagram-accent) 3%, var(--color-surface-card));
   --diagram-card-border: color-mix(in srgb, var(--diagram-accent) 16%, var(--color-border-subtle));
   --diagram-card-highlight: color-mix(in srgb, var(--color-surface-card) 72%, transparent);
@@ -555,6 +568,7 @@ select {
   --notebook-diagram-accent: var(--diagram-accent);
   display: grid;
   width: min(100%, 52rem);
+  max-width: 100%;
   gap: 0.45em;
   border: 1px solid var(--diagram-card-border);
   border-radius: var(--diagram-card-radius);
@@ -592,14 +606,14 @@ select {
 
 .notebook-editor [data-diagram-preview="true"] span {
   max-width: 100%;
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: var(--diagram-font-source);
   font-size: 0.92em;
   font-weight: 650;
 }
 
 .notebook-editor .notebook-diagram-guidance-message {
   color: var(--diagram-empty-text);
-  font-family: var(--font-body);
+  font-family: var(--diagram-font-ui);
   font-size: 0.92em;
   font-weight: 650;
 }
@@ -610,7 +624,7 @@ select {
   border-radius: 5px;
   background: var(--diagram-guidance-bg);
   color: var(--diagram-guidance-text);
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: var(--diagram-font-source);
   font-size: 0.84em;
   font-weight: 650;
   line-height: 1.45;
@@ -627,17 +641,118 @@ select {
   overflow: hidden;
 }
 
-.notebook-editor .notebook-graph-visual {
-  display: block;
+/* O host do preview React estica na largura disponível do preview: o frame
+   mede o espaço real do editor, independente do tamanho do conteúdo escalado
+   (sem isso, a medição seguiria a box e refluiria a grade durante o drag). */
+.notebook-editor [data-diagram-preview="true"] > div {
+  align-self: stretch;
+}
+
+/* Frame escalável compartilhado dos previews (Fase 8.1). Estrutura:
+   frame (100%, nunca transformado) > box (reserva natural × escala no fluxo,
+   centralizada, hospeda os handles) > content (layout natural em
+   max-content + transform: scale uniforme). Tudo aqui é runtime: a
+   serialização troca o preview React pelo fallback textual. */
+.notebook-editor .notebook-diagram-frame {
+  position: relative;
   width: 100%;
   max-width: 100%;
+}
+
+.notebook-editor .notebook-diagram-frame-box {
+  position: relative;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+.notebook-editor .notebook-diagram-frame-content {
+  width: max-content;
+  transform-origin: top left;
+}
+
+.notebook-editor .notebook-diagram-resize-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--diagram-node-border);
+  border-radius: 3px;
+  background: var(--color-surface-card);
+  touch-action: none;
+  user-select: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, border-color 120ms ease;
+  z-index: 1;
+}
+
+.notebook-editor .notebook-diagram-resize-handle[data-handle-corner="nw"] {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+
+.notebook-editor .notebook-diagram-resize-handle[data-handle-corner="ne"] {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+
+.notebook-editor .notebook-diagram-resize-handle[data-handle-corner="sw"] {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+
+.notebook-editor .notebook-diagram-resize-handle[data-handle-corner="se"] {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
+}
+
+.notebook-editor .notebook-diagram-frame[data-frame-active="true"] .notebook-diagram-resize-handle,
+.notebook-editor .notebook-diagram-resize-handle:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notebook-editor .notebook-diagram-resize-handle:hover,
+.notebook-editor .notebook-diagram-resize-handle:focus-visible {
+  border-color: var(--diagram-accent);
+  outline: none;
+}
+
+/* Contorno de seleção apenas durante a interação de resize. */
+.notebook-editor .notebook-diagram-frame[data-frame-resizing="true"] .notebook-diagram-frame-box {
+  outline: 1px dashed var(--diagram-node-border);
+  outline-offset: 4px;
+}
+
+@media print {
+  .notebook-editor .notebook-diagram-resize-handle {
+    display: none;
+  }
+
+  .notebook-editor .notebook-diagram-frame[data-frame-resizing="true"] .notebook-diagram-frame-box {
+    outline: none;
+  }
+}
+
+/* Os SVGs usam largura intrínseca (altura runtime × proporção do viewBox) em
+   vez de esticar o contêiner: assim o frame escalável mede o tamanho natural
+   real do desenho, sem letterbox. */
+.notebook-editor .notebook-graph-visual {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  margin-inline: auto;
   height: var(--notebook-graph-visual-height, var(--diagram-graph-visual-height));
 }
 
 .notebook-editor .notebook-diagram-visual {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
+  margin-inline: auto;
   height: var(--notebook-diagram-visual-height, var(--diagram-visual-height));
 }
 
@@ -665,7 +780,7 @@ select {
 .notebook-editor .notebook-diagram-visual-label {
   pointer-events: none;
   fill: var(--diagram-node-text);
-  font-family: var(--font-body);
+  font-family: var(--diagram-font-ui);
   font-size: var(--diagram-node-font-size);
   font-weight: 650;
 }
@@ -687,23 +802,33 @@ select {
 
 .notebook-editor .notebook-graph-cycle-vertex {
   vector-effect: non-scaling-stroke;
-  fill: var(--diagram-node-bg);
-  stroke: var(--diagram-node-border);
+  fill: var(--diagram-cycle-vertex-fill);
+  stroke: var(--diagram-cycle-vertex-stroke);
   stroke-width: var(--diagram-node-stroke-width);
 }
 
+.notebook-editor .notebook-graph-visual--cycle .notebook-diagram-visual-edge {
+  stroke: var(--diagram-cycle-edge);
+}
+
 .notebook-editor .notebook-graph-cycle-vertex-label {
+  fill: var(--diagram-cycle-vertex-label);
+  font-family: var(--diagram-font-math);
   font-size: calc(var(--diagram-node-font-size) * 0.96);
+  font-weight: 400;
 }
 
 .notebook-editor .notebook-graph-cycle-math {
   min-width: 0;
-  max-width: 100%;
+  /* Teto fixo: dentro do layout natural em max-content do frame escalável, a
+     descrição quebra linha em vez de esticar o bloco inteiro. */
+  max-width: min(100%, 24rem);
   flex: 1 1 13rem;
-  color: var(--diagram-node-text);
-  font-family: var(--font-body);
-  font-size: 0.86em;
-  line-height: 1.55;
+  color: var(--diagram-cycle-math-text);
+  font-family: var(--diagram-font-math);
+  font-size: var(--diagram-math-font-size);
+  font-weight: 400;
+  line-height: 1.6;
   text-align: left;
   white-space: normal;
 }
@@ -714,26 +839,40 @@ select {
 }
 
 .notebook-editor .notebook-graph-cycle-math-title {
-  color: var(--diagram-node-muted-text);
-  font-weight: 700;
+  color: inherit;
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Letras de conjunto/grafo (C, V, E): variáveis matemáticas em serif itálico,
+   com peso leve para não competir com o desenho. */
+.notebook-editor .notebook-graph-cycle-math-variable {
+  color: inherit;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.notebook-editor .notebook-graph-cycle-math-variable sub {
+  font-style: normal;
 }
 
 .notebook-editor .notebook-graph-cycle-math-set-glyph {
-  color: var(--diagram-node-muted-text);
-  font-family: "IBM Plex Mono", Consolas, monospace;
-  font-weight: 650;
+  color: inherit;
+  font-family: var(--diagram-font-math);
+  font-weight: 400;
 }
 
 .notebook-editor .notebook-graph-cycle-math-item {
   overflow-wrap: anywhere;
-  font-family: "IBM Plex Mono", Consolas, monospace;
-  font-weight: 600;
+  font-family: var(--diagram-font-math);
+  font-weight: 400;
+  font-style: normal;
 }
 
 .notebook-editor .notebook-graph-cycle-math-set {
-  font-family: "IBM Plex Mono", Consolas, monospace;
-  font-size: 0.92em;
-  font-weight: 600;
+  font-family: var(--diagram-font-math);
+  font-size: 0.98em;
+  font-weight: 400;
 }
 
 .notebook-editor .notebook-flowchart-visual-host {
@@ -744,8 +883,9 @@ select {
 
 .notebook-editor .notebook-flowchart-visual {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
+  margin-inline: auto;
   height: var(--notebook-flowchart-visual-height, var(--diagram-flowchart-visual-height));
 }
 
@@ -780,7 +920,7 @@ select {
 .notebook-editor .notebook-flowchart-visual-label {
   pointer-events: none;
   fill: var(--diagram-node-text);
-  font-family: var(--font-body);
+  font-family: var(--diagram-font-ui);
   font-size: var(--diagram-node-font-size);
   font-weight: 650;
 }
@@ -792,7 +932,7 @@ select {
   border-radius: 5px 5px 7px 7px;
   background: var(--diagram-source-bg);
   color: var(--diagram-source-text);
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: var(--diagram-font-source);
   font-size: 0.82em;
   font-weight: 600;
   line-height: 1.5;
@@ -808,7 +948,7 @@ select {
   display: block;
   margin-bottom: 0.35em;
   color: var(--diagram-node-muted-text);
-  font-family: var(--font-body);
+  font-family: var(--diagram-font-ui);
   font-size: 0.72em;
   font-weight: 750;
   letter-spacing: 0.06em;
@@ -818,7 +958,7 @@ select {
 .notebook-editor [data-diagram-source="true"]:empty::after {
   content: "Descreva o diagrama em texto";
   color: var(--diagram-source-placeholder-text);
-  font-family: var(--font-body);
+  font-family: var(--diagram-font-ui);
   font-style: italic;
   font-weight: 500;
 }
@@ -849,28 +989,14 @@ select {
   display: none;
 }
 
+/* O modo limpo remove apenas cromo (título, Fonte, bordas, fundos e padding
+   externo). Ele NUNCA altera height/width dos SVGs: como os previews escalam
+   pelo viewBox (preserveAspectRatio meet), qualquer teto de altura reduziria
+   o desenho inteiro — inclusive a tipografia dos labels. */
 .notebook-editor--diagram-clean-mode .notebook-diagram-visual,
 .notebook-editor--diagram-clean-mode .notebook-graph-visual,
 .notebook-editor--diagram-clean-mode .notebook-flowchart-visual {
   margin-inline: auto;
-}
-
-.notebook-editor--diagram-clean-mode .notebook-diagram-visual {
-  height: min(var(--notebook-diagram-visual-height, var(--diagram-visual-height)), 4.25rem);
-}
-
-.notebook-editor--diagram-clean-mode .notebook-graph-visual {
-  height: min(var(--notebook-graph-visual-height, var(--diagram-graph-visual-height)), 8rem);
-}
-
-/* No modo limpo, o grafo ciclo e a descrição matemática continuam visíveis;
-   apenas o espaçamento é compactado junto com o resto do bloco. */
-.notebook-editor--diagram-clean-mode .notebook-graph-cycle-layout {
-  gap: 0.35em 1.1em;
-}
-
-.notebook-editor--diagram-clean-mode .notebook-flowchart-visual {
-  height: min(var(--notebook-flowchart-visual-height, var(--diagram-flowchart-visual-height)), 14rem);
 }
 
 .notebook-editor--diagram-clean-mode [data-diagram-source="true"] {

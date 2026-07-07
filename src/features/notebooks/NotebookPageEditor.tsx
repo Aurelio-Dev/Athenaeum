@@ -23,6 +23,7 @@ import {
   setCalloutType,
 } from "./notebookEditorCalloutDom";
 import {
+  clearDiagramScaleRuntimeStyles,
   findClosestDiagram,
   findClosestDiagramSource,
   getDiagramKind,
@@ -198,6 +199,9 @@ function serializeNotebookEditorHtml(editor: HTMLElement) {
 
   removeNotebookAssetImageSources(clone);
   normalizeDiagrams(clone);
+  // O HTML salvo carrega apenas data-diagram-scale: nenhuma variável CSS
+  // runtime, transform, dimensão medida ou handle sobrevive à serialização.
+  clearDiagramScaleRuntimeStyles(clone);
   normalizeEquations(clone);
   normalizeFileAttachmentCards(clone);
   clearEquationPreviews(clone);

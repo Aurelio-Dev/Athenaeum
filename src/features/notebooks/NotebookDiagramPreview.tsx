@@ -1,5 +1,6 @@
 import { type CSSProperties, useId } from "react";
 
+import { NotebookDiagramFrame } from "./NotebookDiagramFrame";
 import type { ParsedDiagram } from "./notebookDiagramParser";
 
 type NotebookDiagramPreviewProps = {
@@ -115,10 +116,11 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
   };
 
   return (
-    <div
-      className="notebook-diagram-visual-host"
-      aria-label={`Diagrama com ${diagram.nodes.length} nos e ${diagram.edges.length} conexoes`}
-    >
+    <NotebookDiagramFrame>
+      <div
+        className="notebook-diagram-visual-host"
+        aria-label={`Diagrama com ${diagram.nodes.length} nos e ${diagram.edges.length} conexoes`}
+      >
       <svg
         role="img"
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
@@ -179,6 +181,7 @@ export function NotebookDiagramPreview({ diagram }: NotebookDiagramPreviewProps)
           ))}
         </g>
       </svg>
-    </div>
+      </div>
+    </NotebookDiagramFrame>
   );
 }

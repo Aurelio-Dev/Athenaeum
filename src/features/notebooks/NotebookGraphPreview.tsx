@@ -1,5 +1,6 @@
 import { type CSSProperties, useId, useMemo } from "react";
 
+import { NotebookDiagramFrame, useDiagramFrameWidth } from "./NotebookDiagramFrame";
 import type { ParsedGraph } from "./notebookDiagramParser";
 import { detectSimpleCycle, type SimpleCycle } from "./notebookGraphAnalysis";
 
@@ -39,6 +40,21 @@ function getColumnCount(nodeCount: number) {
   }
 
   return 3;
+}
+
+// A grade responde à largura real do frame: em blocos estreitos, usa menos
+// colunas em vez de escalar o SVG (o que reduziria a tipografia).
+function getResponsiveColumnCount(nodeCount: number, availableWidth: number | null) {
+  const preferredColumns = getColumnCount(nodeCount);
+  if (availableWidth === null || availableWidth <= 0) {
+    return preferredColumns;
+  }
+
+  const fittingColumns = Math.floor(
+    (availableWidth - horizontalPadding * 2 + columnGap) / (minNodeWidth + columnGap),
+  );
+
+  return Math.max(1, Math.min(preferredColumns, fittingColumns));
 }
 
 function getLabelCharacterLimit(nodeCount: number) {
@@ -258,10 +274,14 @@ function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
         </svg>
         <div className="notebook-graph-cycle-math">
           <p className="notebook-graph-cycle-math-title">
-            C<sub>{vertexCount}</sub>: grafo ciclo com {vertexCount} vértices
+            <span className="notebook-graph-cycle-math-variable">
+              C<sub>{vertexCount}</sub>
+            </span>
+            : grafo ciclo com {vertexCount} vértices
           </p>
           <p className="notebook-graph-cycle-math-set">
-            <span className="notebook-graph-cycle-math-set-glyph">V = {"{"}</span>
+            <span className="notebook-graph-cycle-math-variable">V</span>
+            <span className="notebook-graph-cycle-math-set-glyph"> = {"{"}</span>
             {vertexItems.map((item, index) => (
               <span className="notebook-graph-cycle-math-item" key={item.key}>
                 {item.content}
@@ -271,7 +291,8 @@ function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
             <span className="notebook-graph-cycle-math-set-glyph">{"}"}</span>
           </p>
           <p className="notebook-graph-cycle-math-set">
-            <span className="notebook-graph-cycle-math-set-glyph">E = {"{"}</span>
+            <span className="notebook-graph-cycle-math-variable">E</span>
+            <span className="notebook-graph-cycle-math-set-glyph"> = {"{"}</span>
             {edgeItems.map((item, index) => (
               <span className="notebook-graph-cycle-math-item" key={item.key}>
                 {item.content}
@@ -288,7 +309,8 @@ function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
 
 function GridGraphPreview({ graph }: NotebookGraphPreviewProps) {
   const arrowMarkerId = `notebook-graph-arrow-${useId().replace(/:/g, "")}`;
-  const columnCount = getColumnCount(graph.nodes.length);
+  const frameWidth = useDiagramFrameWidth();
+  const columnCount = getResponsiveColumnCount(graph.nodes.length, frameWidth);
   const rowCount = Math.max(1, Math.ceil(graph.nodes.length / columnCount));
   const maxLabelCharacters = getLabelCharacterLimit(graph.nodes.length);
   const displayNodes = graph.nodes.map((node) => ({
@@ -422,9 +444,9 @@ function GridGraphPreview({ graph }: NotebookGraphPreviewProps) {
 export function NotebookGraphPreview({ graph }: NotebookGraphPreviewProps) {
   const cycle = useMemo(() => detectSimpleCycle(graph), [graph]);
 
-  if (cycle) {
-    return <CycleGraphPreview graph={graph} cycle={cycle} />;
-  }
-
-  return <GridGraphPreview graph={graph} />;
+  return (
+    <NotebookDiagramFrame>
+      {cycle ? <CycleGraphPreview graph={graph} cycle={cycle} /> : <GridGraphPreview graph={graph} />}
+    </NotebookDiagramFrame>
+  );
 }

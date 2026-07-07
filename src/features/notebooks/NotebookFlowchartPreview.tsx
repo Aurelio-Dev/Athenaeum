@@ -1,5 +1,6 @@
 import { type CSSProperties, useId } from "react";
 
+import { NotebookDiagramFrame } from "./NotebookDiagramFrame";
 import type { ParsedDiagram } from "./notebookDiagramParser";
 
 type NotebookFlowchartPreviewProps = {
@@ -118,10 +119,11 @@ export function NotebookFlowchartPreview({ flowchart }: NotebookFlowchartPreview
   };
 
   return (
-    <div
-      className="notebook-flowchart-visual-host"
-      aria-label={`Fluxograma com ${flowchart.nodes.length} etapas e ${flowchart.edges.length} conexoes`}
-    >
+    <NotebookDiagramFrame>
+      <div
+        className="notebook-flowchart-visual-host"
+        aria-label={`Fluxograma com ${flowchart.nodes.length} etapas e ${flowchart.edges.length} conexoes`}
+      >
       <svg
         role="img"
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
@@ -182,6 +184,7 @@ export function NotebookFlowchartPreview({ flowchart }: NotebookFlowchartPreview
           ))}
         </g>
       </svg>
-    </div>
+      </div>
+    </NotebookDiagramFrame>
   );
 }
