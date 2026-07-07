@@ -1,6 +1,6 @@
 # Sintaxe dos Blocos de Diagrama do Notebook
 
-Ultima atualizacao: 07/07/2026 (Macrofase 7)
+Ultima atualizacao: 07/07/2026 (Fase 7.1)
 
 Os blocos `data-athenaeum-block="diagram"` guardam apenas texto na fonte
 (`data-diagram-source`). O SVG do preview e a descricao matematica sao gerados
@@ -58,6 +58,19 @@ gera um Cycle Graph C5 com:
 - `V = {1, 2, 3, 4, 5}`;
 - `E = {{1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 1}}`.
 
+`V` e `E` sempre usam o label completo de cada vertice, mesmo quando o desenho
+SVG trunca o label visualmente (ver "Labels longos" abaixo). Por exemplo:
+
+```
+ProcessamentoInicial -- ProcessamentoInterno
+ProcessamentoInterno -- ProcessamentoFinal
+ProcessamentoFinal -- ProcessamentoInicial
+```
+
+gera `V = {ProcessamentoInicial, ProcessamentoInterno, ProcessamentoFinal}` e
+`E` com os tres pares completos — nunca os prefixos truncados que aparecem no
+desenho, o que evitaria confundir vertices diferentes com o mesmo prefixo.
+
 Grafos nao direcionados que nao formam ciclo simples (caminho aberto, grafo
 ramificado, desconectado, com self-loop ou misto direcionado/nao direcionado)
 permanecem no layout de grade deterministica, com linhas sem seta para as
@@ -69,9 +82,13 @@ arestas `--` e setas preservadas para as arestas `->`.
   ignorada como invalida.
 - O layout circular foi dimensionado para 3 a ~12 vertices; acima disso os
   labels podem ficar densos.
-- Labels sao truncados no preview e na descricao matematica (16 caracteres no
-  ciclo) para proteger o layout; o texto completo permanece na fonte e no
-  `<title>` acessivel de cada vertice.
+- Labels sao truncados apenas no desenho SVG do ciclo (16 caracteres) para
+  proteger o layout; o texto completo permanece na fonte, no `<title>`
+  acessivel de cada vertice e nos conjuntos `V`/`E` da descricao matematica,
+  que nunca truncam.
+- A descricao matematica quebra linha naturalmente entre itens de `V`/`E` (e,
+  se necessario, dentro de um label muito longo) para evitar overflow
+  horizontal; ela nao e persistida e nao afeta a fonte textual.
 - Ciclos direcionados (`1 -> 2 -> 3 -> 1`) e ciclos com cordas nao recebem
   layout circular — apenas o ciclo simples nao direcionado.
 - Nao ha layout force-directed, edicao visual nem persistencia de SVG.

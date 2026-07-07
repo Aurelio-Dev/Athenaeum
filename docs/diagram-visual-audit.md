@@ -48,6 +48,7 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 6E.3 | Concluida | Compactacao vertical do modo limpo. | O modo limpo reduziu margem, padding e altura visual runtime dos previews para que diagramas parecam figuras editoriais embutidas no texto. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E.4 | Concluida | Ajuste fino da altura do modo limpo. | O modo limpo passou a limitar diretamente a altura visual dos SVGs, reduzindo espaco residual abaixo de diagramas pequenos sem alterar o layout logico. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Macrofase 7 | Concluida | Grafo nao direcionado, deteccao de ciclo simples e descricao matematica runtime para `graph`. | `graph` ganhou parser proprio (`parseGraphSource`) com arestas `A -- B` e direcao explicita por aresta; ciclos simples nao direcionados sao detectados (`detectSimpleCycle`) e renderizados em layout circular deterministico com descricao matematica (`Cn`, `V`, `E`) gerada em runtime; grafos nao direcionados fora de ciclo mantem a grade, sem setas. `diagram` e `flowchart` nao mudaram. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 7.1 | Concluida | Labels completos em `V`/`E` do Cycle Graph, separados do label truncado do SVG. | `V` e `E` passaram a renderizar sempre o label original (nunca truncado) por vertice/aresta, via helpers puros (`buildCycleVertexItems`, `buildCycleEdgeItems`) e elementos `<span>` por item, permitindo quebra de linha natural sem overflow horizontal; o truncamento de 16 caracteres continua exclusivo do desenho SVG, com `<title>` completo por vertice. `diagram`, `flowchart`, a grade de `graph`, o parser e a deteccao de ciclo nao mudaram. | `npm run typecheck`, `npm test -- --run`, `npm run build` e `git diff --check`. |
 
 Ressalvas mantidas apos a Macrofase 7:
 
@@ -72,6 +73,10 @@ Ressalvas mantidas apos a Macrofase 7:
 - A descricao matematica usa HTML semantico com `<sub>`; KaTeX nao foi usado
   aqui para nao ampliar o escopo (labels arbitrarios exigiriam escaping para
   `\text{}` e render fora do fluxo React atual).
+- Em `V` e `E` do Cycle Graph, o label usado e sempre o original completo
+  (nunca o truncado do desenho SVG); cada item de `V`/`E` e um `<span>`
+  separado, o que permite quebra de linha natural entre itens e evita que
+  labels com o mesmo prefixo virem ambiguos na descricao.
 - `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito
   longos ainda precisam reduzir escala para caber no card.
 - Labels longos truncam de forma menos agressiva, mas continuam truncados para
@@ -232,7 +237,10 @@ Em `NotebookGraphPreview.tsx` (layout circular de ciclo):
   entre `64` e `168`;
 - padding do viewBox: `18`;
 - viewBox calculado a partir do raio, extensao dos labels e padding;
-- altura visual maxima compartilhada com a grade: `320`.
+- altura visual maxima compartilhada com a grade: `320`;
+- limite de `16` caracteres se aplica apenas ao label desenhado no SVG; o
+  label completo (sem limite) e usado em `V`, `E` e no `<title>` de cada
+  vertice.
 
 Esses valores nao sao necessariamente errados; eles apenas ainda nao estao
 centralizados como tokens de diagrama.

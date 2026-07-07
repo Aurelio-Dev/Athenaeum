@@ -697,9 +697,9 @@ select {
 }
 
 .notebook-editor .notebook-graph-cycle-math {
-  min-width: min(100%, 13rem);
+  min-width: 0;
   max-width: 100%;
-  flex: 0 1 auto;
+  flex: 1 1 13rem;
   color: var(--diagram-node-text);
   font-family: var(--font-body);
   font-size: 0.86em;
@@ -716,6 +716,18 @@ select {
 .notebook-editor .notebook-graph-cycle-math-title {
   color: var(--diagram-node-muted-text);
   font-weight: 700;
+}
+
+.notebook-editor .notebook-graph-cycle-math-set-glyph {
+  color: var(--diagram-node-muted-text);
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-weight: 650;
+}
+
+.notebook-editor .notebook-graph-cycle-math-item {
+  overflow-wrap: anywhere;
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-weight: 600;
 }
 
 .notebook-editor .notebook-graph-cycle-math-set {

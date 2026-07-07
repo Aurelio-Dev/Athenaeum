@@ -128,6 +128,33 @@ function getCycleLabelHorizontalExtent(labelX: number, labelWidth: number, ancho
   return [labelX - labelWidth / 2, labelX + labelWidth / 2] as const;
 }
 
+type CycleMathVertex = {
+  id: string;
+  label: string;
+};
+
+type CycleMathItem = {
+  key: string;
+  content: string;
+};
+
+// V e E da descrição matemática usam o label original (não truncado) — o
+// truncamento em CycleGraphPreview é só para o desenho SVG, nunca para
+// identificação de vértice.
+function buildCycleVertexItems(vertices: CycleMathVertex[]): CycleMathItem[] {
+  return vertices.map((vertex) => ({ key: vertex.id, content: vertex.label }));
+}
+
+function buildCycleEdgeItems(vertices: CycleMathVertex[]): CycleMathItem[] {
+  return vertices.map((vertex, index) => {
+    const nextVertex = vertices[(index + 1) % vertices.length];
+    return {
+      key: `${vertex.id}-${nextVertex.id}`,
+      content: `{${vertex.label}, ${nextVertex.label}}`,
+    };
+  });
+}
+
 // Layout circular determinístico para ciclos simples: primeiro vértice no
 // topo, percurso em sentido horário e labels radiais fora do círculo.
 function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
@@ -184,10 +211,8 @@ function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
     return { id: `cycle-edge-${index + 1}`, x1: vertex.x, y1: vertex.y, x2: nextVertex.x, y2: nextVertex.y };
   });
 
-  const vertexSetText = `V = {${vertices.map((vertex) => vertex.displayLabel).join(", ")}}`;
-  const edgeSetText = `E = {${vertices
-    .map((vertex, index) => `{${vertex.displayLabel}, ${vertices[(index + 1) % vertexCount].displayLabel}}`)
-    .join(", ")}}`;
+  const vertexItems = buildCycleVertexItems(vertices);
+  const edgeItems = buildCycleEdgeItems(vertices);
   const accessibleTitle = `Grafo ciclo com ${vertexCount} vértices e ${vertexCount} arestas`;
 
   return (
@@ -235,8 +260,26 @@ function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
           <p className="notebook-graph-cycle-math-title">
             C<sub>{vertexCount}</sub>: grafo ciclo com {vertexCount} vértices
           </p>
-          <p className="notebook-graph-cycle-math-set">{vertexSetText}</p>
-          <p className="notebook-graph-cycle-math-set">{edgeSetText}</p>
+          <p className="notebook-graph-cycle-math-set">
+            <span className="notebook-graph-cycle-math-set-glyph">V = {"{"}</span>
+            {vertexItems.map((item, index) => (
+              <span className="notebook-graph-cycle-math-item" key={item.key}>
+                {item.content}
+                {index < vertexItems.length - 1 ? ", " : ""}
+              </span>
+            ))}
+            <span className="notebook-graph-cycle-math-set-glyph">{"}"}</span>
+          </p>
+          <p className="notebook-graph-cycle-math-set">
+            <span className="notebook-graph-cycle-math-set-glyph">E = {"{"}</span>
+            {edgeItems.map((item, index) => (
+              <span className="notebook-graph-cycle-math-item" key={item.key}>
+                {item.content}
+                {index < edgeItems.length - 1 ? ", " : ""}
+              </span>
+            ))}
+            <span className="notebook-graph-cycle-math-set-glyph">{"}"}</span>
+          </p>
         </div>
       </div>
     </div>
