@@ -38,9 +38,12 @@ import {
 } from "./notebookEditorEquationDom";
 import { hydrateNotebookAssetImages, removeNotebookAssetImageSources } from "./notebookEditorFigureDom";
 import {
+  AlignCenterIcon,
+  AlignJustifyIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
   AttachmentIcon,
   CalloutIcon,
-  ChevronDownIcon,
   CitationIcon,
   EquationIcon,
   FigureIcon,
@@ -119,15 +122,6 @@ type ActiveDiagramControls = {
 
 export type NotebookSpacingMode = "compact" | "normal" | "comfortable" | "wide";
 type AlignmentCommand = "justifyLeft" | "justifyCenter" | "justifyRight" | "justifyFull";
-type TextStyleCommand = "paragraph" | Extract<BlockAction, "h1" | "h2" | "h3">;
-type ToolbarOverflowLevel = 0 | 1 | 2;
-
-const textStyleOptions: Array<{ command: TextStyleCommand; label: string }> = [
-  { command: "paragraph", label: "Parágrafo" },
-  { command: "h1", label: "Título 1" },
-  { command: "h2", label: "Título 2" },
-  { command: "h3", label: "Título 3" },
-];
 
 const alignmentOptions: Array<{ command: AlignmentCommand; label: string }> = [
   { command: "justifyLeft", label: "Alinhar à esquerda" },
@@ -367,14 +361,10 @@ export function NotebookPageEditor({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
-  const referencesToolbarGroupRef = useRef<HTMLDivElement | null>(null);
-  const layoutToolbarGroupRef = useRef<HTMLDivElement | null>(null);
-  const overflowToolbarGroupRef = useRef<HTMLDivElement | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
   const localImageInputRef = useRef<HTMLInputElement | null>(null);
   const localAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
-  const toolbarMeasuredWidthsRef = useRef({ references: 0, layout: 0, overflow: 0 });
   const zoomScale = zoomPercent / 100;
   const spacingConfig = notebookSpacingConfig[spacingMode];
   const editorFontSize = 14 * zoomScale;
@@ -395,7 +385,6 @@ export function NotebookPageEditor({
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isCiteMenuOpen, setIsCiteMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [toolbarOverflowLevel, setToolbarOverflowLevel] = useState<ToolbarOverflowLevel>(0);
   const [activeAlignment, setActiveAlignment] = useState<AlignmentCommand | null>(null);
   const [isSelectionInLink, setIsSelectionInLink] = useState(false);
   const [showAttachmentNotice, setShowAttachmentNotice] = useState(false);
@@ -406,9 +395,6 @@ export function NotebookPageEditor({
   const [isDiagramCleanMode, setIsDiagramCleanMode] = useState(false);
   const [activeEquation, setActiveEquation] = useState<ActiveEquationControls | null>(null);
   const [isEmpty, setIsEmpty] = useState(initialNotebookContentIsEmpty(initialContent));
-  const isLayoutInOverflow = toolbarOverflowLevel >= 1;
-  const isReferencesInOverflow = toolbarOverflowLevel >= 2;
-  const hasOverflowMenu = isLayoutInOverflow || isReferencesInOverflow;
 
   const syncActiveActions = useCallback(() => {
     const editor = editorRef.current;
@@ -645,86 +631,6 @@ export function NotebookPageEditor({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [isTextMenuOpen, isListMenuOpen, isReferenceMenuOpen, isInsertMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError]);
-
-  useEffect(() => {
-    const toolbar = toolbarRef.current;
-    if (!toolbar) {
-      return;
-    }
-
-    const toolbarElement = toolbar;
-    let animationFrame = 0;
-
-    function readGroupWidth(element: HTMLDivElement | null, key: "references" | "layout" | "overflow") {
-      if (!element) {
-        return toolbarMeasuredWidthsRef.current[key];
-      }
-
-      const width = element.offsetWidth;
-      if (width > 0) {
-        toolbarMeasuredWidthsRef.current[key] = width;
-      }
-
-      return toolbarMeasuredWidthsRef.current[key];
-    }
-
-    function measureToolbar() {
-      const availableWidth = toolbarElement.clientWidth;
-      const currentWidth = toolbarElement.scrollWidth;
-      const layoutWidth = readGroupWidth(layoutToolbarGroupRef.current, "layout");
-      const referencesWidth = readGroupWidth(referencesToolbarGroupRef.current, "references");
-      const overflowWidth = readGroupWidth(overflowToolbarGroupRef.current, "overflow");
-      const tolerance = 2;
-      const groupGap = 4;
-
-      setToolbarOverflowLevel((currentLevel) => {
-        if (currentLevel === 0) {
-          return currentWidth > availableWidth + tolerance ? 1 : 0;
-        }
-
-        if (currentLevel === 1) {
-          const expandedWidth = currentWidth - overflowWidth + layoutWidth + groupGap;
-
-          if (expandedWidth <= availableWidth - tolerance) {
-            return 0;
-          }
-
-          return currentWidth > availableWidth + tolerance ? 2 : 1;
-        }
-
-        const expandedWidth = currentWidth + referencesWidth + groupGap;
-        return expandedWidth <= availableWidth - tolerance ? 1 : 2;
-      });
-    }
-
-    function requestMeasure() {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(measureToolbar);
-    }
-
-    const resizeObserver = new ResizeObserver(requestMeasure);
-    resizeObserver.observe(toolbarElement);
-    requestMeasure();
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      resizeObserver.disconnect();
-    };
-  }, [toolbarOverflowLevel, isFocusMode]);
-
-  useEffect(() => {
-    if (isReferencesInOverflow) {
-      setIsReferenceMenuOpen(false);
-    }
-
-    if (isLayoutInOverflow) {
-      setIsLayoutMenuOpen(false);
-    }
-
-    if (!hasOverflowMenu) {
-      setIsMoreMenuOpen(false);
-    }
-  }, [hasOverflowMenu, isLayoutInOverflow, isReferencesInOverflow]);
 
   function isSelectionInsideEditor(selection: Selection | null) {
     const editor = editorRef.current;
@@ -1806,24 +1712,6 @@ export function NotebookPageEditor({
     setIsMoreMenuOpen(false);
   }
 
-  function applyParagraphStyle() {
-    restoreSavedRangeOrEditorEnd();
-    document.execCommand("formatBlock", false, "<div>");
-    emitChange();
-    syncActiveActions();
-    setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
-    setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
-    setIsLayoutMenuOpen(false);
-    setIsMoreMenuOpen(false);
-  }
-
-  function applyEditorActionFromMenu(action: EditorAction) {
-    restoreSavedRangeOrEditorEnd();
-    applyAction(action);
-  }
-
   function applyAlignmentCommand(command: AlignmentCommand) {
     restoreSavedRangeOrEditorEnd();
     document.execCommand(command, false);
@@ -1992,21 +1880,26 @@ export function NotebookPageEditor({
     syncActiveActions();
   }
 
-  const toolbarIconButtonClassName = "inline-flex h-8 w-8 items-center justify-center rounded-md text-text-primary transition hover:bg-surface-muted";
-  const toolbarChipButtonClassName = "inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 text-xs font-semibold text-text-primary transition hover:bg-surface-muted";
+  const toolbarIconButtonClassName = "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-primary transition hover:bg-surface-muted";
+  const toolbarHeadingButtonClassName = "inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-2 text-text-primary transition hover:bg-surface-muted";
   const activeToolbarButtonClassName = "bg-primary-soft text-primary";
+  const toolbarSeparator = <span className="mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
   const menuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg";
-  const compactMenuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-56 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg";
   const menuSectionLabelClassName = "px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle";
   const menuItemClassName = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const plainMenuItemClassName = "block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const disabledMenuItemClassName = "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary";
   const activeMenuItemClassName = "bg-primary-soft text-primary";
+  const menuIconButtonClassName = "inline-flex h-8 w-full items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
+  const h1Button = getToolbarButton("h1");
+  const h2Button = getToolbarButton("h2");
+  const h3Button = getToolbarButton("h3");
   const boldButton = getToolbarButton("bold");
   const italicButton = getToolbarButton("italic");
   const unorderedListButton = getToolbarButton("unordered-list");
   const orderedListButton = getToolbarButton("ordered-list");
-  const isParagraphActive = !activeActions.has("h1") && !activeActions.has("h2") && !activeActions.has("h3") && !activeActions.has("blockquote");
+  const blockquoteButton = getToolbarButton("blockquote");
+  const codeButton = getToolbarButton("code");
 
   const closePeerToolbarMenus = () => {
     setIsTextMenuOpen(false);
@@ -2020,224 +1913,38 @@ export function NotebookPageEditor({
     setShowAttachmentNotice(false);
   };
 
-  const textMenu = isTextMenuOpen ? (
-    <div className={compactMenuPanelClassName}>
-      <p className={menuSectionLabelClassName}>Texto</p>
-      {textStyleOptions.map((option) => {
-        const isActive = option.command === "paragraph" ? isParagraphActive : activeActions.has(option.command);
+  function alignmentIcon(command: AlignmentCommand) {
+    switch (command) {
+      case "justifyCenter":
+        return <AlignCenterIcon />;
+      case "justifyRight":
+        return <AlignRightIcon />;
+      case "justifyFull":
+        return <AlignJustifyIcon />;
+      case "justifyLeft":
+        return <AlignLeftIcon />;
+    }
+  }
 
-        return (
-          <button
-            key={option.command}
-            type="button"
-            role="menuitemradio"
-            aria-checked={isActive}
-            className={`${plainMenuItemClassName} ${isActive ? activeMenuItemClassName : ""}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              if (option.command === "paragraph") {
-                applyParagraphStyle();
-                return;
-              }
+  function renderToolbarActionButton(button: ReturnType<typeof getToolbarButton>, className = toolbarIconButtonClassName) {
+    return (
+      <button
+        key={button.action}
+        type="button"
+        title={button.title}
+        aria-label={button.title}
+        aria-pressed={activeActions.has(button.action)}
+        className={`${className} ${activeActions.has(button.action) ? activeToolbarButtonClassName : ""}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyAction(button.action)}
+      >
+        {button.icon}
+      </button>
+    );
+  }
 
-              applyEditorActionFromMenu(option.command);
-            }}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-      <div className="my-1 h-px bg-border-subtle" />
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={activeActions.has("blockquote")}
-        className={`${plainMenuItemClassName} ${activeActions.has("blockquote") ? activeMenuItemClassName : ""}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyEditorActionFromMenu("blockquote")}
-      >
-        Citação em bloco
-      </button>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={activeActions.has("code")}
-        className={`${plainMenuItemClassName} ${activeActions.has("code") ? activeMenuItemClassName : ""}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyEditorActionFromMenu("code")}
-      >
-        Bloco de código
-      </button>
-      {isFocusMode ? (
-        <>
-          <div className="my-1 h-px bg-border-subtle" />
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={activeActions.has("bold")}
-            className={`${plainMenuItemClassName} ${activeActions.has("bold") ? activeMenuItemClassName : ""}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyEditorActionFromMenu("bold")}
-          >
-            Negrito
-          </button>
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={activeActions.has("italic")}
-            className={`${plainMenuItemClassName} ${activeActions.has("italic") ? activeMenuItemClassName : ""}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyEditorActionFromMenu("italic")}
-          >
-            Itálico
-          </button>
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={activeActions.has("unordered-list")}
-            className={`${plainMenuItemClassName} ${activeActions.has("unordered-list") ? activeMenuItemClassName : ""}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyEditorActionFromMenu("unordered-list")}
-          >
-            Lista com marcadores
-          </button>
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={activeActions.has("ordered-list")}
-            className={`${plainMenuItemClassName} ${activeActions.has("ordered-list") ? activeMenuItemClassName : ""}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyEditorActionFromMenu("ordered-list")}
-          >
-            Lista numerada
-          </button>
-        </>
-      ) : null}
-      <div className="my-1 h-px bg-border-subtle" />
-      <button
-        type="button"
-        className={plainMenuItemClassName}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyMaintenanceCommand("clear-formatting")}
-      >
-        Limpar formatação
-      </button>
-    </div>
-  ) : null;
-
-  const listMenu = isListMenuOpen ? (
-    <div className={compactMenuPanelClassName}>
-      <p className={menuSectionLabelClassName}>Listas</p>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={activeActions.has("unordered-list")}
-        className={`${menuItemClassName} ${activeActions.has("unordered-list") ? activeMenuItemClassName : ""}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyEditorActionFromMenu("unordered-list")}
-      >
-        {unorderedListButton.icon}
-        Lista com marcadores
-      </button>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={activeActions.has("ordered-list")}
-        className={`${menuItemClassName} ${activeActions.has("ordered-list") ? activeMenuItemClassName : ""}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyEditorActionFromMenu("ordered-list")}
-      >
-        {orderedListButton.icon}
-        Lista numerada
-      </button>
-    </div>
-  ) : null;
-
-  const referencesMenuContent = (
+  const insertMenuContent = (
     <>
-      <p className={menuSectionLabelClassName}>Referências</p>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openCiteMenu}>
-        <CitationIcon />
-        Cite
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openLinkPopover}>
-        <LinkIcon />
-        Inserir link
-      </button>
-      <button
-        type="button"
-        disabled={!isSelectionInLink}
-        className={`${menuItemClassName} ${disabledMenuItemClassName}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyMaintenanceCommand("unlink")}
-      >
-        <LinkIcon />
-        Remover link
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openLocalAttachmentPicker}>
-        <AttachmentIcon />
-        Anexar arquivo
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openPdfPickerFromToolbar}>
-        <PdfToolbarIcon />
-        Vincular PDF
-      </button>
-    </>
-  );
-
-  const referenceMenu = isReferenceMenuOpen ? (
-    <div className={menuPanelClassName}>{referencesMenuContent}</div>
-  ) : null;
-
-  const layoutMenuContent = (
-    <>
-      <p className={menuSectionLabelClassName}>Layout</p>
-      <p className={menuSectionLabelClassName}>Alinhamento</p>
-      {alignmentOptions.map((option) => {
-        const isActive = activeAlignment === option.command;
-
-        return (
-          <button
-            key={option.command}
-            type="button"
-            role="menuitemradio"
-            aria-checked={isActive}
-            className={`${plainMenuItemClassName} ${isActive ? activeMenuItemClassName : ""}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyAlignmentCommand(option.command)}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-      <div className="my-1 h-px bg-border-subtle" />
-      <p className={menuSectionLabelClassName}>Espaçamento</p>
-      <div className="grid grid-cols-2 gap-1">
-        {notebookSpacingOptions.map((option) => {
-          const isActive = spacingMode === option.value;
-
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={isActive}
-              className={`rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
-                isActive ? activeMenuItemClassName : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-              }`}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySpacingMode(option.value)}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </>
-  );
-
-  const insertMenu = isInsertMenuOpen ? (
-    <div className={menuPanelClassName}>
       <p className={menuSectionLabelClassName}>Inserir</p>
       <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertTableBlock}>
         <TableIcon />
@@ -2281,172 +1988,140 @@ export function NotebookPageEditor({
           </button>
         );
       })}
-    </div>
-  ) : null;
+    </>
+  );
 
-  const layoutMenu = isLayoutMenuOpen ? (
-    <div className={menuPanelClassName}>{layoutMenuContent}</div>
-  ) : null;
+  const layoutMenuContent = (
+    <>
+      <p className={menuSectionLabelClassName}>Alinhamento</p>
+      <div className="grid grid-cols-4 gap-1 px-1">
+        {alignmentOptions.map((option) => {
+          const isActive = activeAlignment === option.command;
 
-  const overflowMenu = isMoreMenuOpen && hasOverflowMenu ? (
+          return (
+            <button
+              key={option.command}
+              type="button"
+              role="menuitemradio"
+              aria-checked={isActive}
+              title={option.label}
+              aria-label={option.label}
+              className={`${menuIconButtonClassName} ${isActive ? activeMenuItemClassName : ""}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applyAlignmentCommand(option.command)}
+            >
+              {alignmentIcon(option.command)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="my-1 h-px bg-border-subtle" />
+      <p className={menuSectionLabelClassName}>Espaçamento</p>
+      <div className="grid grid-cols-2 gap-1">
+        {notebookSpacingOptions.map((option) => {
+          const isActive = spacingMode === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={isActive}
+              className={`rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
+                isActive ? activeMenuItemClassName : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+              }`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applySpacingMode(option.value)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const moreMenu = isMoreMenuOpen ? (
     <div className={menuPanelClassName}>
-      <p className={menuSectionLabelClassName}>Mais opções</p>
-      {isReferencesInOverflow ? referencesMenuContent : null}
-      {isReferencesInOverflow && isLayoutInOverflow ? <div className="my-1 h-px bg-border-subtle" /> : null}
-      {isLayoutInOverflow ? layoutMenuContent : null}
+      {insertMenuContent}
+      <div className="my-1 h-px bg-border-subtle" />
+      {layoutMenuContent}
+      <div className="my-1 h-px bg-border-subtle" />
+      <p className={menuSectionLabelClassName}>Manutenção</p>
+      <button
+        type="button"
+        className={plainMenuItemClassName}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyMaintenanceCommand("clear-formatting")}
+      >
+        Limpar formatação
+      </button>
+      <button
+        type="button"
+        disabled={!isSelectionInLink}
+        className={`${plainMenuItemClassName} ${disabledMenuItemClassName}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyMaintenanceCommand("unlink")}
+      >
+        Remover link
+      </button>
     </div>
   ) : null;
 
-  const textMenuButton = (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={isTextMenuOpen}
-        className={toolbarChipButtonClassName}
-        onMouseDown={(event) => {
-          event.preventDefault();
-          saveCurrentRange();
-        }}
-        onClick={() => {
-          const shouldOpen = !isTextMenuOpen;
-          closePeerToolbarMenus();
-          setIsTextMenuOpen(shouldOpen);
-        }}
-      >
-        Texto
-        <ChevronDownIcon />
-      </button>
-      {textMenu}
-    </div>
-  );
-
-  const boldToolbarButton = !isFocusMode ? (
+  const citeToolbarButton = (
     <button
       type="button"
-      title={boldButton.title}
-      aria-label={boldButton.title}
-      aria-pressed={activeActions.has("bold")}
-      className={`${toolbarIconButtonClassName} ${activeActions.has("bold") ? activeToolbarButtonClassName : ""}`}
+      title="Inserir citação"
+      aria-label="Inserir citação"
+      className={toolbarIconButtonClassName}
       onMouseDown={(event) => event.preventDefault()}
-      onClick={() => applyAction("bold")}
+      onClick={openCiteMenu}
     >
-      {boldButton.icon}
+      <CitationIcon />
     </button>
-  ) : null;
-
-  const italicToolbarButton = !isFocusMode ? (
-    <button
-      type="button"
-      title={italicButton.title}
-      aria-label={italicButton.title}
-      aria-pressed={activeActions.has("italic")}
-      className={`${toolbarIconButtonClassName} ${activeActions.has("italic") ? activeToolbarButtonClassName : ""}`}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={() => applyAction("italic")}
-    >
-      {italicButton.icon}
-    </button>
-  ) : null;
-
-  const listMenuButton = !isFocusMode ? (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={isListMenuOpen}
-        className={toolbarChipButtonClassName}
-        onMouseDown={(event) => {
-          event.preventDefault();
-          saveCurrentRange();
-        }}
-        onClick={() => {
-          const shouldOpen = !isListMenuOpen;
-          closePeerToolbarMenus();
-          setIsListMenuOpen(shouldOpen);
-        }}
-      >
-        Listas
-        <ChevronDownIcon />
-      </button>
-      {listMenu}
-    </div>
-  ) : null;
-
-  const referenceMenuButton = !isReferencesInOverflow ? (
-    <div ref={referencesToolbarGroupRef} className="relative shrink-0">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={isReferenceMenuOpen}
-        className={toolbarChipButtonClassName}
-        onMouseDown={(event) => {
-          event.preventDefault();
-          saveCurrentRange();
-        }}
-        onClick={() => {
-          const shouldOpen = !isReferenceMenuOpen;
-          closePeerToolbarMenus();
-          setIsReferenceMenuOpen(shouldOpen);
-        }}
-      >
-        Referências
-        <ChevronDownIcon />
-      </button>
-      {referenceMenu}
-    </div>
-  ) : null;
-
-  const insertMenuButton = (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={isInsertMenuOpen}
-        className={toolbarChipButtonClassName}
-        onMouseDown={(event) => {
-          event.preventDefault();
-          saveCurrentRange();
-        }}
-        onClick={() => {
-          const shouldOpen = !isInsertMenuOpen;
-          closePeerToolbarMenus();
-          setIsInsertMenuOpen(shouldOpen);
-        }}
-      >
-        Inserir
-        <ChevronDownIcon />
-      </button>
-      {insertMenu}
-    </div>
   );
 
-  const layoutMenuButton = !isLayoutInOverflow ? (
-    <div ref={layoutToolbarGroupRef} className="relative shrink-0">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={isLayoutMenuOpen}
-        className={toolbarChipButtonClassName}
-        onMouseDown={(event) => {
-          event.preventDefault();
-          saveCurrentRange();
-        }}
-        onClick={() => {
-          const shouldOpen = !isLayoutMenuOpen;
-          closePeerToolbarMenus();
-          setIsLayoutMenuOpen(shouldOpen);
-        }}
-      >
-        Layout
-        <ChevronDownIcon />
-      </button>
-      {layoutMenu}
-    </div>
-  ) : null;
+  const linkToolbarButton = (
+    <button
+      type="button"
+      title="Inserir link"
+      aria-label="Inserir link"
+      className={toolbarIconButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openLinkPopover}
+    >
+      <LinkIcon />
+    </button>
+  );
 
-  const moreMenuButton = hasOverflowMenu ? (
-    <div ref={overflowToolbarGroupRef} className="relative shrink-0">
+  const attachmentToolbarButton = (
+    <button
+      type="button"
+      title="Anexar arquivo"
+      aria-label="Anexar arquivo"
+      className={toolbarIconButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openLocalAttachmentPicker}
+    >
+      <AttachmentIcon />
+    </button>
+  );
+
+  const pdfToolbarButton = (
+    <button
+      type="button"
+      title="Vincular PDF"
+      aria-label="Vincular PDF"
+      className={toolbarIconButtonClassName}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={openPdfPickerFromToolbar}
+    >
+      <PdfToolbarIcon />
+    </button>
+  );
+
+  const moreMenuButton = (
+    <div className="relative shrink-0">
       <button
         type="button"
         title="Mais opções"
@@ -2466,9 +2141,34 @@ export function NotebookPageEditor({
       >
         <MoreIcon />
       </button>
-      {overflowMenu}
+      {moreMenu}
     </div>
-  ) : null;
+  );
+
+  const toolbarControls = (
+    <>
+      {renderToolbarActionButton(h1Button, toolbarHeadingButtonClassName)}
+      {renderToolbarActionButton(h2Button, toolbarHeadingButtonClassName)}
+      {renderToolbarActionButton(h3Button, toolbarHeadingButtonClassName)}
+      {toolbarSeparator}
+      {renderToolbarActionButton(boldButton)}
+      {renderToolbarActionButton(italicButton)}
+      {toolbarSeparator}
+      {renderToolbarActionButton(unorderedListButton)}
+      {renderToolbarActionButton(orderedListButton)}
+      {toolbarSeparator}
+      {renderToolbarActionButton(blockquoteButton)}
+      {renderToolbarActionButton(codeButton)}
+      {toolbarSeparator}
+      {citeToolbarButton}
+      {toolbarSeparator}
+      {linkToolbarButton}
+      {attachmentToolbarButton}
+      {pdfToolbarButton}
+      {toolbarSeparator}
+      {moreMenuButton}
+    </>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -2494,26 +2194,7 @@ export function NotebookPageEditor({
             isFocusMode ? "mx-auto w-fit max-w-full justify-center gap-1 rounded-lg px-2" : `gap-1 rounded-lg pr-2 ${contentInsetClassName}`
           }`}
         >
-          {isFocusMode ? (
-            <>
-              {textMenuButton}
-              {insertMenuButton}
-              {referenceMenuButton}
-              {layoutMenuButton}
-              {moreMenuButton}
-            </>
-          ) : (
-            <>
-              {textMenuButton}
-              {boldToolbarButton}
-              {italicToolbarButton}
-              {listMenuButton}
-              {referenceMenuButton}
-              {insertMenuButton}
-              {layoutMenuButton}
-              {moreMenuButton}
-            </>
-          )}
+          {toolbarControls}
 
           {isLinkPopoverOpen ? (
             <div className={`absolute top-[calc(100%+6px)] z-40 flex w-72 items-center gap-2 rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg ${

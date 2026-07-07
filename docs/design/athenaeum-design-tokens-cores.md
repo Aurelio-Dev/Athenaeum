@@ -1,5 +1,15 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 07/07/2026 — Toolbar compacta por ícones no Caderno:**
+> a toolbar do editor foi ajustada para seguir a referência visual com botões
+> diretos e compactos por ícone. `H1/H2/H3`, `Negrito`, `Itálico`, listas,
+> citação em bloco, código, Cite, link, anexo e PDF voltaram para a barra; o
+> `...` permanente concentra inserção, layout, espaçamento e manutenção. As
+> opções de alinhamento dentro do menu `...` agora são representadas por ícones
+> em vez de rótulos textuais. Não houve alteração de tokens de cor, paleta de
+> tags, tipografia, tema claro/escuro, comandos do editor ou formato HTML
+> persistido.
+>
 > **Changelog 07/07/2026 — Reorganização estrutural da toolbar do Caderno:**
 > a toolbar do editor foi compactada por grupos funcionais: `Texto`,
 > `Negrito`, `Itálico`, `Listas`, `Referências`, `Inserir` e `Layout`.

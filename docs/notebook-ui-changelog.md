@@ -1,5 +1,35 @@
 # Changelog da UI do Caderno
 
+## 07/07/2026 — Toolbar compacta por ícones
+
+Esta fase ajustou a toolbar do editor para ficar mais próxima da referência
+visual enviada, priorizando botões compactos por ícone e removendo os menus
+textuais permanentes da barra.
+
+Principais alterações:
+
+- `H1`, `H2` e `H3` voltaram para a toolbar como glifos diretos.
+- `Negrito`, `Itálico`, listas, citação em bloco e código ficaram como botões
+  diretos por ícone.
+- `Cite`, link, anexo e PDF também voltaram para a toolbar como ações diretas
+  por ícone.
+- O botão `...` voltou a existir permanentemente no fim da toolbar, como na
+  referência, concentrando inserção de blocos, layout, espaçamento e manutenção.
+- As opções de alinhamento dentro do menu `...` passaram a usar ícones em vez
+  de rótulos textuais.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm run test -- src/features/notebooks/notebookDiagramParser.test.ts`
+- `npm run build`
+- `git diff --check`
+
+Observação sobre tokens:
+
+Não houve alteração nos tokens de cor, na paleta de tags, nos temas claro/escuro
+ou na tipografia global nesta fase.
+
 ## 07/07/2026 — Reorganização estrutural da toolbar do editor
 
 Esta fase refez a organização da toolbar para reduzir a quantidade de controles

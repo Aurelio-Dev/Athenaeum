@@ -134,6 +134,50 @@ export function AttachmentIcon() {
   );
 }
 
+export function AlignLeftIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M4 6h14" />
+      <path d="M4 10h10" />
+      <path d="M4 14h14" />
+      <path d="M4 18h9" />
+    </svg>
+  );
+}
+
+export function AlignCenterIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M6 6h12" />
+      <path d="M8 10h8" />
+      <path d="M6 14h12" />
+      <path d="M9 18h6" />
+    </svg>
+  );
+}
+
+export function AlignRightIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M6 6h14" />
+      <path d="M10 10h10" />
+      <path d="M6 14h14" />
+      <path d="M11 18h9" />
+    </svg>
+  );
+}
+
+export function AlignJustifyIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M4 6h16" />
+      <path d="M4 10h16" />
+      <path d="M4 14h16" />
+      <path d="M4 18h16" />
+    </svg>
+  );
+}
+
 export function PdfToolbarIcon() {
   return (
     <svg {...iconProps}>
@@ -192,14 +236,6 @@ export function MoreIcon() {
       <circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-export function ChevronDownIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
