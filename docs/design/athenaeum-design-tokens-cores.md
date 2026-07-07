@@ -1,5 +1,12 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 07/07/2026 — Refinos da toolbar compacta do Caderno:**
+> o botão `...` foi alinhado ao canto direito da toolbar, `Vincular PDF` passou
+> a aparecer como botão com ícone e texto `PDF`, e os ícones/glifos da toolbar
+> voltaram a usar os tokens existentes de texto suave/forte para respeitar
+> modo claro e escuro. Não houve alteração de tokens de cor, paleta de tags,
+> tipografia, comandos do editor ou formato HTML persistido.
+>
 > **Changelog 07/07/2026 — Toolbar compacta por ícones no Caderno:**
 > a toolbar do editor foi ajustada para seguir a referência visual com botões
 > diretos e compactos por ícone. `H1/H2/H3`, `Negrito`, `Itálico`, listas,

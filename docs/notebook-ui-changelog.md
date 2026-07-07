@@ -1,5 +1,29 @@
 # Changelog da UI do Caderno
 
+## 07/07/2026 — Refinos da toolbar compacta
+
+Esta fase ajustou detalhes visuais da toolbar compacta do editor.
+
+Principais alterações:
+
+- O botão `...` passou a ficar encostado no canto direito da toolbar.
+- `Vincular PDF` passou a usar botão com ícone e texto `PDF`, seguindo a
+  referência visual.
+- Os ícones e glifos da toolbar voltaram a usar os tokens temáticos já
+  existentes de texto suave/forte para modo claro e escuro.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm run test -- src/features/notebooks/notebookDiagramParser.test.ts`
+- `npm run build`
+- `git diff --check`
+
+Observação sobre tokens:
+
+Não houve alteração nos tokens de cor, na paleta de tags, nos temas claro/escuro
+ou na tipografia global nesta fase.
+
 ## 07/07/2026 — Toolbar compacta por ícones
 
 Esta fase ajustou a toolbar do editor para ficar mais próxima da referência

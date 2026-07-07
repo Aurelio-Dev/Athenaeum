@@ -1880,9 +1880,11 @@ export function NotebookPageEditor({
     syncActiveActions();
   }
 
-  const toolbarIconButtonClassName = "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-primary transition hover:bg-surface-muted";
-  const toolbarHeadingButtonClassName = "inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-2 text-text-primary transition hover:bg-surface-muted";
-  const activeToolbarButtonClassName = "bg-primary-soft text-primary";
+  const toolbarBaseTextClassName = "text-[var(--color-sidebar-muted)] hover:text-[var(--color-sidebar-text)]";
+  const toolbarIconButtonClassName = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
+  const toolbarHeadingButtonClassName = `inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-2 transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
+  const toolbarPdfButtonClassName = `inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
+  const activeToolbarButtonClassName = "bg-primary-soft text-[var(--color-sidebar-text)]";
   const toolbarSeparator = <span className="mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
   const menuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg";
   const menuSectionLabelClassName = "px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle";
@@ -2112,11 +2114,12 @@ export function NotebookPageEditor({
       type="button"
       title="Vincular PDF"
       aria-label="Vincular PDF"
-      className={toolbarIconButtonClassName}
+      className={toolbarPdfButtonClassName}
       onMouseDown={(event) => event.preventDefault()}
       onClick={openPdfPickerFromToolbar}
     >
       <PdfToolbarIcon />
+      PDF
     </button>
   );
 
@@ -2165,7 +2168,7 @@ export function NotebookPageEditor({
       {linkToolbarButton}
       {attachmentToolbarButton}
       {pdfToolbarButton}
-      {toolbarSeparator}
+      <span className="min-w-4 flex-1" aria-hidden="true" />
       {moreMenuButton}
     </>
   );
