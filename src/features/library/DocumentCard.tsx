@@ -186,7 +186,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
         <div className="document-cover-swatch relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={coverStyle} />
 
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
+          <h2 className="truncate font-sans text-[15px] font-semibold leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
           <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{formatAuthors(document.authors)}</p>
           <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{publisherLine}</p>
         </div>
@@ -332,7 +332,7 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
 
       <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
         <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{publisherLine}</p>
-        <h2 className="line-clamp-2 font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
+        <h2 className="line-clamp-2 font-sans text-[15px] font-semibold leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
         <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{formatAuthors(document.authors)}</p>
 
         {isTrashMode ? (
