@@ -1,5 +1,17 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 07/07/2026 — Reorganização estrutural da toolbar do Caderno:**
+> a toolbar do editor foi compactada por grupos funcionais: `Texto`,
+> `Negrito`, `Itálico`, `Listas`, `Referências`, `Inserir` e `Layout`.
+> `H1/H2/H3`, listas, Cite, links, anexos e PDF deixaram de ocupar botões
+> permanentes separados e foram movidos para menus dedicados. `Limpar
+> formatação` foi movido para `Texto` e `Remover link` para `Referências`,
+> removendo o menu `...` permanente. O `...` agora aparece apenas como
+> overflow responsivo quando `Layout` e/ou `Referências` precisam ser
+> recolhidos pela largura disponível da própria toolbar. Não houve alteração
+> de tokens de cor, paleta de tags, tipografia, tema claro/escuro, comandos do
+> editor ou formato HTML persistido.
+>
 > **Changelog 07/07/2026 — Caderno, painel Detalhes e toolbar do editor:**
 > a rodada de UI do Caderno deixou a sidebar `Detalhes` mais robusta, com
 > status de leitura visual, descrição, campo de autor/disciplina reposicionado,
@@ -7,12 +19,10 @@
 > rodapé e botão de opções também no cabeçalho. O menu ganhou ações reais para
 > renomear, mover para coleção, fixar nos favoritos, contagem detalhada e mover
 > para a lixeira, mantendo placeholders desabilitados onde ainda não há lógica.
-> O editor também reorganizou a toolbar: `Link`, `Anexar` e `PDF` ficaram como
-> botões diretos; `Inserir` concentra Tabela, Callout, Imagem, Equação,
-> Separador e Diagramas; `Layout` concentra Alinhamento e Espaçamento; e `...`
-> ficou restrito a manutenção de formatação (`Limpar formatação` e `Remover
-> link`). Não houve alteração de tokens de cor, paleta de tags, tipografia,
-> tema claro/escuro ou formato HTML persistido.
+> O editor também iniciou a separação da toolbar em menus menores, depois
+> consolidada pela reorganização estrutural registrada acima. Não houve
+> alteração de tokens de cor, paleta de tags, tipografia, tema claro/escuro ou
+> formato HTML persistido.
 >
 > **Changelog 06/07/2026 — Tela inicial e painel Detalhes:** a rodada de UI
 > da Home ajustou tokens de texto e previews sem mudar o accent principal nem
