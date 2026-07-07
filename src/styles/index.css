@@ -670,6 +670,60 @@ select {
   font-weight: 650;
 }
 
+.notebook-editor .notebook-graph-cycle-layout {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em 1.4em;
+}
+
+.notebook-editor .notebook-graph-cycle-layout .notebook-graph-visual--cycle {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+
+.notebook-editor .notebook-graph-cycle-vertex {
+  vector-effect: non-scaling-stroke;
+  fill: var(--diagram-node-bg);
+  stroke: var(--diagram-node-border);
+  stroke-width: var(--diagram-node-stroke-width);
+}
+
+.notebook-editor .notebook-graph-cycle-vertex-label {
+  font-size: calc(var(--diagram-node-font-size) * 0.96);
+}
+
+.notebook-editor .notebook-graph-cycle-math {
+  min-width: min(100%, 13rem);
+  max-width: 100%;
+  flex: 0 1 auto;
+  color: var(--diagram-node-text);
+  font-family: var(--font-body);
+  font-size: 0.86em;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+}
+
+.notebook-editor .notebook-graph-cycle-math p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.notebook-editor .notebook-graph-cycle-math-title {
+  color: var(--diagram-node-muted-text);
+  font-weight: 700;
+}
+
+.notebook-editor .notebook-graph-cycle-math-set {
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
 .notebook-editor .notebook-flowchart-visual-host {
   width: 100%;
   max-width: 100%;
@@ -795,6 +849,12 @@ select {
 
 .notebook-editor--diagram-clean-mode .notebook-graph-visual {
   height: min(var(--notebook-graph-visual-height, var(--diagram-graph-visual-height)), 8rem);
+}
+
+/* No modo limpo, o grafo ciclo e a descrição matemática continuam visíveis;
+   apenas o espaçamento é compactado junto com o resto do bloco. */
+.notebook-editor--diagram-clean-mode .notebook-graph-cycle-layout {
+  gap: 0.35em 1.1em;
 }
 
 .notebook-editor--diagram-clean-mode .notebook-flowchart-visual {

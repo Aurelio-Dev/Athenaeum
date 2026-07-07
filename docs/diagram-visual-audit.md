@@ -19,7 +19,8 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Arquivo | Papel atual | Observacoes |
 | --- | --- | --- |
 | `src/features/notebooks/notebookEditorDiagramDom.ts` | Normalizacao DOM, leitura da fonte textual, render runtime do preview e migracao de figuras antigas para o bloco unificado. | Contem o ponto mais sensivel: decide entre SVG runtime, fallback textual e estados vazio/invalido. |
-| `src/features/notebooks/notebookDiagramParser.ts` | Parser puro de relacoes `A -> B`. | Compartilhado por `diagram`, `graph` e `flowchart`; ja possui testes minimos com Vitest. |
+| `src/features/notebooks/notebookDiagramParser.ts` | Parsers puros: `parseDiagramSource` (relacoes `A -> B`) e `parseGraphSource` (`A -> B` e `A -- B` com direcao explicita). | `parseDiagramSource` segue compartilhado por `diagram` e `flowchart`; `graph` usa `parseGraphSource`. Ambos com testes Vitest. |
+| `src/features/notebooks/notebookGraphAnalysis.ts` | Deteccao pura de ciclo simples nao direcionado (`detectSimpleCycle`) com ordem deterministica de percurso. | Usado apenas pelo preview de `graph`; possui testes dedicados. |
 | `src/features/notebooks/NotebookDiagramPreview.tsx` | Preview SVG runtime para `data-diagram-kind="diagram"`. | Layout horizontal deterministico, sem biblioteca externa. |
 | `src/features/notebooks/NotebookGraphPreview.tsx` | Preview SVG runtime para `data-diagram-kind="graph"`. | Layout em grade deterministica, sem force-directed, canvas ou biblioteca externa. |
 | `src/features/notebooks/NotebookFlowchartPreview.tsx` | Preview SVG runtime para `data-diagram-kind="flowchart"`. | Layout vertical deterministico, com tratamento visual simples para inicio/fim. |
@@ -46,11 +47,14 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 6E.2 | Concluida | Refinamento minimalista do modo limpo. | No modo limpo, o titulo interno do preview e ocultado, a moldura principal do preview e removida e o bloco fica mais editorial, mantendo nos, setas e conexoes visiveis. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E.3 | Concluida | Compactacao vertical do modo limpo. | O modo limpo reduziu margem, padding e altura visual runtime dos previews para que diagramas parecam figuras editoriais embutidas no texto. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E.4 | Concluida | Ajuste fino da altura do modo limpo. | O modo limpo passou a limitar diretamente a altura visual dos SVGs, reduzindo espaco residual abaixo de diagramas pequenos sem alterar o layout logico. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Macrofase 7 | Concluida | Grafo nao direcionado, deteccao de ciclo simples e descricao matematica runtime para `graph`. | `graph` ganhou parser proprio (`parseGraphSource`) com arestas `A -- B` e direcao explicita por aresta; ciclos simples nao direcionados sao detectados (`detectSimpleCycle`) e renderizados em layout circular deterministico com descricao matematica (`Cn`, `V`, `E`) gerada em runtime; grafos nao direcionados fora de ciclo mantem a grade, sem setas. `diagram` e `flowchart` nao mudaram. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 6E.4:
+Ressalvas mantidas apos a Macrofase 7:
 
-- `graph` agora tem preview SVG runtime para relacoes `A -> B`, mas fontes
-  legadas no formato textual antigo, como `A -- B`, seguem no fallback textual.
+- `graph` agora tem preview SVG runtime para relacoes `A -> B` e `A -- B`;
+  fontes de `graph` com `A -- B` deixaram de cair no fallback textual. Em
+  `diagram` e `flowchart`, linhas `A -- B` continuam invalidas por decisao de
+  escopo (parser compartilhado inalterado).
 - O `Modo limpo` e global do editor enquanto a pagina esta aberta; ele nao e
   persistido em `data-*`, `app_settings` ou HTML salvo.
 - No modo limpo, o titulo interno e a area `Fonte` somem visualmente, mas a
@@ -58,7 +62,16 @@ Ressalvas mantidas apos a Fase 6E.4:
 - O modo limpo tambem limita diretamente a altura visual dos SVGs apenas em
   runtime; o layout logico e o HTML persistido seguem iguais.
 - Cadeias em linha unica no formato `A -> B -> C` sao expandidas em relacoes
-  consecutivas; linhas legadas `A -- B` seguem no fallback textual/invalido.
+  consecutivas; em `graph`, cadeias `A -- B -- C` e mistas `A -> B -- C`
+  tambem sao expandidas.
+- Em `graph`, ciclos simples nao direcionados (>= 3 vertices, conectado, grau
+  2 em todos os vertices, |E| = |V|, sem self-loop, sem aresta direcionada)
+  ganham layout circular e descricao matematica runtime (`Cn`, `V`, `E`).
+  Grafos que nao satisfazem essas condicoes mantem a grade deterministica;
+  arestas nao direcionadas na grade sao desenhadas sem seta.
+- A descricao matematica usa HTML semantico com `<sub>`; KaTeX nao foi usado
+  aqui para nao ampliar o escopo (labels arbitrarios exigiriam escaping para
+  `\text{}` e render fora do fluxo React atual).
 - `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito
   longos ainda precisam reduzir escala para caber no card.
 - Labels longos truncam de forma menos agressiva, mas continuam truncados para
@@ -101,12 +114,17 @@ na fonte textual e em um preview leve derivado dela.
 | --- | --- | --- | --- |
 | `diagram` | Relacoes `A -> B`, uma por linha. | SVG runtime horizontal com caixas e setas. | Mensagens orientativas quando vazio ou sem relacoes validas. |
 | `flowchart` | Relacoes `A -> B`, uma por linha. | SVG runtime vertical com caixas, setas e terminais simples. | Ainda usa fallback textual quando nao ha relacoes validas. |
-| `graph` | Relacoes `A -> B`, uma por linha. | SVG runtime em grade deterministica com caixas e setas. | Fallback textual quando nao ha relacoes validas. |
+| `graph` | Relacoes `A -> B` (direcionada) e `A -- B` (nao direcionada), uma ou mais por linha. | SVG runtime em grade deterministica; ciclos simples nao direcionados ganham layout circular com descricao matematica. | Fallback textual quando nao ha relacoes validas. |
 
-`diagram`, `graph` e `flowchart` compartilham `parseDiagramSource`. O parser
-ignora linhas vazias, linhas invalidas, relacoes malformadas e nos vazios. Nos
-sao deduplicados preservando a ordem de aparicao, e arestas repetidas tambem
-sao deduplicadas.
+`diagram` e `flowchart` compartilham `parseDiagramSource`; `graph` usa o
+parser proprio `parseGraphSource`, que aceita `->` e `--` e marca a direcao em
+cada aresta. Os dois parsers ignoram linhas vazias, linhas invalidas, relacoes
+malformadas e nos vazios. Nos sao deduplicados preservando a ordem de
+aparicao; arestas direcionadas repetidas sao deduplicadas por sentido, e
+arestas nao direcionadas tratam `A -- B` e `B -- A` como a mesma aresta. A
+deteccao de ciclo simples vive em `notebookGraphAnalysis.ts`
+(`detectSimpleCycle`) e e coberta por testes dedicados. A sintaxe completa
+esta documentada em `docs/notebook-diagram-syntax.md`.
 
 ## Persistencia Leve
 
@@ -192,7 +210,7 @@ Em `NotebookFlowchartPreview.tsx`:
 - inset da seta: `5`;
 - rota lateral simples com deslocamento fixo para arestas nao adjacentes.
 
-Em `NotebookGraphPreview.tsx`:
+Em `NotebookGraphPreview.tsx` (grade):
 
 - layout em grade com ate 3 colunas;
 - largura minima do no: `136`;
@@ -204,6 +222,17 @@ Em `NotebookGraphPreview.tsx`:
 - padding horizontal interno do no: `38`;
 - inset da seta: `5`;
 - altura visual maxima: `320`.
+
+Em `NotebookGraphPreview.tsx` (layout circular de ciclo):
+
+- raio do vertice (ponto): `5`;
+- distancia entre vertice e label: `12` (+`4` para labels do topo/base);
+- limite de label: `16` caracteres;
+- corda minima entre vertices: `46`; raio do circulo derivado dela e limitado
+  entre `64` e `168`;
+- padding do viewBox: `18`;
+- viewBox calculado a partir do raio, extensao dos labels e padding;
+- altura visual maxima compartilhada com a grade: `320`.
 
 Esses valores nao sao necessariamente errados; eles apenas ainda nao estao
 centralizados como tokens de diagrama.
@@ -219,8 +248,12 @@ centralizados como tokens de diagrama.
 - Ciclos, arestas cruzadas e relacoes nao adjacentes sao tratados de forma
   simples. O resultado e previsivel, mas nao tenta auto-layout.
 - Arestas de um no para ele mesmo sao ignoradas no preview visual.
-- `graph` usa grade deterministica simples; relacoes cruzadas, ciclos e
-  grafos densos continuam sem layout force-directed.
+- `graph` usa grade deterministica simples; relacoes cruzadas e grafos densos
+  continuam sem layout force-directed. A unica excecao e o ciclo simples nao
+  direcionado, que ganha layout circular; ciclos direcionados, ciclos com
+  cordas e ciclos parciais permanecem na grade.
+- O layout circular foi pensado para 3 a ~12 vertices; acima disso o circulo
+  continua correto, mas labels podem ficar densos.
 - Estados vazio/invalido estao mais orientativos em `diagram` do que em
   `flowchart` e `graph`.
 - Parte da legibilidade depende de `color-mix`; e bom manter validacao visual

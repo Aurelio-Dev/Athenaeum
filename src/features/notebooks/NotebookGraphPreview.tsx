@@ -1,9 +1,10 @@
-import { type CSSProperties, useId } from "react";
+import { type CSSProperties, useId, useMemo } from "react";
 
-import type { ParsedDiagram } from "./notebookDiagramParser";
+import type { ParsedGraph } from "./notebookDiagramParser";
+import { detectSimpleCycle, type SimpleCycle } from "./notebookGraphAnalysis";
 
 type NotebookGraphPreviewProps = {
-  graph: ParsedDiagram;
+  graph: ParsedGraph;
 };
 
 type GraphVisualStyle = CSSProperties & {
@@ -20,6 +21,13 @@ const estimatedCharacterWidth = 7.1;
 const nodeHorizontalPadding = 38;
 const arrowInset = 5;
 const maxVisualHeight = 320;
+
+const cycleVertexRadius = 5;
+const cycleLabelGap = 12;
+const cycleLabelHalfHeight = 7;
+const cycleLabelCharacterLimit = 16;
+const cyclePadding = 18;
+const cycleMinChordLength = 46;
 
 function getColumnCount(nodeCount: number) {
   if (nodeCount <= 2) {
@@ -89,7 +97,153 @@ function getNodeBoundaryDistance(unitX: number, unitY: number, nodeWidth: number
   return Math.min(horizontalDistance, verticalDistance);
 }
 
-export function NotebookGraphPreview({ graph }: NotebookGraphPreviewProps) {
+type CycleGraphPreviewProps = {
+  graph: ParsedGraph;
+  cycle: SimpleCycle;
+};
+
+type CycleLabelAnchor = "start" | "middle" | "end";
+
+function getCycleLabelAnchor(unitX: number): CycleLabelAnchor {
+  if (unitX > 0.35) {
+    return "start";
+  }
+
+  if (unitX < -0.35) {
+    return "end";
+  }
+
+  return "middle";
+}
+
+function getCycleLabelHorizontalExtent(labelX: number, labelWidth: number, anchor: CycleLabelAnchor) {
+  if (anchor === "start") {
+    return [labelX, labelX + labelWidth] as const;
+  }
+
+  if (anchor === "end") {
+    return [labelX - labelWidth, labelX] as const;
+  }
+
+  return [labelX - labelWidth / 2, labelX + labelWidth / 2] as const;
+}
+
+// Layout circular determinístico para ciclos simples: primeiro vértice no
+// topo, percurso em sentido horário e labels radiais fora do círculo.
+function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
+  const vertexCount = cycle.vertexIds.length;
+  const labelById = new Map(graph.nodes.map((node) => [node.id, node.label]));
+  const radius = clamp(cycleMinChordLength / (2 * Math.sin(Math.PI / vertexCount)), 64, 168);
+  const labelDistance = radius + cycleVertexRadius + cycleLabelGap;
+
+  const vertices = cycle.vertexIds.map((vertexId, index) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * index) / vertexCount;
+    const unitX = Math.cos(angle);
+    const unitY = Math.sin(angle);
+    const label = labelById.get(vertexId) ?? vertexId;
+    const displayLabel = truncateLabel(label, cycleLabelCharacterLimit);
+    const anchor = getCycleLabelAnchor(unitX);
+    // Labels do topo/base (âncora central) ganham um respiro extra para não
+    // encostar no vértice.
+    const extraDistance = anchor === "middle" ? 4 : 0;
+
+    return {
+      id: vertexId,
+      label,
+      displayLabel,
+      x: radius * unitX,
+      y: radius * unitY,
+      labelX: (labelDistance + extraDistance) * unitX,
+      labelY: (labelDistance + extraDistance) * unitY,
+      anchor,
+    };
+  });
+
+  let minX = -radius - cycleVertexRadius;
+  let maxX = radius + cycleVertexRadius;
+  let minY = -radius - cycleVertexRadius;
+  let maxY = radius + cycleVertexRadius;
+  vertices.forEach((vertex) => {
+    const labelWidth = Array.from(vertex.displayLabel).length * estimatedCharacterWidth;
+    const [labelMinX, labelMaxX] = getCycleLabelHorizontalExtent(vertex.labelX, labelWidth, vertex.anchor);
+    minX = Math.min(minX, labelMinX);
+    maxX = Math.max(maxX, labelMaxX);
+    minY = Math.min(minY, vertex.labelY - cycleLabelHalfHeight);
+    maxY = Math.max(maxY, vertex.labelY + cycleLabelHalfHeight);
+  });
+
+  const svgWidth = maxX - minX + cyclePadding * 2;
+  const svgHeight = maxY - minY + cyclePadding * 2;
+  const viewBox = `${minX - cyclePadding} ${minY - cyclePadding} ${svgWidth} ${svgHeight}`;
+  const visualStyle: GraphVisualStyle = {
+    "--notebook-graph-visual-height": `${Math.min(svgHeight, maxVisualHeight)}px`,
+  };
+
+  const edgeEndpoints = vertices.map((vertex, index) => {
+    const nextVertex = vertices[(index + 1) % vertexCount];
+    return { id: `cycle-edge-${index + 1}`, x1: vertex.x, y1: vertex.y, x2: nextVertex.x, y2: nextVertex.y };
+  });
+
+  const vertexSetText = `V = {${vertices.map((vertex) => vertex.displayLabel).join(", ")}}`;
+  const edgeSetText = `E = {${vertices
+    .map((vertex, index) => `{${vertex.displayLabel}, ${vertices[(index + 1) % vertexCount].displayLabel}}`)
+    .join(", ")}}`;
+  const accessibleTitle = `Grafo ciclo com ${vertexCount} vértices e ${vertexCount} arestas`;
+
+  return (
+    <div className="notebook-graph-visual-host" aria-label={accessibleTitle}>
+      <div className="notebook-graph-cycle-layout">
+        <svg
+          role="img"
+          viewBox={viewBox}
+          className="notebook-graph-visual notebook-graph-visual--cycle"
+          style={visualStyle}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <title>{accessibleTitle}</title>
+          <g>
+            {edgeEndpoints.map((edge) => (
+              <line
+                key={edge.id}
+                className="notebook-diagram-visual-edge"
+                x1={edge.x1}
+                y1={edge.y1}
+                x2={edge.x2}
+                y2={edge.y2}
+              />
+            ))}
+          </g>
+          <g>
+            {vertices.map((vertex) => (
+              <g key={vertex.id}>
+                <title>{vertex.label}</title>
+                <circle className="notebook-graph-cycle-vertex" cx={vertex.x} cy={vertex.y} r={cycleVertexRadius} />
+                <text
+                  className="notebook-diagram-visual-label notebook-graph-cycle-vertex-label"
+                  x={vertex.labelX}
+                  y={vertex.labelY}
+                  dominantBaseline="middle"
+                  textAnchor={vertex.anchor}
+                >
+                  {vertex.displayLabel}
+                </text>
+              </g>
+            ))}
+          </g>
+        </svg>
+        <div className="notebook-graph-cycle-math">
+          <p className="notebook-graph-cycle-math-title">
+            C<sub>{vertexCount}</sub>: grafo ciclo com {vertexCount} vértices
+          </p>
+          <p className="notebook-graph-cycle-math-set">{vertexSetText}</p>
+          <p className="notebook-graph-cycle-math-set">{edgeSetText}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GridGraphPreview({ graph }: NotebookGraphPreviewProps) {
   const arrowMarkerId = `notebook-graph-arrow-${useId().replace(/:/g, "")}`;
   const columnCount = getColumnCount(graph.nodes.length);
   const rowCount = Math.max(1, Math.ceil(graph.nodes.length / columnCount));
@@ -189,7 +343,7 @@ export function NotebookGraphPreview({ graph }: NotebookGraphPreviewProps) {
               y1={edge.startY}
               x2={edge.endX}
               y2={edge.endY}
-              markerEnd={`url(#${arrowMarkerId})`}
+              markerEnd={edge.direction === "directed" ? `url(#${arrowMarkerId})` : undefined}
             />
           ))}
         </g>
@@ -220,4 +374,14 @@ export function NotebookGraphPreview({ graph }: NotebookGraphPreviewProps) {
       </svg>
     </div>
   );
+}
+
+export function NotebookGraphPreview({ graph }: NotebookGraphPreviewProps) {
+  const cycle = useMemo(() => detectSimpleCycle(graph), [graph]);
+
+  if (cycle) {
+    return <CycleGraphPreview graph={graph} cycle={cycle} />;
+  }
+
+  return <GridGraphPreview graph={graph} />;
 }
