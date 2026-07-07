@@ -111,7 +111,7 @@ export function DocumentPreview({ documentId, filePath, year }: DocumentPreviewP
     <div className="rounded-lg border border-border-muted bg-surface-muted p-4">
       <div className="aspect-[16/10] w-full overflow-hidden rounded-md border border-indigo-200 bg-surface-panel shadow-card">
         {data ? (
-          <img src={data.dataUrl} alt="Pre-visualizacao da primeira pagina" className="h-full w-full object-cover object-top" draggable={false} />
+          <img src={data.dataUrl} alt="Pré-visualização da primeira página" className="h-full w-full object-cover object-top" draggable={false} />
         ) : (
           <PreviewSkeleton />
         )}

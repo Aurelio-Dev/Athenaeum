@@ -36,7 +36,7 @@ export function LibraryHeader({ title, countText, description, tabs, onEdit }: L
             da fonte a 42px, entao com o overflow:hidden do `truncate` os glifos
             com ascendente/descendente seriam cortados verticalmente; pr-1 evita
             recorte do ultimo glifo na borda direita. */}
-        <h1 className="truncate py-1.5 pr-1 font-serif text-[42px] font-bold leading-[46.2px] text-[#2C1810] dark:text-text-primary">{title}</h1>
+        <h1 className="truncate py-1.5 pr-1 font-serif text-[42px] font-bold leading-[46.2px] text-[#2C1810] dark:text-[#F0E8DF]">{title}</h1>
         {onEdit ? (
           <button
             type="button"

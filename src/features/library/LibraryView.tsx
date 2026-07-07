@@ -344,8 +344,8 @@ export function LibraryView() {
     enabled: Boolean(activeCollection) && collectionTab === "canvases",
   });
   const canvases = canvasesQuery.data ?? [];
-  const emptyMessage = isTrashRoute ? "Sua lixeira esta vazia" : "Nenhum documento encontrado";
-  const emptyDescription = isTrashRoute ? "Itens movidos para a lixeira aparecem aqui por ate 30 dias." : "Ajuste a busca ou os filtros para ver a biblioteca novamente.";
+  const emptyMessage = isTrashRoute ? "Sua lixeira está vazia" : "Nenhum documento encontrado";
+  const emptyDescription = isTrashRoute ? "Itens movidos para a lixeira aparecem aqui por até 30 dias." : "Ajuste a busca ou os filtros para ver a biblioteca novamente.";
 
   async function createNotebookInCollection() {
     if (!activeCollection) {
@@ -643,6 +643,7 @@ export function LibraryView() {
       onRouteChange={setActiveRoute}
       onCreateCollection={createCollection}
       onRenameCollection={renameCollection}
+      onUpdateCollection={editActiveCollection}
       onDeleteCollection={deleteCollection}
       onEmptyAreaContextMenu={openLibraryAreaContextMenu}
       onOpenSettings={() =>
@@ -652,7 +653,7 @@ export function LibraryView() {
       <div className="flex h-full min-h-0 flex-1 flex-col xl:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col" onContextMenu={openLibraryAreaContextMenu}>
           <div className="flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
-            <label className="ml-auto flex w-full max-w-sm items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
+            <label className="ml-auto flex w-full max-w-[340px] items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
               <SearchIcon />
               <input
                 value={searchTerm}
@@ -774,7 +775,7 @@ export function LibraryView() {
             ) : hasLoadError ? (
               <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
                 <div className="rounded-full bg-status-red px-4 py-2 text-sm font-semibold text-status-red-text">
-                  Nao foi possivel carregar a biblioteca.
+                  Não foi possível carregar a biblioteca.
                 </div>
               </div>
             ) : documents.length > 0 ? (

@@ -64,20 +64,41 @@ function EditIcon() {
   );
 }
 
-function CollectionIcon() {
+function FolderMetadataIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M3 7h5l2 2h11v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
-      <path d="M3 7V5a1 1 0 0 1 1-1h4l2 3" />
+    <svg width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path
+        d="M3.24992 7.58339L4.06242 6.01255C4.15075 5.83713 4.28511 5.68902 4.45112 5.58407C4.61714 5.47911 4.80856 5.42127 5.00492 5.41672H10.8333M10.8333 5.41672C10.9987 5.41643 11.1621 5.45406 11.3108 5.52672C11.4595 5.59939 11.5896 5.70515 11.691 5.8359C11.7925 5.96664 11.8626 6.1189 11.8961 6.28098C11.9296 6.44305 11.9255 6.61064 11.8841 6.77089L11.0499 10.0209C10.9896 10.2546 10.8529 10.4616 10.6615 10.6088C10.4701 10.756 10.2351 10.835 9.99367 10.8334H2.16659C1.87927 10.8334 1.60372 10.7192 1.40055 10.5161C1.19739 10.3129 1.08325 10.0374 1.08325 9.75005V2.70839C1.08325 2.42107 1.19739 2.14552 1.40055 1.94235C1.60372 1.73919 1.87927 1.62505 2.16659 1.62505H4.27909C4.46027 1.62328 4.639 1.66697 4.79892 1.75214C4.95885 1.83731 5.09486 1.96122 5.1945 2.11255L5.63325 2.76255C5.73189 2.91234 5.86618 3.03529 6.02407 3.12038C6.18195 3.20547 6.35848 3.25002 6.53784 3.25005H9.74992C10.0372 3.25005 10.3128 3.36419 10.516 3.56735C10.7191 3.77052 10.8333 4.04607 10.8333 4.33339V5.41672Z"
+        stroke="currentColor"
+        strokeWidth="1.08333"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-function BookIcon() {
+function DatabaseMetadataIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    <svg width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M6.5 4.33337C9.19239 4.33337 11.375 3.60584 11.375 2.70837C11.375 1.81091 9.19239 1.08337 6.5 1.08337C3.80761 1.08337 1.625 1.81091 1.625 2.70837C1.625 3.60584 3.80761 4.33337 6.5 4.33337Z" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M1.625 2.70837V10.2917C1.625 10.7227 2.13861 11.136 3.05285 11.4408C3.96709 11.7455 5.20707 11.9167 6.5 11.9167C7.79293 11.9167 9.03291 11.7455 9.94715 11.4408C10.8614 11.136 11.375 10.7227 11.375 10.2917V2.70837" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M1.625 6.5C1.625 6.93098 2.13861 7.3443 3.05285 7.64905C3.96709 7.9538 5.20707 8.125 6.5 8.125C7.79293 8.125 9.03291 7.9538 9.94715 7.64905C10.8614 7.3443 11.375 6.93098 11.375 6.5" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function OpenBookMetadataIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M6.5 3.79163V11.375" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M1.62492 9.75C1.48126 9.75 1.34348 9.69293 1.2419 9.59135C1.14032 9.48977 1.08325 9.35199 1.08325 9.20833V2.16667C1.08325 2.02301 1.14032 1.88523 1.2419 1.78365C1.34348 1.68207 1.48126 1.625 1.62492 1.625H4.33325C4.90789 1.625 5.45899 1.85327 5.86532 2.2596C6.27165 2.66593 6.49992 3.21703 6.49992 3.79167C6.49992 3.21703 6.72819 2.66593 7.13452 2.2596C7.54085 1.85327 8.09195 1.625 8.66659 1.625H11.3749C11.5186 1.625 11.6564 1.68207 11.7579 1.78365C11.8595 1.88523 11.9166 2.02301 11.9166 2.16667V9.20833C11.9166 9.35199 11.8595 9.48977 11.7579 9.59135C11.6564 9.69293 11.5186 9.75 11.3749 9.75H8.12492C7.69394 9.75 7.28062 9.9212 6.97587 10.226C6.67112 10.5307 6.49992 10.944 6.49992 11.375C6.49992 10.944 6.32871 10.5307 6.02397 10.226C5.71922 9.9212 5.3059 9.75 4.87492 9.75H1.62492Z"
+        stroke="currentColor"
+        strokeWidth="1.08333"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -130,6 +151,16 @@ function BookmarkIcon() {
   );
 }
 
+function ReadingProgressIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <line x1="5" x2="11" y1="7" y2="7" />
+      <line x1="5" x2="17" y1="12" y2="12" />
+      <line x1="5" x2="21" y1="17" y2="17" />
+    </svg>
+  );
+}
+
 function formatAuthors(authors: string[]) {
   return authors.length > 6 ? `${authors.slice(0, 6).join(", ")} et al.` : authors.join(", ");
 }
@@ -164,14 +195,17 @@ function splitAuthors(authors: string) {
 }
 
 const sectionLabelClassName = "text-xs font-semibold uppercase tracking-widest text-text-subtle";
+const metadataInputClassName =
+  "w-full min-w-0 rounded-lg border border-border-muted bg-surface-app px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary";
+const metadataLabelClassName = "text-xs font-bold uppercase tracking-wide text-text-secondary";
 
 function MetadataRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="mt-0.5 shrink-0 text-text-subtle">{icon}</span>
+      <span className="mt-0.5 shrink-0 text-text-secondary">{icon}</span>
       <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle">{label}</p>
-        <p className="break-words text-sm font-semibold text-text-primary">{value}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">{label}</p>
+        <p className="mt-1 break-words text-sm font-normal text-[#2C1810] dark:text-[#F0E8DF]">{value}</p>
       </div>
     </div>
   );
@@ -200,7 +234,7 @@ function EditDocumentModal({
     const nextYear = Number(year);
 
     if (title.trim().length === 0) {
-      setValidationMessage("Informe um titulo.");
+      setValidationMessage("Informe um título.");
       return;
     }
 
@@ -215,7 +249,7 @@ function EditDocumentModal({
     }
 
     if (!Number.isInteger(nextYear) || nextYear < 1000 || nextYear > 9999) {
-      setValidationMessage("Informe um ano valido com quatro digitos.");
+      setValidationMessage("Informe um ano válido com quatro dígitos.");
       return;
     }
 
@@ -230,59 +264,67 @@ function EditDocumentModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={onClose}>
-      <section className="w-full max-w-xl rounded-2xl bg-surface-panel shadow-2xl" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-        <header className="flex items-center gap-3 border-b border-border-subtle px-6 py-5">
+      <section
+        className="flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Revise os detalhes"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="flex shrink-0 items-start gap-3 px-6 py-5">
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold text-text-primary">Editar PDF</h2>
-            <p className="text-sm text-text-secondary">Atualize as informacoes do documento</p>
+            <h2 className="text-lg font-bold text-text-primary">Revise os detalhes</h2>
+            <p className="mt-1 text-sm text-text-secondary">Atualize os metadados do documento.</p>
           </div>
-          <button type="button" aria-label="Fechar edicao" className="rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={onClose}>
+          <button type="button" aria-label="Fechar edição" className="rounded-md p-2 text-text-subtle transition hover:bg-surface-muted" onClick={onClose}>
             <CloseIcon />
           </button>
         </header>
 
-        <div className="grid max-h-[calc(100vh-210px)] gap-4 overflow-y-auto px-6 py-5">
-          <label className="grid gap-1.5">
-            <span className="text-sm font-semibold text-text-primary">Titulo</span>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary" />
-          </label>
-
-          <label className="grid gap-1.5">
-            <span className="text-sm font-semibold text-text-primary">Autores</span>
-            <input value={authors} onChange={(event) => setAuthors(event.target.value)} className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary" />
-          </label>
-
-          <div className="grid grid-cols-[1fr_120px] gap-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div className="grid gap-4">
             <label className="grid gap-1.5">
-              <span className="text-sm font-semibold text-text-primary">Fonte</span>
-              <input value={source} onChange={(event) => setSource(event.target.value)} className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary" />
+              <span className={metadataLabelClassName}>Título</span>
+              <input value={title} onChange={(event) => setTitle(event.target.value)} className={metadataInputClassName} placeholder="Título do documento" />
             </label>
+
             <label className="grid gap-1.5">
-              <span className="text-sm font-semibold text-text-primary">Ano</span>
-              <input value={year} inputMode="numeric" onChange={(event) => setYear(event.target.value)} className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary" />
+              <span className={metadataLabelClassName}>Autor(es)</span>
+              <input value={authors} onChange={(event) => setAuthors(event.target.value)} className={metadataInputClassName} placeholder="Separe autores por vírgula" />
             </label>
+
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <label className="grid min-w-0 gap-1.5">
+                <span className={metadataLabelClassName}>Ano</span>
+                <input value={year} inputMode="numeric" onChange={(event) => setYear(event.target.value)} className={metadataInputClassName} placeholder="2026" />
+              </label>
+              <label className="grid min-w-0 gap-1.5">
+                <span className={metadataLabelClassName}>Fonte</span>
+                <input value={source} onChange={(event) => setSource(event.target.value)} className={metadataInputClassName} placeholder="Conferência, periódico ou editora" />
+              </label>
+            </div>
+
+            <label className="grid gap-1.5">
+              <span className={metadataLabelClassName}>Coleção</span>
+              <select value={collection} onChange={(event) => setCollection(event.target.value)} className={`${metadataInputClassName} cursor-pointer`}>
+                {collections.map((availableCollection) => (
+                  <option key={availableCollection.id} value={availableCollection.name}>
+                    {availableCollection.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {validationMessage ? <div className="rounded-lg bg-status-red px-4 py-3 text-sm font-semibold text-status-red-text">{validationMessage}</div> : null}
           </div>
-
-          <label className="grid gap-1.5">
-            <span className="text-sm font-semibold text-text-primary">Colecao</span>
-            <select value={collection} onChange={(event) => setCollection(event.target.value)} className="rounded-lg border border-border-muted px-3 py-2 text-sm outline-none focus:border-primary">
-              {collections.map((availableCollection) => (
-                <option key={availableCollection.id} value={availableCollection.name}>
-                  {availableCollection.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {validationMessage ? <div className="rounded-lg bg-status-red px-4 py-3 text-sm font-semibold text-status-red-text">{validationMessage}</div> : null}
         </div>
 
-        <footer className="flex justify-end gap-3 border-t border-border-subtle px-6 py-4">
+        <footer className="flex shrink-0 justify-end gap-3 px-6 pb-6 pt-2">
           <button type="button" className="rounded-lg px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-muted" onClick={onClose}>
             Cancelar
           </button>
           <button type="button" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button hover:bg-primary-hover" onClick={handleSave}>
-            Salvar alteracoes
+            Salvar alterações
           </button>
         </footer>
       </section>
@@ -443,8 +485,8 @@ export function DocumentDetailsPanel({
   }
 
   return (
-    <aside className="min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel xl:w-[432px] xl:border-l xl:border-t-0">
-      <header className="flex items-center border-b border-border-subtle px-6 py-4">
+    <aside className="min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0">
+      <header className="flex items-center px-6 py-4">
         <span className={sectionLabelClassName}>Detalhes</span>
         <button type="button" aria-label="Fechar detalhes" className="ml-auto rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={onClose}>
           <CloseIcon />
@@ -455,8 +497,8 @@ export function DocumentDetailsPanel({
         <DocumentPreview documentId={document.id} filePath={document.filePath} year={document.year} />
 
         <section className="mt-6">
-          <h2 className="text-lg font-bold text-text-primary">{document.title}</h2>
-          <p className="mt-1 text-sm text-primary">{formatAuthors(document.authors)}</p>
+          <h2 className="font-sans text-lg font-bold text-[#2C1810] dark:text-[#F0E8DF]">{document.title}</h2>
+          <p className="mt-2 text-sm font-normal text-text-secondary">{formatAuthors(document.authors)}</p>
         </section>
 
         <section className="mt-6">
@@ -469,15 +511,15 @@ export function DocumentDetailsPanel({
             )}
           </div>
           <div className="mt-3 grid gap-3">
-            <MetadataRow icon={<BookIcon />} label="Fonte" value={document.source} />
+            <MetadataRow icon={<DatabaseMetadataIcon />} label="Fonte" value={document.source} />
             <MetadataRow icon={<CalendarIcon />} label="Ano" value={String(document.year)} />
-            <MetadataRow icon={<ClockIcon />} label="Adicionado em" value={formatAddedAt(document.updatedAt)} />
-            <MetadataRow icon={<CollectionIcon />} label="Coleção" value={document.collection} />
+            <MetadataRow icon={<OpenBookMetadataIcon />} label="Adicionado em" value={formatAddedAt(document.updatedAt)} />
+            <MetadataRow icon={<FolderMetadataIcon />} label="Coleção" value={document.collection} />
           </div>
         </section>
 
         <section className="mt-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 border-b border-border-subtle pb-2">
             <span className="text-text-subtle">
               <TagIcon />
             </span>
@@ -535,7 +577,7 @@ export function DocumentDetailsPanel({
               {isTrashMode ? null : (
                 <button
                   type="button"
-                  className="inline-flex items-center rounded-full border border-border-subtle px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:bg-surface-muted"
+                  className="inline-flex items-center rounded-full border border-dashed border-[#D6C8BB] bg-[#E8DDD4] px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:brightness-95 dark:border-[#4A3A2F] dark:bg-[#332820]"
                   onClick={() => setIsTagDropdownOpen((current) => !current)}
                 >
                   + Tag
@@ -557,7 +599,7 @@ export function DocumentDetailsPanel({
         </section>
 
         <section className="mt-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 border-b border-border-subtle pb-2">
             <span className="text-text-subtle">
               <FileTextIcon />
             </span>
@@ -570,14 +612,19 @@ export function DocumentDetailsPanel({
             readOnly={isTrashMode}
             rows={4}
             placeholder="Adicione anotações sobre este documento..."
-            className="mt-3 w-full resize-none rounded-lg border border-border-subtle bg-surface-card p-3 text-sm text-text-primary outline-none focus:border-primary placeholder:text-text-subtle"
+            className="mt-3 w-full resize-none rounded-lg border border-border-subtle bg-surface-app p-3 text-sm text-text-primary outline-none focus:border-primary placeholder:text-text-subtle"
           />
         </section>
 
         {isTrashMode ? null : (
           <section className="mt-6">
-            <div className="flex items-center justify-between">
-              <span className={sectionLabelClassName}>Progresso de leitura</span>
+            <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+              <span className="flex items-center gap-2">
+                <span className="text-text-subtle">
+                  <ReadingProgressIcon />
+                </span>
+                <span className={sectionLabelClassName}>Progresso de leitura</span>
+              </span>
               <span className="text-sm font-bold text-primary">{document.progress}%</span>
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-subtle">

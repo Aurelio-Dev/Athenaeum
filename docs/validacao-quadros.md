@@ -1,5 +1,10 @@
 # Validacao manual dos Quadros
 
+> **Update 06/07/2026 — sem nova rodada de QA:** este ciclo ficou restrito à
+> Home da biblioteca, sidebar e painel `Detalhes`. Nenhuma nova validação de
+> Quadros foi executada nesta etapa; a tabela abaixo continua sendo o último
+> registro manual conhecido para esse fluxo.
+
 | #   | Passo                                                      | Resultado esperado                                                                           | OK?                         |
 | --- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------- |
 | 1   | Abrir o app                                                | Boot normal, sem erro de migration                                                           | OK                          |

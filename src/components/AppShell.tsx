@@ -10,6 +10,10 @@ type AppShellProps = {
   onRouteChange: (route: LibraryRoute) => void;
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
   onRenameCollection: (collection: LibraryCollection, name: string) => Promise<void>;
+  onUpdateCollection: (
+    collection: LibraryCollection,
+    updates: { name: string; description: string; color: string },
+  ) => Promise<void>;
   onDeleteCollection: (collection: LibraryCollection) => Promise<void>;
   onEmptyAreaContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
   onOpenSettings: () => void;
@@ -23,6 +27,7 @@ export function AppShell({
   onRouteChange,
   onCreateCollection,
   onRenameCollection,
+  onUpdateCollection,
   onDeleteCollection,
   onEmptyAreaContextMenu,
   onOpenSettings,
@@ -37,6 +42,7 @@ export function AppShell({
         onRouteChange={onRouteChange}
         onCreateCollection={onCreateCollection}
         onRenameCollection={onRenameCollection}
+        onUpdateCollection={onUpdateCollection}
         onDeleteCollection={onDeleteCollection}
         onEmptyAreaContextMenu={onEmptyAreaContextMenu}
         onOpenSettings={onOpenSettings}

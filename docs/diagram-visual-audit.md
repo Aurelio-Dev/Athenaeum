@@ -2,6 +2,13 @@
 
 Data: 06/07/2026
 
+> **Update 06/07/2026 — Escopo preservado:** a rodada mais recente focou a
+> tela inicial da biblioteca, a sidebar esquerda e o painel `Detalhes`. Não
+> houve alteração em `data-athenaeum-block="diagram"`, parser, previews SVG,
+> modo limpo, persistência, autosave, seleção/range ou tokens específicos dos
+> diagramas do Notebook. Este documento continua válido sem mudanças de
+> comportamento.
+
 Escopo desta fase: auditoria técnica e visual dos blocos
 `data-athenaeum-block="diagram"` no editor de Cadernos. Este documento nao
 altera comportamento, persistencia, autosave, selecao/range, paste, clipboard,
@@ -37,8 +44,10 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 6E | Concluida | Polimento visual conjunto e modo limpo runtime. | Bordas, fonte, titulos internos, labels SVG e espacamentos foram suavizados; a toolbar contextual ganhou `Modo limpo`, que oculta `Fonte` apenas em runtime sem salvar estado no bloco. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E.1 | Concluida | Hotfix do modo limpo e cadeias em linha unica. | O botao `Modo limpo` foi movido da toolbar de callout para a toolbar contextual de diagrama, e `parseDiagramSource` passou a aceitar cadeias como `Elemento A -> Elemento B -> Elemento C`. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 | Fase 6E.2 | Concluida | Refinamento minimalista do modo limpo. | No modo limpo, o titulo interno do preview e ocultado, a moldura principal do preview e removida e o bloco fica mais editorial, mantendo nos, setas e conexoes visiveis. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6E.3 | Concluida | Compactacao vertical do modo limpo. | O modo limpo reduziu margem, padding e altura visual runtime dos previews para que diagramas parecam figuras editoriais embutidas no texto. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
+| Fase 6E.4 | Concluida | Ajuste fino da altura do modo limpo. | O modo limpo passou a limitar diretamente a altura visual dos SVGs, reduzindo espaco residual abaixo de diagramas pequenos sem alterar o layout logico. | `npm run typecheck`, `npm test -- --run` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 6E.2:
+Ressalvas mantidas apos a Fase 6E.4:
 
 - `graph` agora tem preview SVG runtime para relacoes `A -> B`, mas fontes
   legadas no formato textual antigo, como `A -- B`, seguem no fallback textual.
@@ -46,6 +55,8 @@ Ressalvas mantidas apos a Fase 6E.2:
   persistido em `data-*`, `app_settings` ou HTML salvo.
 - No modo limpo, o titulo interno e a area `Fonte` somem visualmente, mas a
   fonte textual segue no DOM editavel e volta ao desativar o modo.
+- O modo limpo tambem limita diretamente a altura visual dos SVGs apenas em
+  runtime; o layout logico e o HTML persistido seguem iguais.
 - Cadeias em linha unica no formato `A -> B -> C` sao expandidas em relacoes
   consecutivas; linhas legadas `A -- B` seguem no fallback textual/invalido.
 - `flowchart` ficou mais legivel em fluxos de 4 a 8 etapas, mas fluxos muito

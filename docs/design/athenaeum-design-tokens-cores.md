@@ -1,5 +1,20 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 06/07/2026 — Tela inicial e painel Detalhes:** a rodada de UI
+> da Home ajustou tokens de texto e previews sem mudar o accent principal nem
+> a paleta de tags. `sidebar-text` passou a usar `#2C1810` no modo claro e
+> `#F0E8DF` no modo escuro, cobrindo o título `Athenaeum`, o nome da coleção
+> ativa, o título da coleção aberta e itens selecionados da sidebar. O token
+> `sidebar-muted` foi fechado em `#7A6558` no claro e `#9E8878` no escuro para
+> itens não selecionados. No tema escuro, `foreground` e `card-foreground`
+> também foram alinhados para `#F0E8DF` para manter consistência com os títulos
+> fortes da biblioteca e do painel `Detalhes`. As miniaturas de documento
+> deixaram de usar uma cor fixa pronta por documento e passaram a usar um hue
+> determinístico com luminância por tema: capa clara em
+> `hsl(hue 28% 74%)`, capa escura em `hsl(hue 30% 18%)`, com linhas internas
+> derivadas do mesmo hue. Não houve mudança em `accent-interactive`, nos tokens
+> de tag ou no mapeamento palavra-chave → cor.
+>
 > **Changelog técnico 06/07/2026 — Diagramas no Notebook:** as Fases
 > 6A, 6B, 6C, 6D, 6E, 6E.1 e 6E.2 consolidaram a auditoria e o refinamento visual dos previews
 > SVG runtime de `data-athenaeum-block="diagram"`. A Fase 6A criou
@@ -347,6 +362,22 @@ Pior caso é Red a 6.47:1 — todos folgados acima do mínimo de 4.5:1.
 - Contraste: 5.00:1
 - **Não usar tom mais claro que este.**
 
+## Texto principal e seleção na biblioteca
+
+Esses valores cobrem títulos fortes e estados selecionados da Home, incluindo
+sidebar esquerda, título `Athenaeum`, nome da coleção ativa e o título da
+coleção aberta.
+
+**Modo claro** — sobre `--sidebar` `#EDE5DA` e superfícies claras da biblioteca:
+
+- Cor: `#2C1810`
+- Uso: texto principal da sidebar e títulos/itens selecionados
+
+**Modo escuro** — sobre `--sidebar` `#140F0B` e superfícies escuras da biblioteca:
+
+- Cor: `#F0E8DF`
+- Uso: texto principal da sidebar e títulos/itens selecionados
+
 ## Regras de uso
 
 1. Cada par bg/texto já foi validado — não trocar o tom de texto por
@@ -412,6 +443,12 @@ são dois sistemas sobrepostos).
 | `accent-interactive` | `#9C5A2E` | Ícone do logo, botão "+ Adicionar", barra de progresso de leitura, toggle de painel ativo, aba ativa no painel de anotações. **Mesmo hex em claro e escuro — sem variante separada.**                                            |
 | `accent-icon-amber`  | `#F59E0B` | Ícone "Marcar" em estado ativo na toolbar de seleção (mais vívido que `tag-amber-text`, é ícone pequeno, não texto)                                                                                                              |
 | `accent-tint-bg`     | `#EFE2D8` | Fundo de destaque em estado "ativo" de botões de ferramenta (ex: toolbar do Quadro) — tint sutil de terracota sobre o accent. Diferente do fill sólido das tags: aqui o texto/ícone continua na cor accent por cima, não branco. |
+| `sidebar-text`       | claro `#2C1810`; escuro `#F0E8DF` | Texto principal da sidebar, título `Athenaeum`, título da coleção aberta e itens selecionados da navegação/biblioteca. |
+| `sidebar-muted`      | claro `#7A6558`; escuro `#9E8878` | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação. |
+| `document-cover-hue` | hue derivado do documento | Base determinística das miniaturas de documento; o hue é estável por documento e a saturação/luminosidade mudam por tema. |
+| `document-cover-swatch` | claro `hsl(hue 28% 74%)`; escuro `hsl(hue 30% 18%)` | Fundo principal da área de preview dos cards de documento. |
+| `document-cover-line` | claro `hsl(hue 28% 34% / 0.24)`; escuro `rgb(255 255 255 / 0.08)` | Linhas secundárias internas das miniaturas. |
+| `document-cover-line-strong` | claro `hsl(hue 30% 30% / 0.34)`; escuro `rgb(255 255 255 / 0.15)` | Linhas internas mais fortes das miniaturas. |
 
 Regra: `accent-icon-amber` não substitui o par `tag-amber-bg`/`tag-amber-text`
 documentado acima — são usos diferentes (ícone vívido vs. texto sobre fundo

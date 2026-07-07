@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { IconContextAbrir, IconContextMoverColecao, IconContextVerDetalhes } from "../../components/ui/ContextMenuIcons";
@@ -5,11 +6,15 @@ import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
 import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
 import { HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
 import { TagPill } from "../../components/ui/TagPill";
-import { deriveCoverColor } from "../../lib/documentColor";
+import { deriveCoverHue } from "../../lib/documentColor";
 import { useContextMenu } from "../../hooks/useContextMenu";
 import type { LibraryCollection, LibraryDocument, ViewMode } from "../../types/library";
 
 const MAX_VISIBLE_TAGS = 2;
+
+type DocumentCoverStyle = CSSProperties & {
+  "--document-cover-hue": string;
+};
 
 type DocumentCardProps = {
   document: LibraryDocument;
@@ -57,6 +62,10 @@ function CircularProgress({ value }: { value: number }) {
 
 function formatAuthors(authors: string[]) {
   return authors.length > 4 ? `${authors.slice(0, 4).join(", ")} et al.` : authors.join(", ");
+}
+
+function getCoverStyle(documentId: string): DocumentCoverStyle {
+  return { "--document-cover-hue": String(deriveCoverHue(documentId)) };
 }
 
 function getExpirationDays(deletedAt: string) {
@@ -150,7 +159,7 @@ function DocumentCardContextMenu({
 function DocumentListRow({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
-  const coverColor = deriveCoverColor(document.id);
+  const coverStyle = getCoverStyle(document.id);
   const publisherLine = `${document.year} · ${document.source}`;
   const visibleTags = document.tags.slice(0, MAX_VISIBLE_TAGS);
   const extraTagCount = document.tags.length - visibleTags.length;
@@ -174,7 +183,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
           }
         }}
       >
-        <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={{ backgroundColor: coverColor }} />
+        <div className="document-cover-swatch relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={coverStyle} />
 
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
@@ -243,7 +252,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
 function DocumentGridCard({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
-  const coverColor = deriveCoverColor(document.id);
+  const coverStyle = getCoverStyle(document.id);
   const publisherLine = `${document.year} · ${document.source}`;
   const visibleTags = document.tags.slice(0, MAX_VISIBLE_TAGS);
   const extraTagCount = document.tags.length - visibleTags.length;
@@ -268,20 +277,20 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
         }}
       >
       {/* Faixa superior SEMPRE no accent fixo (token primary) — mesma marca
-          visual dos cards de Cadernos/Quadros. A cor da capa (deriveCoverColor)
+          visual dos cards de Cadernos/Quadros. A cor da capa (deriveCoverHue)
           continua variando por documento; so a faixa e fixa. O overflow-hidden
           + rounded-xl do card clipa a faixa nos cantos arredondados. */}
       <div className="h-[3px] w-full shrink-0 bg-primary" aria-hidden="true" />
-      <div className="relative aspect-[3/4] w-full" style={{ backgroundColor: coverColor }}>
+      <div className="document-cover-swatch relative aspect-[3/4] w-full" style={coverStyle}>
         {/* Linhas decorativas que imitam o topo de uma pagina. */}
         <div className="absolute inset-0 p-4" aria-hidden="true">
-          <div className="h-1.5 w-2/5 rounded-full bg-black/10" />
+          <div className="document-cover-line document-cover-line-strong h-1.5 w-2/5 rounded-full" />
           <div className="mt-3 space-y-1.5">
-            <div className="h-1 w-3/4 rounded-full bg-black/[0.07]" />
-            <div className="h-1 w-2/3 rounded-full bg-black/[0.07]" />
-            <div className="h-1 w-1/2 rounded-full bg-black/[0.07]" />
+            <div className="document-cover-line h-1 w-3/4 rounded-full" />
+            <div className="document-cover-line h-1 w-2/3 rounded-full" />
+            <div className="document-cover-line h-1 w-1/2 rounded-full" />
           </div>
-          <div className="mt-4 h-1 w-1/3 rounded-full bg-black/15" />
+          <div className="document-cover-line document-cover-line-strong mt-4 h-1 w-1/3 rounded-full" />
         </div>
 
         {/* Coracao de favorito: canto superior direito. */}

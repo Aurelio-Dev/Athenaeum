@@ -131,13 +131,13 @@
   --color-sidebar-raised: #D8CCBD;
   --color-sidebar-active: var(--primary);
   --color-sidebar-border: var(--border);
-  --color-sidebar-text: var(--foreground);
+  --color-sidebar-text: #2C1810;
   /* Texto/icones muted da sidebar (itens de nav, colecoes, "Nova colecao",
      "Ajustes"). No claro usa um tom levemente mais escuro que o #9E8878 base
      para dar mais presenca; o cabecalho "MINHA BIBLIOTECA" e mantido em
      #9E8878 via classe propria. No escuro fica #9E8878 (override no .dark),
      onde escurecer sobre o fundo escuro pioraria a legibilidade. */
-  --color-sidebar-muted: #8B786A;
+  --color-sidebar-muted: #7A6558;
 
   --reader-header-bg: var(--card);
   --reader-header-border: var(--border);
@@ -255,9 +255,10 @@
   --color-sidebar-raised: var(--card);
   /* No escuro o muted volta ao #9E8878 (a escurecida e so no tema claro). */
   --color-sidebar-muted: #9E8878;
+  --color-sidebar-text: #F0E8DF;
 
-  --foreground: #F0E6DC;
-  --card-foreground: #F0E6DC;
+  --foreground: #F0E8DF;
+  --card-foreground: #F0E8DF;
   --muted-foreground: #9E8878;
 
   --primary: #9C5A2E;
@@ -314,6 +315,30 @@ body {
   background: var(--color-surface-app);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
+}
+
+.document-cover-swatch {
+  background: hsl(var(--document-cover-hue) 28% 74%);
+}
+
+.document-cover-line {
+  background: hsl(var(--document-cover-hue) 28% 34% / 0.24);
+}
+
+.document-cover-line-strong {
+  background: hsl(var(--document-cover-hue) 30% 30% / 0.34);
+}
+
+.dark .document-cover-swatch {
+  background: hsl(var(--document-cover-hue) 30% 18%);
+}
+
+.dark .document-cover-line {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.dark .document-cover-line-strong {
+  background: rgb(255 255 255 / 0.15);
 }
 
 html.athenaeum-hide-dividers .border-t,
@@ -741,14 +766,17 @@ select {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-  padding: 0.3em 0.2em;
+  padding: 0.05em 0;
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.1) auto;
 }
 
 .notebook-editor--diagram-clean-mode [data-diagram-preview="true"] {
   min-height: 0;
+  gap: 0;
   border-color: transparent;
   background: transparent;
-  padding: 0.15em 0;
+  line-height: 0;
+  padding: 0;
 }
 
 .notebook-editor--diagram-clean-mode [data-diagram-preview="true"] strong {
@@ -759,6 +787,18 @@ select {
 .notebook-editor--diagram-clean-mode .notebook-graph-visual,
 .notebook-editor--diagram-clean-mode .notebook-flowchart-visual {
   margin-inline: auto;
+}
+
+.notebook-editor--diagram-clean-mode .notebook-diagram-visual {
+  height: min(var(--notebook-diagram-visual-height, var(--diagram-visual-height)), 4.25rem);
+}
+
+.notebook-editor--diagram-clean-mode .notebook-graph-visual {
+  height: min(var(--notebook-graph-visual-height, var(--diagram-graph-visual-height)), 8rem);
+}
+
+.notebook-editor--diagram-clean-mode .notebook-flowchart-visual {
+  height: min(var(--notebook-flowchart-visual-height, var(--diagram-flowchart-visual-height)), 14rem);
 }
 
 .notebook-editor--diagram-clean-mode [data-diagram-source="true"] {

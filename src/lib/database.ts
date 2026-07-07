@@ -515,11 +515,11 @@ export async function createCollection(collectionName: string, collectionDescrip
   const description = normalizeCollectionDescription(collectionDescription);
 
   if (name.length === 0) {
-    throw new Error("Informe um nome para a colecao.");
+    throw new Error("Informe um nome para a coleção.");
   }
 
   if (await findCollectionByName(database, name)) {
-    throw new Error("Ja existe uma colecao com esse nome.");
+    throw new Error("Já existe uma coleção com esse nome.");
   }
 
   const id = await createUniqueCollectionId(database, name);
@@ -538,12 +538,12 @@ export async function renameCollection(collectionId: string, collectionName: str
   const name = normalizeCollectionName(collectionName);
 
   if (name.length === 0) {
-    throw new Error("Informe um nome para a colecao.");
+    throw new Error("Informe um nome para a coleção.");
   }
 
   const existingCollection = await findCollectionByName(database, name);
   if (existingCollection && existingCollection.id !== collectionId) {
-    throw new Error("Ja existe uma colecao com esse nome.");
+    throw new Error("Já existe uma coleção com esse nome.");
   }
 
   await database.execute("UPDATE collections SET name = $1 WHERE id = $2", [name, collectionId]);
@@ -566,12 +566,12 @@ export async function updateCollection(collectionId: string, updates: Collection
   const description = normalizeCollectionDescription(updates.description);
 
   if (name.length === 0) {
-    throw new Error("Informe um nome para a colecao.");
+    throw new Error("Informe um nome para a coleção.");
   }
 
   const existingCollection = await findCollectionByName(database, name);
   if (existingCollection && existingCollection.id !== collectionId) {
-    throw new Error("Ja existe uma colecao com esse nome.");
+    throw new Error("Já existe uma coleção com esse nome.");
   }
 
   await database.execute("UPDATE collections SET name = $1, description = $2, color = $3 WHERE id = $4", [
