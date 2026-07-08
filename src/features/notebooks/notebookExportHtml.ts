@@ -1,6 +1,13 @@
 import type { NotebookPage } from "../../types/library";
 import type { NotebookEquationStaticRenderResult } from "./notebookExportKatex";
 import { renderNotebookDiagramStaticSvg } from "./notebookDiagramStaticSvg";
+import {
+  applyExportScaleAttributeAndStyle,
+  applyExportScaleFromPercent,
+  isResizableScaleAttribute,
+  setSanitizedResizableScaleAttribute,
+} from "./notebookDiagramScale";
+import { loadNotebookExportLoraFontFaceCss } from "./notebookExportFonts";
 
 export type NotebookExportScope = "current-page" | "full-notebook";
 
@@ -51,6 +58,7 @@ export type BuildNotebookExportHtmlInput = {
 
 export type NotebookExportStyleOptions = {
   katexStyles?: string;
+  fontFaceStyles?: string;
 };
 
 type NotebookEquationStaticRenderer = (source: string) => NotebookEquationStaticRenderResult;
@@ -140,7 +148,9 @@ const allowedDataAttributes = new Set([
   "data-diagram-kind",
   "data-diagram-scale",
   "data-diagram-source",
+  "data-equation-scale",
   "data-equation-source",
+  "data-figure-scale",
   "data-figure-subtype",
 ]);
 
@@ -161,6 +171,39 @@ function createNonce() {
 
 function formatIsoDate(date: Date) {
   return date.toISOString();
+}
+
+const exportMonthNamesPtBr = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+// Data de exibicao do cabecalho, em pt-BR e horario local do usuario (ex.:
+// "8 de julho de 2026 as 14h30"). Construida a mao em vez de toLocaleString
+// para ter saida deterministica, independente do ICU disponivel. O ISO
+// continua sendo a fonte de verdade no manifest; isto e' so apresentacao.
+export function formatNotebookExportDisplayDate(date: Date) {
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const day = date.getDate();
+  const month = exportMonthNamesPtBr[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${day} de ${month} de ${year} às ${hours}h${minutes}`;
 }
 
 function pageDisplayTitle(page: NotebookPage) {
@@ -234,7 +277,12 @@ function isRuntimeOnlyElement(element: Element) {
   return (
     element.getAttribute("data-diagram-preview") === "true" ||
     element.getAttribute("data-equation-preview") === "true" ||
-    element.getAttribute("data-file-attachment-actions") === "true"
+    element.getAttribute("data-figure-preview") === "true" ||
+    element.getAttribute("data-file-attachment-actions") === "true" ||
+    element.classList.contains("notebook-diagram-frame") ||
+    element.classList.contains("notebook-diagram-frame-box") ||
+    element.classList.contains("notebook-diagram-frame-content") ||
+    element.classList.contains("notebook-diagram-resize-handle")
   );
 }
 
@@ -293,6 +341,11 @@ function copySafeAttributes(source: Element, target: HTMLElement, pageId: number
       continue;
     }
 
+    if (isResizableScaleAttribute(name)) {
+      setSanitizedResizableScaleAttribute(target, name, value);
+      continue;
+    }
+
     if (allowedDataAttributes.has(name)) {
       target.setAttribute(name, value);
       continue;
@@ -331,6 +384,52 @@ function appendSanitizedChildren(source: Element, target: Node, context: Sanitiz
   Array.from(source.childNodes).forEach((child) => {
     sanitizeNode(child, context).forEach((safeChild) => target.appendChild(safeChild));
   });
+}
+
+function isPersistedCodeBlock(element: Element) {
+  if (element.tagName.toLowerCase() !== "code" || !(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  const rawStyle = element.getAttribute("style") ?? "";
+  return element.style.display === "block" || /(^|;)\s*display\s*:\s*block\s*(;|$)/i.test(rawStyle);
+}
+
+function readCodeTextNode(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  if (node instanceof HTMLBRElement) {
+    return "\n";
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return "";
+  }
+
+  const childText = Array.from(node.childNodes).map(readCodeTextNode).join("");
+  const tagName = node.tagName.toLowerCase();
+
+  if ((tagName === "div" || tagName === "p") && childText.length > 0 && !childText.endsWith("\n")) {
+    return `${childText}\n`;
+  }
+
+  return childText;
+}
+
+function readCodeElementText(code: Element) {
+  return Array.from(code.childNodes).map(readCodeTextNode).join("");
+}
+
+function sanitizeCodeBlock(code: HTMLElement, context: SanitizationContext): Node[] {
+  const pre = context.targetDocument.createElement("pre");
+  const targetCode = context.targetDocument.createElement("code");
+
+  targetCode.textContent = readCodeElementText(code);
+  pre.appendChild(targetCode);
+
+  return [pre];
 }
 
 type SanitizationContext = {
@@ -468,11 +567,7 @@ function sanitizeDiagramFigure(diagram: HTMLElement, context: SanitizationContex
   figure.classList.add("athenaeum-export__diagram");
   figure.setAttribute("data-athenaeum-block", "diagram");
   figure.setAttribute("data-diagram-kind", renderedDiagram.kind);
-  if (renderedDiagram.scalePercent === 100) {
-    figure.removeAttribute("data-diagram-scale");
-  } else {
-    figure.setAttribute("data-diagram-scale", String(renderedDiagram.scalePercent));
-  }
+  applyExportScaleFromPercent(figure, "data-diagram-scale", renderedDiagram.scalePercent);
   figure.appendChild(staticContent);
 
   return [figure];
@@ -498,7 +593,21 @@ function sanitizeEquationFigure(equation: HTMLElement, context: SanitizationCont
 
   figure.classList.add("athenaeum-export__equation");
   figure.setAttribute("data-athenaeum-block", "equation");
+  applyExportScaleAttributeAndStyle(figure, "data-equation-scale", equation.getAttribute("data-equation-scale"));
   figure.appendChild(staticContent);
+
+  return [figure];
+}
+
+function sanitizeImageFigure(imageFigure: HTMLElement, context: SanitizationContext): Node[] {
+  const figure = context.targetDocument.createElement("figure");
+  copySafeAttributes(imageFigure, figure, context.pageId, context.warnings);
+
+  figure.classList.add("athenaeum-export__figure");
+  figure.setAttribute("data-athenaeum-block", "figure");
+  figure.setAttribute("data-figure-subtype", "image");
+  applyExportScaleAttributeAndStyle(figure, "data-figure-scale", imageFigure.getAttribute("data-figure-scale"));
+  appendSanitizedChildren(imageFigure, figure, context);
 
   return [figure];
 }
@@ -573,6 +682,10 @@ function sanitizeNode(node: Node, context: SanitizationContext): Node[] {
     return [];
   }
 
+  if (isPersistedCodeBlock(node)) {
+    return sanitizeCodeBlock(node as HTMLElement, context);
+  }
+
   if (node instanceof HTMLImageElement) {
     if (node.hasAttribute("data-notebook-asset-id")) {
       return sanitizeAssetImage(node, context);
@@ -596,6 +709,14 @@ function sanitizeNode(node: Node, context: SanitizationContext): Node[] {
 
   if (tagName === "figure" && node.getAttribute("data-athenaeum-block") === "equation") {
     return sanitizeEquationFigure(node as HTMLElement, context);
+  }
+
+  if (
+    tagName === "figure" &&
+    node.getAttribute("data-athenaeum-block") === "figure" &&
+    node.getAttribute("data-figure-subtype") === "image"
+  ) {
+    return sanitizeImageFigure(node as HTMLElement, context);
   }
 
   if (!allowedElements.has(tagName)) {
@@ -625,74 +746,349 @@ function sanitizePageContent(page: NotebookPage, context: SanitizationContext) {
 
 export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
   const katexStyles = options.katexStyles?.trim();
+  const fontFaceStyles = options.fontFaceStyles?.trim();
 
   return `
+    ${fontFaceStyles ? `${fontFaceStyles}\n` : ""}
     :root {
       color-scheme: light;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #ffffff;
-      color: #1f1a17;
+      /* Tokens editoriais fixos, espelhando o tema claro do Caderno
+         (src/styles/index.css). O export e' um documento estatico e
+         autocontido: sem tema escuro e sem variaveis do app em runtime. */
+      --ax-serif: "Lora", Georgia, "Times New Roman", serif;
+      --ax-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+      --ax-mono: "IBM Plex Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+      --ax-paper: #faf5ef;
+      --ax-desk: #f0e7db;
+      --ax-ink: #1a1410;
+      --ax-ink-muted: #7a6558;
+      --ax-accent: #9c5a2e;
+      --ax-border: #d9cbbf;
+      --ax-border-soft: #e7ddd0;
+      --ax-surface-muted: #efe7dc;
+      --ax-code-bg: #f2ebe1;
+      --ax-code-inline-bg: #f2ebe1;
+      --ax-code-block-bg: #1e2130;
+      --ax-code-block-ink: #f0e6dc;
+      font-family: var(--ax-sans);
+      color: var(--ax-ink);
+      background: var(--ax-desk);
+      -webkit-text-size-adjust: 100%;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
     }
     body {
       margin: 0;
-      background: #ffffff;
+      background: var(--ax-desk);
+      color: var(--ax-ink);
+      font-family: var(--ax-sans);
+      font-size: 17px;
+      line-height: 1.7;
     }
     .athenaeum-export {
       box-sizing: border-box;
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 48px 32px 64px;
+      max-width: 46rem;
+      margin: 2.5rem auto;
+      padding: 3.5rem 3.25rem 4.5rem;
+      background: var(--ax-paper);
+      border: 1px solid var(--ax-border-soft);
+      border-radius: 14px;
+      box-shadow: 0 1px 2px rgba(26, 20, 16, 0.05), 0 18px 40px -24px rgba(26, 20, 16, 0.3);
+    }
+    .athenaeum-export > header {
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--ax-border);
     }
     .athenaeum-export__title {
-      margin: 0 0 8px;
-      font-size: 2rem;
-      line-height: 1.2;
+      margin: 0 0 0.5rem;
+      font-family: var(--ax-serif);
+      font-weight: 700;
+      font-size: 2.4rem;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      color: var(--ax-ink);
     }
     .athenaeum-export__meta {
-      margin: 0 0 32px;
-      color: #6b625c;
-      font-size: 0.9rem;
+      margin: 0;
+      color: var(--ax-ink-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
     .athenaeum-export__page {
-      margin: 0 0 48px;
-      padding-top: 8px;
-      border-top: 1px solid #e4dbd3;
+      margin: 0;
+    }
+    .athenaeum-export__page + .athenaeum-export__page {
+      margin-top: 3rem;
+      padding-top: 2.75rem;
+      border-top: 1px solid var(--ax-border-soft);
     }
     .athenaeum-export__page-title {
-      margin: 0 0 24px;
-      font-size: 1.35rem;
+      margin: 0 0 1.35rem;
+      font-family: var(--ax-serif);
+      font-weight: 500;
+      font-size: 1.75rem;
+      line-height: 1.25;
+      letter-spacing: -0.005em;
+      color: var(--ax-ink);
+    }
+    .athenaeum-export__page-title + * {
+      margin-top: 0;
+    }
+    .athenaeum-export__page :is(h1, h2, h3, h4, h5, h6):not(.athenaeum-export__page-title) {
+      font-family: var(--ax-sans);
+      font-weight: 700;
       line-height: 1.3;
+      color: var(--ax-ink);
+      margin: 2em 0 0.55em;
     }
-    figure {
-      margin: 1.25rem 0;
+    .athenaeum-export__page h1:not(.athenaeum-export__page-title) {
+      font-size: 1.5rem;
     }
-    figcaption {
-      margin-top: 0.5rem;
-      color: #6b625c;
+    .athenaeum-export__page h2:not(.athenaeum-export__page-title) {
+      font-size: 1.3rem;
+    }
+    .athenaeum-export__page h3:not(.athenaeum-export__page-title) {
+      font-size: 1.13rem;
+    }
+    .athenaeum-export__page h4:not(.athenaeum-export__page-title) {
+      font-size: 1rem;
+    }
+    .athenaeum-export__page :is(h5, h6):not(.athenaeum-export__page-title) {
       font-size: 0.9rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--ax-ink-muted);
     }
-    table {
+    .athenaeum-export p {
+      margin: 0 0 1.15em;
+    }
+    .athenaeum-export :is(ul, ol) {
+      margin: 0 0 1.15em;
+      padding-left: 1.6em;
+    }
+    .athenaeum-export ul {
+      list-style: disc;
+    }
+    .athenaeum-export ol {
+      list-style: decimal;
+    }
+    .athenaeum-export li {
+      margin: 0.3em 0;
+    }
+    .athenaeum-export li::marker {
+      color: var(--ax-accent);
+    }
+    .athenaeum-export blockquote {
+      margin: 1.5em 0;
+      padding: 0.25em 0 0.25em 1.25em;
+      border-left: 3px solid var(--ax-accent);
+      color: var(--ax-ink-muted);
+      font-style: italic;
+    }
+    .athenaeum-export blockquote > :last-child {
+      margin-bottom: 0;
+    }
+    .athenaeum-export__page a:not(.athenaeum-export__attachment) {
+      color: var(--ax-accent);
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 0.16em;
+      text-decoration-thickness: 0.07em;
+      overflow-wrap: anywhere;
+    }
+    .athenaeum-export mark {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 0.02em 0.18em;
+      border-radius: 3px;
+    }
+    .athenaeum-export hr {
+      margin: 2.25em 0;
+      border: 0;
+      border-top: 1px solid var(--ax-border-soft);
+    }
+    .athenaeum-export :not(pre) > code {
+      font-family: var(--ax-mono);
+      font-size: 0.86em;
+      background: var(--ax-code-inline-bg);
+      border: 1px solid var(--ax-border-soft);
+      border-radius: 5px;
+      padding: 0.12em 0.35em;
+    }
+    .athenaeum-export pre {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      margin: 1.5em 0;
+      padding: 0.875rem 1rem;
+      background: var(--ax-code-block-bg);
+      border: 1px solid #34384b;
+      border-radius: 8px;
+      color: var(--ax-code-block-ink);
+      font-family: var(--ax-mono);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .athenaeum-export pre code {
+      color: inherit;
+      font: inherit;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      white-space: inherit;
+    }
+    .athenaeum-export figure {
+      margin: 1.85em 0;
+    }
+    .athenaeum-export figcaption {
+      margin-top: 0.65em;
+      color: var(--ax-ink-muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .athenaeum-export img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto;
+    }
+    .athenaeum-export__asset {
+      border-radius: 6px;
+    }
+    .athenaeum-export__figure {
+      max-width: 100%;
+    }
+    .athenaeum-export__figure img {
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+    }
+    .athenaeum-export__missing {
+      display: inline-block;
+      padding: 0.15em 0.55em;
+      border: 1px dashed var(--ax-border);
+      border-radius: 6px;
+      color: var(--ax-ink-muted);
+      font-size: 0.85em;
+      font-style: italic;
+    }
+    .athenaeum-export figure[data-athenaeum-block="file-attachment"] {
+      margin: 1.75em 0;
+    }
+    .athenaeum-export__attachment {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.5em;
+      max-width: 100%;
+      padding: 0.7em 1em;
+      border: 1px solid var(--ax-border);
+      border-left: 3px solid var(--ax-accent);
+      border-radius: 8px;
+      background: var(--ax-surface-muted);
+      color: var(--ax-accent);
+      font-weight: 700;
+      text-decoration: none;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .athenaeum-export__attachment::before {
+      content: "Anexo";
+      flex: none;
+      color: var(--ax-ink-muted);
+      font-family: var(--ax-sans);
+      font-size: 0.62em;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .athenaeum-export__attachment:hover {
+      text-decoration: underline;
+      text-underline-offset: 0.16em;
+    }
+    .athenaeum-export table {
       width: 100%;
       border-collapse: collapse;
-      margin: 1rem 0;
+      margin: 1.6em 0;
+      font-size: 0.95em;
     }
-    td, th {
-      border: 1px solid #d8cdc2;
-      padding: 0.5rem;
+    .athenaeum-export :is(td, th) {
+      border: 1px solid var(--ax-border);
+      padding: 0.55em 0.7em;
       vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
     }
-    [data-athenaeum-block="callout"] {
+    .athenaeum-export th {
+      background: var(--ax-surface-muted);
+      font-weight: 700;
+    }
+    .athenaeum-export [data-athenaeum-block="callout"] {
+      --ax-callout-accent: #2563eb;
+      --ax-callout-bg: #eef3fd;
+      --ax-callout-border: #c9d8f6;
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.75rem;
-      border: 1px solid #d8cdc2;
-      border-radius: 0.5rem;
-      padding: 0.9rem;
-      background: #fbf7f2;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 0.75em;
+      margin: 1.6em 0;
+      padding: 0.9em 1.05em;
+      border: 1px solid var(--ax-callout-border);
+      border-left: 4px solid var(--ax-callout-accent);
+      border-radius: 8px;
+      background: var(--ax-callout-bg);
+    }
+    .athenaeum-export [data-athenaeum-block="callout"][data-callout-type="tip"] {
+      --ax-callout-accent: #0f766e;
+      --ax-callout-bg: #e7f1ef;
+      --ax-callout-border: #c0dad6;
+    }
+    .athenaeum-export [data-athenaeum-block="callout"][data-callout-type="warning"] {
+      --ax-callout-accent: #a16207;
+      --ax-callout-bg: #f6eedf;
+      --ax-callout-border: #e4d2ae;
+    }
+    .athenaeum-export [data-athenaeum-block="callout"][data-callout-type="danger"] {
+      --ax-callout-accent: #b91c1c;
+      --ax-callout-bg: #f7e9e7;
+      --ax-callout-border: #eac4bf;
+    }
+    .athenaeum-export [data-callout-icon="true"] {
+      display: inline-flex;
+      width: 1.7em;
+      height: 1.7em;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: var(--ax-callout-accent);
+      color: #ffffff;
+      font-family: var(--ax-mono);
+      font-size: 0.82em;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .athenaeum-export [data-callout-content="true"] {
+      min-width: 0;
+    }
+    .athenaeum-export [data-callout-content="true"] > strong:first-child {
+      display: block;
+      margin-bottom: 0.2em;
+      color: var(--ax-ink);
+    }
+    .athenaeum-export [data-callout-content="true"] > div {
+      color: var(--ax-ink-muted);
     }
     ${katexStyles ? `${katexStyles}\n` : ""}
     .athenaeum-export__equation {
-      margin: 1rem 0;
+      margin: 1.6em auto;
+      padding: 0.85em 1em;
+      border: 1px solid var(--ax-border-soft);
+      border-radius: 8px;
+      background: var(--ax-code-bg);
       overflow-x: auto;
     }
     .athenaeum-export__equation-static {
@@ -701,28 +1097,29 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
     }
     .athenaeum-export__equation-rendered .katex-display {
       margin: 0.35rem 0;
+      color: var(--ax-ink);
     }
     .athenaeum-export__equation-fallback {
       display: grid;
       gap: 0.45rem;
-      color: #6b625c;
+      color: var(--ax-ink-muted);
       font-size: 0.92rem;
     }
     .athenaeum-export__equation-fallback strong {
-      color: #1f1a17;
+      color: var(--ax-ink);
     }
     .athenaeum-export__equation-source {
       display: block;
       margin-top: 0.15rem;
       white-space: pre-wrap;
-      color: #4f4740;
-      font-family: "IBM Plex Mono", Consolas, monospace;
+      color: var(--ax-ink-muted);
+      font-family: var(--ax-mono);
       font-size: 0.82rem;
     }
     .athenaeum-export__diagram {
       width: min(100%, 52rem);
       max-width: 100%;
-      margin: 0.35rem auto;
+      margin: 1.5em auto;
       padding: 0.05rem 0;
       border: 0;
       background: transparent;
@@ -778,29 +1175,76 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
     .notebook-diagram-visual-label,
     .notebook-flowchart-visual-label {
       fill: #1f1a17;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: var(--ax-sans);
       font-size: 12.25px;
       letter-spacing: 0;
     }
     .notebook-graph-cycle-vertex-label {
-      font-family: Georgia, "Times New Roman", serif;
+      font-family: var(--ax-serif);
       font-size: 11.75px;
     }
     .athenaeum-export__diagram-fallback {
       display: grid;
       gap: 0.45rem;
-      color: #6b625c;
+      color: var(--ax-ink-muted);
       font-size: 0.92rem;
     }
     .athenaeum-export__diagram-fallback strong {
-      color: #1f1a17;
+      color: var(--ax-ink);
     }
     .athenaeum-export__diagram-source {
       margin: 0.25rem 0 0;
       white-space: pre-wrap;
-      color: #4f4740;
-      font-family: "IBM Plex Mono", Consolas, monospace;
+      color: var(--ax-ink-muted);
+      font-family: var(--ax-mono);
       font-size: 0.82rem;
+    }
+    @media print {
+      body {
+        background: #ffffff;
+      }
+      .athenaeum-export {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .athenaeum-export figure,
+      .athenaeum-export pre,
+      .athenaeum-export table,
+      .athenaeum-export blockquote,
+      .athenaeum-export [data-athenaeum-block="diagram"],
+      .athenaeum-export [data-athenaeum-block="equation"],
+      .athenaeum-export__diagram,
+      .athenaeum-export__equation,
+      .athenaeum-export__figure {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .athenaeum-export pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+    @media (max-width: 640px) {
+      body {
+        font-size: 16px;
+      }
+      .athenaeum-export {
+        margin: 0;
+        padding: 1.85rem 1.25rem 2.75rem;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .athenaeum-export__title {
+        font-size: 1.95rem;
+      }
+      .athenaeum-export__page-title {
+        font-size: 1.5rem;
+      }
     }
   `;
 }
@@ -850,7 +1294,8 @@ export async function buildNotebookExportHtml(input: BuildNotebookExportHtmlInpu
     throw new Error("Nao ha paginas para exportar.");
   }
 
-  const createdAt = formatIsoDate(input.createdAt ?? new Date());
+  const createdAtDate = input.createdAt ?? new Date();
+  const createdAt = formatIsoDate(createdAtDate);
   const nonce = normalizeNonce(input.nonce ?? createNonce());
   const targetDocument = document.implementation.createHTMLDocument("Athenaeum export");
   const slots: NotebookExportManifestSlot[] = [];
@@ -888,7 +1333,7 @@ export async function buildNotebookExportHtml(input: BuildNotebookExportHtmlInpu
   const bodyHtml = `<main class="athenaeum-export">
   <header>
     <h1 class="athenaeum-export__title">${escapeHtml(input.notebookTitle)}</h1>
-    <p class="athenaeum-export__meta">Exportado em ${escapeHtml(createdAt)}</p>
+    <p class="athenaeum-export__meta">Exportado em ${escapeHtml(formatNotebookExportDisplayDate(createdAtDate))}</p>
   </header>
   ${sanitizedPages
     .map(
@@ -899,8 +1344,11 @@ export async function buildNotebookExportHtml(input: BuildNotebookExportHtmlInpu
     )
     .join("\n")}
 </main>`;
-  const katexStyles = await loadKatexStylesIfNeeded(styleRequirements.hasRenderedEquation);
-  const html = renderExportHtmlDocument(input.notebookTitle, bodyHtml, { katexStyles });
+  const [katexStyles, fontFaceStyles] = await Promise.all([
+    loadKatexStylesIfNeeded(styleRequirements.hasRenderedEquation),
+    loadNotebookExportLoraFontFaceCss(),
+  ]);
+  const html = renderExportHtmlDocument(input.notebookTitle, bodyHtml, { katexStyles, fontFaceStyles });
   const validation = validateNotebookExportManifestSlots(html, manifest);
 
   validation.errors.forEach((message) => {

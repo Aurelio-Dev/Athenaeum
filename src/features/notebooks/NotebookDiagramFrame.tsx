@@ -12,41 +12,43 @@ import {
 
 import {
   applyDiagramScale,
-  clampDiagramScale,
+  clampResizableScale,
   diagramScaleDefaultPercent,
-  diagramScaleMaxPercent,
-  diagramScaleMinPercent,
   parseDiagramScale,
+  resizableScaleDefaultPercent,
+  resizableScaleMaxPercent,
+  resizableScaleMinPercent,
   stepDiagramScale,
 } from "./notebookDiagramScale";
 
-// Frame compartilhado pelos previews de diagram, graph e flowchart.
+// Frame compartilhado por diagramas, grafos, fluxogramas, equacoes e figuras.
 //
-// Modelo de escala (Fase 8.1): o conteúdo tem um layout NATURAL fixo
-// (width: max-content, independente da escala) medido por ResizeObserver —
-// que reporta caixas não transformadas, ao contrário de getBoundingClientRect.
-// A escala é um transform: scale() uniforme sobre esse layout, e a "box"
-// intermediária reserva naturalWidth × escala por naturalHeight × escala no
-// fluxo, para o texto abaixo acompanhar o fim do frame. Redimensionar nunca
-// reflui o layout interno — é o oposto do antigo data-diagram-width, que só
-// estreitava o contêiner responsivo.
-//
-// Quando a escala pedida não cabe na largura do editor, a escala EFETIVA é
-// limitada em runtime (sem overflow horizontal), mas data-diagram-scale
-// preserva a preferência e o tamanho volta quando houver espaço.
+// Modelo de escala: o conteudo tem um layout natural fixo (width: max-content,
+// independente da escala) medido por ResizeObserver. A escala e um
+// transform: scale() uniforme sobre esse layout, e a "box" intermediaria
+// reserva naturalWidth x escala por naturalHeight x escala no fluxo. Quando a
+// escala pedida nao cabe na largura util, a escala efetiva e limitada em
+// runtime, mas o atributo persistido preserva a preferencia.
 
 const DiagramFrameWidthContext = createContext<number | null>(null);
 
-// Largura não transformada disponível para o frame (px); null antes da
-// primeira medição. É a base da responsividade de layout por janela (ex.:
-// colunas da grade do graph), separada do redimensionamento manual — ela não
-// muda durante um drag de escala.
+// Largura nao transformada disponivel para o frame (px); usada pelos grafos
+// para escolher responsivamente a distribuicao interna.
 export function useDiagramFrameWidth(): number | null {
   return useContext(DiagramFrameWidthContext);
 }
 
 type NotebookDiagramFrameProps = {
   children: ReactNode;
+};
+
+type NotebookResizableFrameProps = {
+  children: ReactNode;
+  blockSelector: string;
+  scaleAttributeName: string;
+  parseScale: (value: string | null | undefined) => number | null;
+  applyScale: (block: HTMLElement, scale: number | null) => void;
+  ariaLabel: string;
 };
 
 type NaturalSize = {
@@ -68,13 +70,11 @@ type DragState = {
   rafId: number | null;
 };
 
-function findDiagramBlock(node: HTMLElement | null): HTMLElement | null {
-  const diagram = node?.closest('[data-athenaeum-block="diagram"]');
-  return diagram instanceof HTMLElement ? diagram : null;
+function findResizableBlock(node: HTMLElement | null, selector: string): HTMLElement | null {
+  const block = node?.closest(selector);
+  return block instanceof HTMLElement ? block : null;
 }
 
-// Fator aplicado de fato: a preferência, limitada ao que cabe na largura
-// disponível (só limita ampliação — reduzir sempre cabe).
 function getEffectiveScaleFactor(
   scalePercent: number,
   naturalSize: NaturalSize | null,
@@ -88,26 +88,88 @@ function getEffectiveScaleFactor(
   return Math.min(preferredFactor, availableWidth / naturalSize.width);
 }
 
-// Uma única persistência + um único "input" por interação (autosave).
-function commitDiagramScale(diagram: HTMLElement, scale: number) {
-  applyDiagramScale(diagram, scale);
-  diagram.dispatchEvent(new Event("input", { bubbles: true }));
+function commitResizableScale(
+  block: HTMLElement,
+  scale: number,
+  applyScale: (block: HTMLElement, scale: number | null) => void,
+) {
+  applyScale(block, scale);
+  block.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
+export function NotebookResizableFrame({
+  children,
+  blockSelector,
+  scaleAttributeName,
+  parseScale,
+  applyScale,
+  ariaLabel,
+}: NotebookResizableFrameProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const activeHandleRef = useRef<HTMLDivElement | null>(null);
   const pointerInsideBlockRef = useRef(false);
   const dragStateRef = useRef<DragState | null>(null);
   const naturalSizeRef = useRef<NaturalSize | null>(null);
   const frameWidthRef = useRef<number | null>(null);
   const [frameWidth, setFrameWidth] = useState<number | null>(null);
   const [naturalSize, setNaturalSize] = useState<NaturalSize | null>(null);
-  const [scalePercent, setScalePercent] = useState(diagramScaleDefaultPercent);
+  const [scalePercent, setScalePercent] = useState(resizableScaleDefaultPercent);
   const [isBlockActive, setIsBlockActive] = useState(false);
   const [isHandleFocused, setIsHandleFocused] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+
+  function findBlock() {
+    return findResizableBlock(frameRef.current, blockSelector);
+  }
+
+  function applyRuntimeScale(pendingScale: number) {
+    const box = boxRef.current;
+    const content = contentRef.current;
+    const natural = naturalSizeRef.current;
+    const factor = getEffectiveScaleFactor(pendingScale, natural, frameWidthRef.current);
+
+    if (content) {
+      content.style.transform = `scale(${factor})`;
+    }
+    if (box && natural) {
+      box.style.width = `${natural.width * factor}px`;
+      box.style.height = `${natural.height * factor}px`;
+    }
+  }
+
+  function finishActiveDrag(updateReactState = true) {
+    const dragState = dragStateRef.current;
+    if (!dragState) {
+      return;
+    }
+
+    if (dragState.rafId !== null) {
+      cancelAnimationFrame(dragState.rafId);
+      applyRuntimeScale(dragState.pendingScale);
+    }
+
+    const activeHandle = activeHandleRef.current;
+    if (activeHandle?.hasPointerCapture(dragState.pointerId)) {
+      activeHandle.releasePointerCapture(dragState.pointerId);
+    }
+
+    dragStateRef.current = null;
+    activeHandleRef.current = null;
+
+    if (updateReactState) {
+      setIsResizing(false);
+    }
+
+    const block = findBlock();
+    if (block) {
+      commitResizableScale(block, dragState.pendingScale, applyScale);
+      if (updateReactState) {
+        setScalePercent(dragState.pendingScale);
+      }
+    }
+  }
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -116,8 +178,8 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       return;
     }
 
-    const diagram = findDiagramBlock(frame);
-    setScalePercent(parseDiagramScale(diagram?.dataset.diagramScale) ?? diagramScaleDefaultPercent);
+    const block = findResizableBlock(frame, blockSelector);
+    setScalePercent(parseScale(block?.getAttribute(scaleAttributeName)) ?? resizableScaleDefaultPercent);
 
     const frameObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
@@ -129,8 +191,6 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
     });
     frameObserver.observe(frame);
 
-    // Dimensões naturais (não escaladas): ResizeObserver reporta a caixa de
-    // layout, que não é afetada por transform: scale.
     const contentObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
@@ -149,43 +209,39 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
     });
     contentObserver.observe(content);
 
-    // Sincroniza mudanças externas do atributo (normalização, undo, migração
-    // da largura legada) com o estado do frame.
-    const attributeObserver = diagram
+    const attributeObserver = block
       ? new MutationObserver(() => {
-          setScalePercent(parseDiagramScale(diagram.dataset.diagramScale) ?? diagramScaleDefaultPercent);
+          setScalePercent(parseScale(block.getAttribute(scaleAttributeName)) ?? resizableScaleDefaultPercent);
         })
       : null;
-    attributeObserver?.observe(diagram as HTMLElement, {
+    attributeObserver?.observe(block as HTMLElement, {
       attributes: true,
-      attributeFilter: ["data-diagram-scale"],
+      attributeFilter: [scaleAttributeName],
     });
 
-    // "Selecionado ou focado": caret dentro do bloco OU último pointerdown
-    // dentro dele (clicar no SVG não move o caret para dentro do bloco).
     function handleDocumentPointerDown(event: Event) {
       const target = event.target;
-      const inside = Boolean(diagram && target instanceof Node && diagram.contains(target));
+      const inside = Boolean(block && target instanceof Node && block.contains(target));
       pointerInsideBlockRef.current = inside;
       setIsBlockActive(inside);
     }
 
     function handleSelectionChange() {
-      if (!diagram) {
+      if (!block) {
         return;
       }
 
       const anchorNode = document.getSelection()?.anchorNode ?? null;
-      const selectionInside = Boolean(anchorNode && diagram.contains(anchorNode));
+      const selectionInside = Boolean(anchorNode && block.contains(anchorNode));
       setIsBlockActive(selectionInside || pointerInsideBlockRef.current);
     }
 
     function handleDocumentFocusIn(event: Event) {
-      if (!diagram) {
+      if (!block) {
         return;
       }
 
-      const focusInside = event.target instanceof Node && diagram.contains(event.target);
+      const focusInside = event.target instanceof Node && block.contains(event.target);
       if (focusInside) {
         setIsBlockActive(true);
         return;
@@ -195,43 +251,39 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       setIsBlockActive(false);
     }
 
-    function handleWindowBlur() {
+    function finishBecauseInteractionWasInterrupted() {
+      finishActiveDrag();
       pointerInsideBlockRef.current = false;
       setIsBlockActive(false);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") {
+        finishBecauseInteractionWasInterrupted();
+      }
     }
 
     document.addEventListener("pointerdown", handleDocumentPointerDown, true);
     document.addEventListener("selectionchange", handleSelectionChange);
     document.addEventListener("focusin", handleDocumentFocusIn);
-    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", finishBecauseInteractionWasInterrupted);
 
     return () => {
+      finishActiveDrag(false);
       frameObserver.disconnect();
       contentObserver.disconnect();
       attributeObserver?.disconnect();
       document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
       document.removeEventListener("selectionchange", handleSelectionChange);
       document.removeEventListener("focusin", handleDocumentFocusIn);
-      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", finishBecauseInteractionWasInterrupted);
     };
+    // O frame e montado uma vez por preview runtime; os callbacks sao estaveis
+    // por renderizacao do bloco.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Aplica a escala pendente do drag sem passar pelo React (rAF-throttled):
-  // transform no conteúdo + reserva de espaço na box.
-  function applyRuntimeScale(pendingScale: number) {
-    const box = boxRef.current;
-    const content = contentRef.current;
-    const natural = naturalSizeRef.current;
-    const factor = getEffectiveScaleFactor(pendingScale, natural, frameWidthRef.current);
-
-    if (content) {
-      content.style.transform = `scale(${factor})`;
-    }
-    if (box && natural) {
-      box.style.width = `${natural.width * factor}px`;
-      box.style.height = `${natural.height * factor}px`;
-    }
-  }
 
   function finishDrag(event: PointerEvent<HTMLDivElement>) {
     const dragState = dragStateRef.current;
@@ -239,28 +291,16 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       return;
     }
 
-    if (dragState.rafId !== null) {
-      cancelAnimationFrame(dragState.rafId);
-      applyRuntimeScale(dragState.pendingScale);
-    }
-    dragStateRef.current = null;
-    setIsResizing(false);
-
-    const diagram = findDiagramBlock(frameRef.current);
-    if (diagram) {
-      commitDiagramScale(diagram, dragState.pendingScale);
-      setScalePercent(dragState.pendingScale);
-    }
+    finishActiveDrag();
   }
 
   function handleHandlePointerDown(event: PointerEvent<HTMLDivElement>, corner: HandleCorner) {
     const box = boxRef.current;
-    const diagram = findDiagramBlock(frameRef.current);
-    if (!box || !diagram) {
+    const block = findBlock();
+    if (!box || !block) {
       return;
     }
 
-    // Âncora no canto oposto da caixa escalada visível.
     const rect = box.getBoundingClientRect();
     const anchorX = corner === "nw" || corner === "sw" ? rect.right : rect.left;
     const anchorY = corner === "nw" || corner === "ne" ? rect.bottom : rect.top;
@@ -269,15 +309,12 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       return;
     }
 
-    // Impede que o arrasto mova o caret ou selecione texto no contentEditable.
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
+    activeHandleRef.current = event.currentTarget;
 
-    // Base do drag: a escala efetiva atual (o que o usuário vê), não a
-    // preferência persistida, para o movimento não "pular" quando a
-    // preferência estiver limitada pela largura do editor.
-    const startScale = clampDiagramScale(
+    const startScale = clampResizableScale(
       getEffectiveScaleFactor(scalePercent, naturalSizeRef.current, frameWidthRef.current) * 100,
     );
     dragStateRef.current = {
@@ -298,9 +335,8 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       return;
     }
 
-    // Fator uniforme: razão entre a distância atual e a inicial até a âncora.
     const distance = Math.hypot(event.clientX - dragState.anchorX, event.clientY - dragState.anchorY);
-    dragState.pendingScale = clampDiagramScale(dragState.startScale * (distance / dragState.startDistance));
+    dragState.pendingScale = clampResizableScale(dragState.startScale * (distance / dragState.startDistance));
 
     if (dragState.rafId !== null) {
       return;
@@ -313,14 +349,13 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
   }
 
   function handleHandleDoubleClick() {
-    const diagram = findDiagramBlock(frameRef.current);
-    if (!diagram) {
+    const block = findBlock();
+    if (!block) {
       return;
     }
 
-    // applyDiagramScale trata 100 como padrão e remove o atributo.
-    commitDiagramScale(diagram, diagramScaleDefaultPercent);
-    setScalePercent(diagramScaleDefaultPercent);
+    commitResizableScale(block, resizableScaleDefaultPercent, applyScale);
+    setScalePercent(resizableScaleDefaultPercent);
   }
 
   function handleHandleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -332,8 +367,8 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       return;
     }
 
-    const diagram = findDiagramBlock(frameRef.current);
-    if (!diagram) {
+    const block = findBlock();
+    if (!block) {
       return;
     }
 
@@ -343,9 +378,9 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
     } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
       next = stepDiagramScale(scalePercent, -1, event.shiftKey);
     } else if (event.key === "Home") {
-      next = diagramScaleMinPercent;
+      next = resizableScaleMinPercent;
     } else if (event.key === "End") {
-      next = diagramScaleMaxPercent;
+      next = resizableScaleMaxPercent;
     }
 
     if (next === null) {
@@ -354,7 +389,7 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
 
     event.preventDefault();
     event.stopPropagation();
-    commitDiagramScale(diagram, next);
+    commitResizableScale(block, next, applyScale);
     setScalePercent(next);
   }
 
@@ -384,10 +419,10 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
             contentEditable={false}
             className="notebook-diagram-resize-handle"
             data-handle-corner={corner}
-            aria-label="Redimensionar diagrama"
+            aria-label={ariaLabel}
             aria-orientation="horizontal"
-            aria-valuemin={diagramScaleMinPercent}
-            aria-valuemax={diagramScaleMaxPercent}
+            aria-valuemin={resizableScaleMinPercent}
+            aria-valuemax={resizableScaleMaxPercent}
             aria-valuenow={scalePercent}
             aria-valuetext={`${scalePercent}%`}
             onPointerDown={(event) => handleHandlePointerDown(event, corner)}
@@ -404,3 +439,19 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
     </div>
   );
 }
+
+export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
+  return (
+    <NotebookResizableFrame
+      blockSelector='[data-athenaeum-block="diagram"]'
+      scaleAttributeName="data-diagram-scale"
+      parseScale={parseDiagramScale}
+      applyScale={applyDiagramScale}
+      ariaLabel="Redimensionar diagrama"
+    >
+      {children}
+    </NotebookResizableFrame>
+  );
+}
+
+export { diagramScaleDefaultPercent };

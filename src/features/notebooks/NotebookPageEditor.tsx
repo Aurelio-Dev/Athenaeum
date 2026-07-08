@@ -31,14 +31,25 @@ import {
   normalizeDiagrams,
   setDiagramKind,
 } from "./notebookEditorDiagramDom";
-import { diagramScaleDefaultPercent, parseDiagramScale } from "./notebookDiagramScale";
+import {
+  diagramScaleDefaultPercent,
+  parseDiagramScale,
+  parseEquationScale,
+  parseFigureScale,
+  resizableScaleDefaultPercent,
+} from "./notebookDiagramScale";
 import {
   clearEquationPreviews,
   findClosestEquation,
   getEquationSource,
   normalizeEquations,
 } from "./notebookEditorEquationDom";
-import { hydrateNotebookAssetImages, removeNotebookAssetImageSources } from "./notebookEditorFigureDom";
+import {
+  clearFigurePreviews,
+  hydrateNotebookAssetImages,
+  normalizeFigures,
+  removeNotebookAssetImageSources,
+} from "./notebookEditorFigureDom";
 import {
   AlignCenterIcon,
   AlignJustifyIcon,
@@ -195,23 +206,102 @@ function readFileAsDataBase64(file: File, itemLabel = "imagem do clipboard"): Pr
   });
 }
 
-function serializeNotebookEditorHtml(editor: HTMLElement) {
+export function serializeNotebookEditorHtml(editor: HTMLElement) {
   const clone = editor.cloneNode(true) as HTMLElement;
 
-  removeNotebookAssetImageSources(clone);
   normalizeDiagrams(clone);
   // O HTML salvo carrega apenas data-diagram-scale: nenhuma variável CSS
   // runtime, transform, dimensão medida ou handle sobrevive à serialização.
   clearDiagramScaleRuntimeStyles(clone);
   normalizeEquations(clone);
+  normalizeFigures(clone);
   normalizeFileAttachmentCards(clone);
   clearEquationPreviews(clone);
+  clearFigurePreviews(clone);
+  removeNotebookAssetImageSources(clone);
   clearFileAttachmentControls(clone);
 
   return clone.innerHTML;
 }
 
-function createSanitizedDiagramClipboardHtml(html: string) {
+function appendTrailingClipboardBlock(wrapper: HTMLElement) {
+  const trailingBlock = document.createElement("div");
+  trailingBlock.appendChild(document.createElement("br"));
+  wrapper.append(trailingBlock);
+}
+
+function appendSanitizedDiagramClipboardBlock(wrapper: HTMLElement, diagram: HTMLElement) {
+  const kind = getDiagramKind(diagram);
+  const sourceText = getDiagramSource(diagram)?.textContent ?? "";
+  const scale = parseDiagramScale(diagram.dataset.diagramScale);
+  const pastedDiagram = document.createElement("figure");
+  const preview = document.createElement("div");
+  const source = document.createElement("figcaption");
+
+  pastedDiagram.dataset.athenaeumBlock = "diagram";
+  pastedDiagram.dataset.diagramKind = kind;
+  if (scale !== null && scale !== diagramScaleDefaultPercent) {
+    pastedDiagram.dataset.diagramScale = String(scale);
+  }
+
+  preview.dataset.diagramPreview = "true";
+  preview.contentEditable = "false";
+  source.dataset.diagramSource = "true";
+  source.spellcheck = false;
+  source.setAttribute("spellcheck", "false");
+  source.textContent = sourceText;
+  pastedDiagram.append(preview, source);
+  wrapper.append(pastedDiagram);
+}
+
+function appendSanitizedEquationClipboardBlock(wrapper: HTMLElement, equation: HTMLElement) {
+  const sourceText = getEquationSource(equation)?.textContent ?? "";
+  const scale = parseEquationScale(equation.dataset.equationScale);
+  const pastedEquation = document.createElement("figure");
+  const preview = document.createElement("div");
+  const source = document.createElement("figcaption");
+
+  pastedEquation.dataset.athenaeumBlock = "equation";
+  if (scale !== null && scale !== resizableScaleDefaultPercent) {
+    pastedEquation.dataset.equationScale = String(scale);
+  }
+
+  preview.dataset.equationPreview = "true";
+  preview.contentEditable = "false";
+  source.dataset.equationSource = "true";
+  source.spellcheck = false;
+  source.setAttribute("spellcheck", "false");
+  source.textContent = sourceText;
+  pastedEquation.append(preview, source);
+  wrapper.append(pastedEquation);
+}
+
+function appendSanitizedFigureClipboardBlock(wrapper: HTMLElement, figure: HTMLElement) {
+  const image = figure.querySelector<HTMLImageElement>(":scope > img[data-notebook-asset-id]");
+  const assetId = image?.dataset.notebookAssetId;
+  if (!image || !assetId) {
+    return;
+  }
+
+  const scale = parseFigureScale(figure.dataset.figureScale);
+  const pastedFigure = document.createElement("figure");
+  const pastedImage = document.createElement("img");
+  const caption = document.createElement("figcaption");
+
+  pastedFigure.dataset.athenaeumBlock = "figure";
+  pastedFigure.dataset.figureSubtype = "image";
+  if (scale !== null && scale !== resizableScaleDefaultPercent) {
+    pastedFigure.dataset.figureScale = String(scale);
+  }
+
+  pastedImage.dataset.notebookAssetId = assetId;
+  pastedImage.alt = image.getAttribute("alt") ?? "";
+  caption.textContent = figure.querySelector(":scope > figcaption")?.textContent ?? "";
+  pastedFigure.append(pastedImage, caption);
+  wrapper.append(pastedFigure);
+}
+
+export function createSanitizedNotebookClipboardHtml(html: string) {
   if (html.trim().length === 0) {
     return null;
   }
@@ -219,39 +309,36 @@ function createSanitizedDiagramClipboardHtml(html: string) {
   const template = document.createElement("template");
   template.innerHTML = html;
 
-  const diagrams = Array.from(template.content.querySelectorAll<HTMLElement>('[data-athenaeum-block="diagram"]'));
-  if (diagrams.length === 0) {
+  const richBlocks = Array.from(
+    template.content.querySelectorAll<HTMLElement>(
+      [
+        '[data-athenaeum-block="diagram"]',
+        '[data-athenaeum-block="equation"]',
+        '[data-athenaeum-block="figure"][data-figure-subtype="image"]',
+      ].join(","),
+    ),
+  );
+  if (richBlocks.length === 0) {
     return null;
   }
 
   const wrapper = document.createElement("div");
-  diagrams.forEach((diagram) => {
-    const kind = getDiagramKind(diagram);
-    const sourceText = getDiagramSource(diagram)?.textContent ?? "";
-    const scale = parseDiagramScale(diagram.dataset.diagramScale);
-    const pastedDiagram = document.createElement("figure");
-    const preview = document.createElement("div");
-    const source = document.createElement("figcaption");
-
-    pastedDiagram.dataset.athenaeumBlock = "diagram";
-    pastedDiagram.dataset.diagramKind = kind;
-    if (scale !== null && scale !== diagramScaleDefaultPercent) {
-      pastedDiagram.dataset.diagramScale = String(scale);
+  richBlocks.forEach((block) => {
+    const blockType = block.dataset.athenaeumBlock;
+    if (blockType === "diagram") {
+      appendSanitizedDiagramClipboardBlock(wrapper, block);
+    } else if (blockType === "equation") {
+      appendSanitizedEquationClipboardBlock(wrapper, block);
+    } else if (blockType === "figure") {
+      appendSanitizedFigureClipboardBlock(wrapper, block);
     }
-
-    preview.dataset.diagramPreview = "true";
-    preview.contentEditable = "false";
-    source.dataset.diagramSource = "true";
-    source.spellcheck = false;
-    source.setAttribute("spellcheck", "false");
-    source.textContent = sourceText;
-    pastedDiagram.append(preview, source);
-    wrapper.append(pastedDiagram);
   });
 
-  const trailingBlock = document.createElement("div");
-  trailingBlock.appendChild(document.createElement("br"));
-  wrapper.append(trailingBlock);
+  if (wrapper.childElementCount === 0) {
+    return null;
+  }
+
+  appendTrailingClipboardBlock(wrapper);
 
   return wrapper.innerHTML;
 }
@@ -577,6 +664,7 @@ export function NotebookPageEditor({
       normalizeCallouts(editor);
       normalizeDiagrams(editor);
       normalizeEquations(editor);
+      normalizeFigures(editor);
       normalizeFileAttachmentCards(editor);
       prepareCodeElements(editor);
       setIsEmpty(!notebookEditorHasContent(editor));
@@ -1794,6 +1882,7 @@ export function NotebookPageEditor({
     normalizeCallouts(editor);
     normalizeDiagrams(editor);
     normalizeEquations(editor);
+    normalizeFigures(editor);
     normalizeFileAttachmentCards(editor);
     setIsEmpty(!notebookEditorHasContent(editor));
     onContentChange(serializeNotebookEditorHtml(editor));
@@ -1851,9 +1940,9 @@ export function NotebookPageEditor({
     }
 
     setAssetPasteError(null);
-    const diagramClipboardHtml = createSanitizedDiagramClipboardHtml(event.clipboardData.getData("text/html"));
-    if (diagramClipboardHtml) {
-      insertHtml(diagramClipboardHtml, { placeCursorInTrailingBlock: true });
+    const notebookClipboardHtml = createSanitizedNotebookClipboardHtml(event.clipboardData.getData("text/html"));
+    if (notebookClipboardHtml) {
+      insertHtml(notebookClipboardHtml, { placeCursorInTrailingBlock: true });
       return;
     }
 

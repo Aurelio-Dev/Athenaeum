@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createNotebookExportSlotSentinel,
+  formatNotebookExportDisplayDate,
   parseNotebookExportSlotSentinels,
   renderExportStyles,
   validateNotebookExportManifestSlots,
@@ -119,5 +120,81 @@ describe("renderExportStyles", () => {
     expect(styles).toContain("@font-face{font-family:KaTeX_Main");
     expect(styles).toContain("data:font/woff2;base64,");
     expect(styles).toContain(".katex{}");
+  });
+
+  it("aligns the export typography to the notebook visual (Lora titles, Segoe UI body)", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain('--ax-serif: "Lora"');
+    expect(styles).toContain('--ax-sans: "Segoe UI"');
+    expect(styles).toMatch(/\.athenaeum-export__title \{[^}]*font-family: var\(--ax-serif\)/);
+    expect(styles).toMatch(/\.athenaeum-export__page-title \{[^}]*font-family: var\(--ax-serif\)/);
+    expect(styles).toMatch(/body \{[^}]*font-family: var\(--ax-sans\)/);
+  });
+
+  it("does not embed the Lora font faces by default", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).not.toContain("data:font/ttf;base64,");
+    expect(styles).not.toContain('@font-face{font-family:"Lora"');
+  });
+
+  it("embeds the Lora font faces only when supplied by the async export flow", () => {
+    const fontFaceStyles = '@font-face{font-family:"Lora";font-weight:500;src:url("data:font/ttf;base64,AA==") format("truetype")}';
+    const styles = renderExportStyles({ fontFaceStyles });
+
+    expect(styles).toContain('@font-face{font-family:"Lora"');
+    expect(styles).toContain("data:font/ttf;base64,");
+  });
+
+  it("separates block code, pre child code and inline code styles", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain(".athenaeum-export pre {");
+    expect(styles).toContain("background: var(--ax-code-block-bg)");
+    expect(styles).toContain("white-space: pre");
+    expect(styles).toContain(".athenaeum-export pre code {");
+    expect(styles).toContain("background: transparent");
+    expect(styles).toContain(".athenaeum-export :not(pre) > code {");
+    expect(styles).toContain("background: var(--ax-code-inline-bg)");
+  });
+
+  it("adds print protection for large notebook blocks", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain("@media print");
+    expect(styles).toContain(".athenaeum-export__diagram");
+    expect(styles).toContain(".athenaeum-export__equation");
+    expect(styles).toContain(".athenaeum-export__figure");
+    expect(styles).toContain("break-inside: avoid");
+    expect(styles).toContain("page-break-inside: avoid");
+  });
+
+  it("keeps exported image figures proportional", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain(".athenaeum-export__figure img");
+    expect(styles).toContain("width: 100%");
+    expect(styles).toContain("max-width: 100%");
+    expect(styles).toContain("height: auto");
+  });
+});
+
+describe("formatNotebookExportDisplayDate", () => {
+  it("formats the date in localized pt-BR with local time", () => {
+    // Componentes locais: getHours() devolve 14 independente do fuso do runner.
+    const date = new Date(2026, 6, 8, 14, 30);
+
+    expect(formatNotebookExportDisplayDate(date)).toBe("8 de julho de 2026 às 14h30");
+  });
+
+  it("zero-pads hours and minutes", () => {
+    const date = new Date(2026, 0, 3, 9, 5);
+
+    expect(formatNotebookExportDisplayDate(date)).toBe("3 de janeiro de 2026 às 09h05");
+  });
+
+  it("returns an empty string for an invalid date", () => {
+    expect(formatNotebookExportDisplayDate(new Date("data-invalida"))).toBe("");
   });
 });

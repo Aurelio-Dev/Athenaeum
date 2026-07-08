@@ -564,6 +564,24 @@ select {
   border-radius: 6px;
 }
 
+.notebook-editor [data-figure-preview="true"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.notebook-editor [data-figure-preview="true"] + img[data-notebook-asset-id] {
+  display: none;
+}
+
+.notebook-editor .notebook-figure-preview-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  user-select: none;
+}
+
 .notebook-editor [data-athenaeum-block="diagram"] {
   --notebook-diagram-accent: var(--diagram-accent);
   display: grid;
@@ -1124,6 +1142,18 @@ select {
 
 .notebook-editor [data-equation-preview="true"] .katex {
   color: inherit;
+}
+
+.notebook-editor [data-equation-preview="true"] > div {
+  align-self: stretch;
+  width: 100%;
+}
+
+.notebook-editor .notebook-equation-render-host {
+  display: flex;
+  min-height: 1.35em;
+  align-items: center;
+  justify-content: center;
 }
 
 .notebook-editor [data-equation-source="true"] {

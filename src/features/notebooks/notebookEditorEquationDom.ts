@@ -1,4 +1,15 @@
-import katex from "katex";
+import { createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+
+import { NotebookEquationPreview } from "./NotebookEquationPreview";
+import { applyEquationScale, parseEquationScale } from "./notebookDiagramScale";
+
+type EquationPreviewRoot = {
+  host: HTMLDivElement;
+  root: Root;
+};
+
+const equationPreviewRoots = new WeakMap<HTMLElement, EquationPreviewRoot>();
 
 export function findClosestEquation(node: Node | null, editor: HTMLElement): HTMLElement | null {
   const element = node instanceof Element ? node : node?.parentElement;
@@ -32,6 +43,36 @@ function sourceContainsMarkup(source: HTMLElement) {
   return Array.from(source.childNodes).some((child) => child.nodeType !== Node.TEXT_NODE);
 }
 
+function unmountEquationPreview(preview: HTMLElement) {
+  const mountedPreview = equationPreviewRoots.get(preview);
+  if (!mountedPreview) {
+    return;
+  }
+
+  mountedPreview.root.unmount();
+  equationPreviewRoots.delete(preview);
+}
+
+function renderReactEquationPreview(preview: HTMLElement, sourceText: string) {
+  if (!document.body.contains(preview)) {
+    preview.textContent = sourceText;
+    return;
+  }
+
+  const mountedPreview = equationPreviewRoots.get(preview);
+  const host = mountedPreview?.host.parentElement === preview ? mountedPreview.host : document.createElement("div");
+  let root = mountedPreview?.host.parentElement === preview ? mountedPreview.root : null;
+
+  if (!root) {
+    unmountEquationPreview(preview);
+    root = createRoot(host);
+    equationPreviewRoots.set(preview, { host, root });
+  }
+
+  preview.replaceChildren(host);
+  root.render(createElement(NotebookEquationPreview, { source: sourceText }));
+}
+
 export function renderEquationPreview(equation: HTMLElement) {
   const source = getEquationSource(equation);
   const preview = equation.querySelector<HTMLElement>('[data-equation-preview="true"]');
@@ -44,27 +85,24 @@ export function renderEquationPreview(equation: HTMLElement) {
   preview.contentEditable = "false";
 
   if (!sourceText) {
+    unmountEquationPreview(preview);
     preview.replaceChildren();
     return;
   }
 
-  try {
-    katex.render(sourceText, preview, {
-      displayMode: true,
-      throwOnError: false,
-      trust: false,
-    });
-  } catch (error) {
-    console.warn("Nao foi possivel renderizar equacao com KaTeX.", error);
-    preview.textContent = sourceText;
-  }
+  renderReactEquationPreview(preview, sourceText);
 }
 
 export function clearEquationPreviews(editor: HTMLElement) {
   editor.querySelectorAll<HTMLElement>('[data-equation-preview="true"]').forEach((preview) => {
+    unmountEquationPreview(preview);
     preview.replaceChildren();
     preview.contentEditable = "false";
   });
+}
+
+function normalizeEquationScale(equation: HTMLElement) {
+  applyEquationScale(equation, parseEquationScale(equation.dataset.equationScale));
 }
 
 export function normalizeEquations(editor: HTMLElement) {
@@ -78,6 +116,8 @@ export function normalizeEquations(editor: HTMLElement) {
       renderEquationPreview(nextEquation);
       return;
     }
+
+    normalizeEquationScale(equation);
 
     let preview = equation.querySelector<HTMLElement>(':scope > [data-equation-preview="true"]');
     if (!preview) {

@@ -2,8 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   clampDiagramScale,
+  clampResizableScale,
+  getExportScaleWidthPercent,
+  getResolvedResizableScale,
+  getResizableScaleDatasetKey,
+  isResizableScaleAttribute,
+  parseEquationScale,
   parseDiagramScale,
+  parseFigureScale,
   parseLegacyDiagramWidthPercent,
+  parseResizableScale,
+  serializeResizableScale,
   stepDiagramScale,
 } from "./notebookDiagramScale";
 
@@ -56,6 +65,69 @@ describe("clampDiagramScale", () => {
   it("falls back to 100 for non-finite values", () => {
     expect(clampDiagramScale(Number.NaN)).toBe(100);
     expect(clampDiagramScale(Number.POSITIVE_INFINITY)).toBe(100);
+  });
+});
+
+describe("shared resizable scale helpers", () => {
+  it("uses the same parser for every resizable block kind", () => {
+    expect(parseResizableScale(null)).toBeNull();
+    expect(parseDiagramScale("125")).toBe(125);
+    expect(parseEquationScale("125")).toBe(125);
+    expect(parseFigureScale("125")).toBe(125);
+  });
+
+  it("returns the default for missing scale values", () => {
+    expect(getResolvedResizableScale(undefined)).toBe(100);
+    expect(getResolvedResizableScale("")).toBe(100);
+  });
+
+  it("clamps values below and above the allowed range", () => {
+    expect(clampResizableScale(12)).toBe(50);
+    expect(clampResizableScale(260)).toBe(160);
+  });
+
+  it("rejects NaN, Infinity, text and empty strings", () => {
+    expect(serializeResizableScale(Number.NaN)).toBeNull();
+    expect(serializeResizableScale(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(parseResizableScale("texto")).toBeNull();
+    expect(parseResizableScale("")).toBeNull();
+  });
+
+  it("serializes precision stably as integer percentages", () => {
+    expect(serializeResizableScale(72.49)).toBe("72");
+    expect(serializeResizableScale(72.5)).toBe("73");
+    expect(serializeResizableScale(100)).toBeNull();
+  });
+
+  it("serializes new equation and figure scales with the same stable numeric contract", () => {
+    expect(serializeResizableScale(parseEquationScale("88"))).toBe("88");
+    expect(serializeResizableScale(parseFigureScale("160"))).toBe("160");
+    expect(parseEquationScale("49")).toBeNull();
+    expect(parseFigureScale("161")).toBeNull();
+  });
+
+  it("exposes only the allowed persisted scale attributes", () => {
+    expect(isResizableScaleAttribute("data-diagram-scale")).toBe(true);
+    expect(isResizableScaleAttribute("data-equation-scale")).toBe(true);
+    expect(isResizableScaleAttribute("data-figure-scale")).toBe(true);
+    expect(isResizableScaleAttribute("style")).toBe(false);
+    expect(isResizableScaleAttribute("data-random-scale")).toBe(false);
+  });
+
+  it("maps scale attributes to their dataset keys", () => {
+    expect(getResizableScaleDatasetKey("data-diagram-scale")).toBe("diagramScale");
+    expect(getResizableScaleDatasetKey("data-equation-scale")).toBe("equationScale");
+    expect(getResizableScaleDatasetKey("data-figure-scale")).toBe("figureScale");
+    expect(getResizableScaleDatasetKey("data-random-scale")).toBeNull();
+  });
+
+  it("uses the sanitized scale as controlled export width", () => {
+    expect(getExportScaleWidthPercent(null)).toBeNull();
+    expect(getExportScaleWidthPercent("72")).toBe(72);
+    expect(getExportScaleWidthPercent("49")).toBeNull();
+    expect(getExportScaleWidthPercent("100")).toBeNull();
+    expect(getExportScaleWidthPercent("161")).toBeNull();
+    expect(getExportScaleWidthPercent("texto")).toBeNull();
   });
 });
 

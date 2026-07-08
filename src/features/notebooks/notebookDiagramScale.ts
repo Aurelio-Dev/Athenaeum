@@ -1,24 +1,28 @@
-// Escala proporcional dos blocos de diagrama: persistida como
-// data-diagram-scale (inteiro 50..160, em % do tamanho natural) e aplicada em
-// runtime por transform: scale() dentro do NotebookDiagramFrame. Diferente da
-// antiga largura (data-diagram-width), que só estreitava o contêiner e
-// provocava reflow, a escala amplia/reduz o conteúdo inteiro uniformemente.
-// A ausência do atributo (ou o valor 100) significa tamanho natural.
+// Escala proporcional dos blocos redimensionaveis: persistida como inteiro
+// 50..160, em % do tamanho natural, e aplicada em runtime pelo frame de
+// redimensionamento. A ausencia do atributo (ou o valor 100) significa tamanho
+// natural.
 
-export const diagramScaleMinPercent = 50;
-export const diagramScaleMaxPercent = 160;
-export const diagramScaleDefaultPercent = 100;
-export const diagramScaleStepPercent = 5;
-export const diagramScaleLargeStepPercent = 10;
+export const resizableScaleMinPercent = 50;
+export const resizableScaleMaxPercent = 160;
+export const resizableScaleDefaultPercent = 100;
+export const resizableScaleStepPercent = 5;
+export const resizableScaleLargeStepPercent = 10;
 
-// Variáveis runtime que nunca devem chegar ao HTML persistido: a da escala
-// atual e a da largura da Macrofase 8 (legada, removida na migração).
+export const diagramScaleMinPercent = resizableScaleMinPercent;
+export const diagramScaleMaxPercent = resizableScaleMaxPercent;
+export const diagramScaleDefaultPercent = resizableScaleDefaultPercent;
+export const diagramScaleStepPercent = resizableScaleStepPercent;
+export const diagramScaleLargeStepPercent = resizableScaleLargeStepPercent;
+
+// Variaveis runtime que nunca devem chegar ao HTML persistido: a da escala
+// atual e a da largura da Macrofase 8 (legada, removida na migracao).
 export const diagramScaleCssVariable = "--notebook-diagram-scale";
 export const legacyDiagramWidthCssVariable = "--notebook-diagram-width";
 
 // Aceita apenas inteiros dentro do intervalo permitido; qualquer outro valor
-// conta como inválido e vira null (tamanho natural).
-export function parseDiagramScale(value: string | null | undefined): number | null {
+// conta como invalido e vira null (tamanho natural).
+export function parseResizableScale(value: string | null | undefined): number | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -29,37 +33,78 @@ export function parseDiagramScale(value: string | null | undefined): number | nu
   }
 
   const parsed = Number(trimmedValue);
-  if (parsed < diagramScaleMinPercent || parsed > diagramScaleMaxPercent) {
+  if (parsed < resizableScaleMinPercent || parsed > resizableScaleMaxPercent) {
     return null;
   }
 
   return parsed;
 }
 
-export function clampDiagramScale(value: number): number {
+export function clampResizableScale(value: number): number {
   if (!Number.isFinite(value)) {
-    return diagramScaleDefaultPercent;
+    return resizableScaleDefaultPercent;
   }
 
-  return Math.min(diagramScaleMaxPercent, Math.max(diagramScaleMinPercent, Math.round(value)));
+  return Math.min(resizableScaleMaxPercent, Math.max(resizableScaleMinPercent, Math.round(value)));
 }
 
-export function stepDiagramScale(current: number, direction: -1 | 1, useLargeStep: boolean): number {
-  const step = useLargeStep ? diagramScaleLargeStepPercent : diagramScaleStepPercent;
-  return clampDiagramScale(current + direction * step);
+// Serializacao estavel: valores invalidos/default nao geram atributo; valores
+// validos saem como inteiro sem casas decimais.
+export function serializeResizableScale(scale: number | null): string | null {
+  if (scale === null) {
+    return null;
+  }
+
+  const clampedScale = clampResizableScale(scale);
+  return clampedScale === resizableScaleDefaultPercent ? null : String(clampedScale);
 }
 
-// 100 é o padrão e não é persistido: null ou 100 removem o atributo.
-export function applyDiagramScale(diagram: HTMLElement, scale: number | null) {
-  if (scale === null || scale === diagramScaleDefaultPercent) {
-    delete diagram.dataset.diagramScale;
+export function applyResizableScale(element: HTMLElement, datasetKey: string, scale: number | null) {
+  const serializedScale = serializeResizableScale(scale);
+
+  if (serializedScale === null) {
+    delete element.dataset[datasetKey];
     return;
   }
 
-  diagram.dataset.diagramScale = String(scale);
+  element.dataset[datasetKey] = serializedScale;
 }
 
-// Leitor do atributo legado data-diagram-width (inteiro 40..100), usado só
+export function parseDiagramScale(value: string | null | undefined): number | null {
+  return parseResizableScale(value);
+}
+
+export function clampDiagramScale(value: number): number {
+  return clampResizableScale(value);
+}
+
+export function stepDiagramScale(current: number, direction: -1 | 1, useLargeStep: boolean): number {
+  const step = useLargeStep ? resizableScaleLargeStepPercent : resizableScaleStepPercent;
+  return clampDiagramScale(current + direction * step);
+}
+
+// 100 e o padrao e nao e persistido: null ou 100 removem o atributo.
+export function applyDiagramScale(diagram: HTMLElement, scale: number | null) {
+  applyResizableScale(diagram, "diagramScale", scale);
+}
+
+export function parseEquationScale(value: string | null | undefined): number | null {
+  return parseResizableScale(value);
+}
+
+export function applyEquationScale(equation: HTMLElement, scale: number | null) {
+  applyResizableScale(equation, "equationScale", scale);
+}
+
+export function parseFigureScale(value: string | null | undefined): number | null {
+  return parseResizableScale(value);
+}
+
+export function applyFigureScale(figure: HTMLElement, scale: number | null) {
+  applyResizableScale(figure, "figureScale", scale);
+}
+
+// Leitor do atributo legado data-diagram-width (inteiro 40..100), usado so
 // para migrar blocos antigos para uma escala inicial aproximada.
 export function parseLegacyDiagramWidthPercent(value: string | null | undefined): number | null {
   if (typeof value !== "string") {
@@ -79,14 +124,105 @@ export function parseLegacyDiagramWidthPercent(value: string | null | undefined)
   return parsed;
 }
 
-// Garante que nenhuma variável CSS runtime de escala/largura sobrevive na
-// serialização — o HTML salvo carrega apenas data-diagram-scale.
+// Garante que nenhuma variavel CSS runtime de escala/largura sobrevive na
+// serializacao. O HTML salvo carrega apenas atributos data-* semanticos.
 export function clearDiagramScaleRuntimeStyles(root: HTMLElement) {
-  root.querySelectorAll<HTMLElement>('[data-athenaeum-block="diagram"]').forEach((diagram) => {
-    diagram.style.removeProperty(diagramScaleCssVariable);
-    diagram.style.removeProperty(legacyDiagramWidthCssVariable);
-    if (!diagram.getAttribute("style")) {
-      diagram.removeAttribute("style");
+  root
+    .querySelectorAll<HTMLElement>(
+      '[data-athenaeum-block="diagram"], [data-athenaeum-block="equation"], [data-athenaeum-block="figure"]',
+    )
+    .forEach((block) => {
+      block.style.removeProperty(diagramScaleCssVariable);
+      block.style.removeProperty(legacyDiagramWidthCssVariable);
+      if (!block.getAttribute("style")) {
+        block.removeAttribute("style");
+      }
+    });
+}
+
+export function getResolvedResizableScale(value: string | null | undefined) {
+  return parseResizableScale(value) ?? resizableScaleDefaultPercent;
+}
+
+export function isResizableScaleAttribute(name: string) {
+  return name === "data-diagram-scale" || name === "data-equation-scale" || name === "data-figure-scale";
+}
+
+export function getResizableScaleDatasetKey(attributeName: string) {
+  if (attributeName === "data-diagram-scale") {
+    return "diagramScale";
+  }
+
+  if (attributeName === "data-equation-scale") {
+    return "equationScale";
+  }
+
+  if (attributeName === "data-figure-scale") {
+    return "figureScale";
+  }
+
+  return null;
+}
+
+export function setSanitizedResizableScaleAttribute(
+  target: HTMLElement,
+  attributeName: string,
+  rawValue: string | null | undefined,
+) {
+  const datasetKey = getResizableScaleDatasetKey(attributeName);
+  if (!datasetKey) {
+    return;
+  }
+
+  const scale = parseResizableScale(rawValue);
+  if (scale !== null) {
+    applyResizableScale(target, datasetKey, scale);
+  } else {
+    delete target.dataset[datasetKey];
+  }
+}
+
+export function getExportScaleWidthPercent(rawValue: string | null | undefined) {
+  const scale = parseResizableScale(rawValue);
+  if (scale === null || scale === resizableScaleDefaultPercent) {
+    return null;
+  }
+
+  return scale;
+}
+
+export function appendExportScaleStyle(target: HTMLElement, scalePercent: number | null) {
+  if (scalePercent === null) {
+    return;
+  }
+
+  const scaleStyle =
+    `--athenaeum-export-block-width: ${scalePercent}%; ` +
+    "width: var(--athenaeum-export-block-width); max-width: 100%; margin-inline: auto";
+  const currentStyle = target.getAttribute("style");
+  target.setAttribute("style", currentStyle ? `${currentStyle}; ${scaleStyle}` : scaleStyle);
+}
+
+export function applyExportScaleAttributeAndStyle(
+  target: HTMLElement,
+  attributeName: string,
+  rawValue: string | null | undefined,
+) {
+  setSanitizedResizableScaleAttribute(target, attributeName, rawValue);
+  appendExportScaleStyle(target, getExportScaleWidthPercent(rawValue));
+}
+
+export function applyExportScaleFromPercent(target: HTMLElement, attributeName: string, scalePercent: number) {
+  const serializedScale = serializeResizableScale(scalePercent);
+  const datasetKey = getResizableScaleDatasetKey(attributeName);
+
+  if (serializedScale === null) {
+    if (datasetKey) {
+      delete target.dataset[datasetKey];
     }
-  });
+    return;
+  }
+
+  setSanitizedResizableScaleAttribute(target, attributeName, serializedScale);
+  appendExportScaleStyle(target, Number(serializedScale));
 }
