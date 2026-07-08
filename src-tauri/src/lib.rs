@@ -77,6 +77,25 @@ fn select_pdf_files() -> Result<Vec<PickedPdfFile>, String> {
 }
 
 #[tauri::command]
+fn select_notebook_export_destination(default_file_name: String) -> Result<Option<String>, String> {
+  let fallback_file_name = "caderno.html";
+  let trimmed_file_name = default_file_name.trim();
+  let file_name = if trimmed_file_name.is_empty() {
+    fallback_file_name
+  } else {
+    trimmed_file_name
+  };
+
+  Ok(
+    rfd::FileDialog::new()
+      .add_filter("HTML", &["html", "htm"])
+      .set_file_name(file_name)
+      .save_file()
+      .map(|path| path.to_string_lossy().to_string()),
+  )
+}
+
+#[tauri::command]
 fn read_pdf_file(file_path: String) -> Result<String, String> {
   let path = PathBuf::from(&file_path);
 
@@ -1987,6 +2006,7 @@ pub fn run() {
       save_canvas_file,
       save_notebook_asset,
       save_notebook_file_attachment,
+      select_notebook_export_destination,
       select_pdf_file,
       select_pdf_files
     ])

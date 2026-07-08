@@ -1218,6 +1218,16 @@ export async function deleteNotebookFileAttachment(attachmentId: string): Promis
   return invoke<NotebookFileAttachmentMetadata>("delete_notebook_file_attachment", { attachmentId });
 }
 
+export type NotebookExportDestinationRequest = {
+  defaultFileName: string;
+};
+
+export async function selectNotebookExportDestination(request: NotebookExportDestinationRequest): Promise<string | null> {
+  return invoke<string | null>("select_notebook_export_destination", {
+    defaultFileName: request.defaultFileName,
+  });
+}
+
 function uniqueTrimmed(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
 }

@@ -20,6 +20,7 @@ import {
   moveNotebookToTrash as movePersistedNotebookToTrash,
   saveNotebookPage,
   saveNotebookTags,
+  selectNotebookExportDestination,
   setNotebookFavorite,
   setSetting,
   unlinkDocumentFromNotebook,
@@ -32,6 +33,7 @@ import { useContextMenu } from "../../hooks/useContextMenu";
 import type { LibraryCollection, LibraryDocument, NotebookPage, SubjectTag } from "../../types/library";
 import { DocumentPickerModal } from "../library/DocumentPickerModal";
 import { TagSelector } from "../library/TagSelector";
+import { getNotebookExportDefaultFileName } from "./notebookExportFileName";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
   notebookDetailsCollapseBreakpoint,
@@ -58,6 +60,15 @@ type EditorStats = {
 };
 
 type NotebookSaveStatus = "saved" | "dirty" | "saving" | "error";
+
+type NotebookExportScope = "current-page" | "full-notebook";
+
+type NotebookExportPreparation = {
+  notebookId: number;
+  scope: NotebookExportScope;
+  pageIds: number[];
+  destinationPath: string;
+};
 
 const editorZoomOptions = [75, 90, 100, 110, 125, 150] as const;
 
@@ -145,6 +156,14 @@ function formatCount(value: number) {
 function pageDisplayTitle(page: NotebookPage) {
   // Fallback calculado na UI a partir de position — nunca persistido.
   return page.title ?? `Página sem título ${page.position}`;
+}
+
+function getNotebookExportErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Não foi possível preparar a exportação.";
 }
 
 function NotebookHeaderIcon() {
@@ -542,6 +561,11 @@ export function NotebookPanel({
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<NotebookSaveStatus>("saved");
   const [isStatsDialogOpen, setIsStatsDialogOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<NotebookExportScope>("full-notebook");
+  const [isPreparingExport, setIsPreparingExport] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [preparedExport, setPreparedExport] = useState<NotebookExportPreparation | null>(null);
   const [normalSpacingMode, setNormalSpacingMode] = useState<NotebookSpacingMode>("normal");
   const [focusSpacingMode, setFocusSpacingMode] = useState<NotebookSpacingMode>("comfortable");
   const [openedAt] = useState(() => new Date().toISOString());
@@ -599,6 +623,7 @@ export function NotebookPanel({
   const draftTitleRef = useRef("");
   const draftContentRef = useRef("");
   const isDirtyRef = useRef(false);
+  const saveQueueTailRef = useRef<Promise<void>>(Promise.resolve());
   const onNotebookChangedRef = useRef(onNotebookChanged);
   onNotebookChangedRef.current = onNotebookChanged;
 
@@ -695,32 +720,38 @@ export function NotebookPanel({
     };
   }, []);
 
-  const saveActivePage = useCallback(async () => {
-    const pageId = activePageIdRef.current;
+  const saveActivePage = useCallback(() => {
+    const runQueuedSave = async () => {
+      const pageId = activePageIdRef.current;
 
-    if (!isDirtyRef.current || pageId === null) {
-      return;
-    }
+      if (!isDirtyRef.current || pageId === null) {
+        return;
+      }
 
-    // Le os rascunhos SINCRONAMENTE antes de qualquer await: trocas de pagina
-    // que acontecam durante o save nao contaminam o payload.
-    const trimmedTitle = draftTitleRef.current.trim();
-    const title = trimmedTitle.length > 0 ? trimmedTitle : null;
-    const content = draftContentRef.current;
-    isDirtyRef.current = false;
-    setSaveStatus("saving");
+      const trimmedTitle = draftTitleRef.current.trim();
+      const title = trimmedTitle.length > 0 ? trimmedTitle : null;
+      const content = draftContentRef.current;
 
-    try {
-      await saveNotebookPage(pageId, { title, content });
-      setPages((currentPages) => currentPages.map((page) => (page.id === pageId ? { ...page, title, content } : page)));
-      setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: new Date().toISOString() } : currentInfo));
-      setSaveStatus("saved");
-      onNotebookChangedRef.current();
-    } catch (error) {
-      console.warn("Nao foi possivel salvar a pagina do caderno.", error);
-      isDirtyRef.current = true;
-      setSaveStatus("error");
-    }
+      isDirtyRef.current = false;
+      setSaveStatus("saving");
+
+      try {
+        await saveNotebookPage(pageId, { title, content });
+        setPages((currentPages) => currentPages.map((page) => (page.id === pageId ? { ...page, title, content } : page)));
+        setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: new Date().toISOString() } : currentInfo));
+        setSaveStatus(isDirtyRef.current ? "dirty" : "saved");
+        onNotebookChangedRef.current();
+      } catch (error) {
+        console.warn("Nao foi possivel salvar a pagina do caderno.", error);
+        isDirtyRef.current = true;
+        setSaveStatus("error");
+        throw error;
+      }
+    };
+
+    const publicPromise = saveQueueTailRef.current.then(runQueuedSave);
+    saveQueueTailRef.current = publicPromise.catch(() => undefined);
+    return publicPromise;
   }, []);
 
   const saveNotebookInfoDraft = useCallback(async () => {
@@ -880,6 +911,61 @@ export function NotebookPanel({
   function openDetailedCount() {
     notebookOptionsContextMenu.close();
     setIsStatsDialogOpen(true);
+  }
+
+  function openNotebookExportDialog() {
+    notebookOptionsContextMenu.close();
+    setExportScope("full-notebook");
+    setExportError(null);
+    setPreparedExport(null);
+    setIsExportDialogOpen(true);
+  }
+
+  function closeNotebookExportDialog() {
+    if (isPreparingExport) {
+      return;
+    }
+
+    setIsExportDialogOpen(false);
+    setExportError(null);
+  }
+
+  async function prepareNotebookExport() {
+    setExportError(null);
+    setPreparedExport(null);
+    setIsPreparingExport(true);
+
+    try {
+      await saveNotebookInfoDraft();
+      if (isInfoDirtyRef.current) {
+        throw new Error("Não foi possível salvar as informações mais recentes do caderno.");
+      }
+
+      await saveActivePage();
+
+      const pageIds = exportScope === "current-page" ? (activePageIdRef.current === null ? [] : [activePageIdRef.current]) : pages.map((page) => page.id);
+      if (pageIds.length === 0) {
+        throw new Error("Não há páginas para exportar.");
+      }
+
+      const defaultFileName = getNotebookExportDefaultFileName(infoDraftTitleRef.current || notebookTitle || notebookInfo?.title || "Caderno");
+      const destinationPath = await selectNotebookExportDestination({ defaultFileName });
+      if (!destinationPath) {
+        return;
+      }
+
+      setPreparedExport({
+        notebookId,
+        scope: exportScope,
+        pageIds,
+        destinationPath,
+      });
+    } catch (error) {
+      console.warn("Nao foi possivel preparar a exportacao do caderno.", error);
+      setExportError(getNotebookExportErrorMessage(error));
+    } finally {
+      setIsPreparingExport(false);
+    }
   }
 
   function openNotebookOptionsMenu(event: ReactMouseEvent<HTMLElement>, placement: "header" | "footer") {
@@ -1148,6 +1234,9 @@ export function NotebookPanel({
   }, [isZoomMenuOpen]);
 
   const activePage = pages.find((page) => page.id === activePageId) ?? null;
+  const exportCurrentPageTitle = activePage ? pageDisplayTitle(activePage) : "Página atual";
+  const exportPreparedScopeLabel =
+    preparedExport?.scope === "current-page" ? "Página atual" : preparedExport?.scope === "full-notebook" ? "Caderno completo" : "";
 
   const visiblePages = useMemo(() => {
     const term = pageSearchTerm.trim().toLowerCase();
@@ -1774,7 +1863,7 @@ export function NotebookPanel({
                 <ContextMenuItem icon={<MenuGlyph name="copy" />} label="Duplicar" onSelect={() => undefined} disabled />
                 <ContextMenuItem icon={<MenuGlyph name="pin" />} label="Fixar nos favoritos" onSelect={() => void pinNotebookFavorite()} disabled={Boolean(notebookInfo?.favorite)} />
                 <ContextMenuDivider />
-                <ContextMenuItem icon={<MenuGlyph name="export" />} label="Exportar" onSelect={() => undefined} disabled />
+                <ContextMenuItem icon={<MenuGlyph name="export" />} label="Exportar" onSelect={openNotebookExportDialog} />
                 <ContextMenuItem icon={<MenuGlyph name="print" />} label="Imprimir" onSelect={() => undefined} disabled />
                 <ContextMenuItem icon={<MenuGlyph name="link" />} label="Copiar link interno" onSelect={() => undefined} disabled />
                 <ContextMenuDivider />
@@ -1827,6 +1916,110 @@ export function NotebookPanel({
                 onClick={() => setIsStatsDialogOpen(false)}
               >
                 Fechar
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {isExportDialogOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={closeNotebookExportDialog}>
+          <section
+            className="w-full max-w-md rounded-xl bg-surface-panel shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="notebook-export-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="border-b border-border-subtle px-6 py-5">
+              <h2 id="notebook-export-title" className="text-lg font-bold text-text-primary">
+                Exportar Caderno
+              </h2>
+            </header>
+
+            <div className="grid gap-5 px-6 py-5 text-sm">
+              <fieldset className="grid gap-3">
+                <legend className="text-xs font-bold uppercase tracking-wide text-text-secondary">Escopo</legend>
+                <label className="grid cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border-subtle bg-[var(--card)] px-4 py-3 transition hover:border-primary">
+                  <input
+                    type="radio"
+                    name="notebook-export-scope"
+                    value="current-page"
+                    checked={exportScope === "current-page"}
+                    disabled={!activePage}
+                    onChange={() => {
+                      setExportScope("current-page");
+                      setExportError(null);
+                      setPreparedExport(null);
+                    }}
+                    className="mt-1"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-text-primary">Página atual</span>
+                    <span className="block truncate text-xs text-text-secondary" title={exportCurrentPageTitle}>
+                      {exportCurrentPageTitle}
+                    </span>
+                  </span>
+                </label>
+                <label className="grid cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border-subtle bg-[var(--card)] px-4 py-3 transition hover:border-primary">
+                  <input
+                    type="radio"
+                    name="notebook-export-scope"
+                    value="full-notebook"
+                    checked={exportScope === "full-notebook"}
+                    onChange={() => {
+                      setExportScope("full-notebook");
+                      setExportError(null);
+                      setPreparedExport(null);
+                    }}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-semibold text-text-primary">Caderno completo</span>
+                    <span className="block text-xs text-text-secondary">
+                      {formatCount(pages.length)} {pages.length === 1 ? "página" : "páginas"}
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
+
+              {exportError ? (
+                <div className="rounded-lg border border-status-red bg-status-red-soft px-4 py-3 text-sm font-medium text-status-red-text">
+                  {exportError}
+                </div>
+              ) : null}
+
+              {preparedExport ? (
+                <div className="grid gap-2 rounded-lg border border-border-subtle bg-surface-card px-4 py-3">
+                  <p className="font-semibold text-text-primary">Exportação preparada</p>
+                  <p className="text-xs text-text-secondary">
+                    {exportPreparedScopeLabel} - {formatCount(preparedExport.pageIds.length)}{" "}
+                    {preparedExport.pageIds.length === 1 ? "página" : "páginas"}
+                  </p>
+                  <p className="break-words text-xs font-medium text-text-primary [overflow-wrap:anywhere] [word-break:break-word]" title={preparedExport.destinationPath}>
+                    {preparedExport.destinationPath}
+                  </p>
+                  <p className="text-xs text-text-secondary">O arquivo final será gerado em uma fase posterior.</p>
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
+              <button
+                type="button"
+                disabled={isPreparingExport}
+                className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={closeNotebookExportDialog}
+              >
+                {preparedExport ? "Fechar" : "Cancelar"}
+              </button>
+              <button
+                type="button"
+                disabled={isPreparingExport}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void prepareNotebookExport()}
+              >
+                {isPreparingExport ? "Preparando..." : preparedExport ? "Selecionar outro destino" : "Selecionar destino"}
               </button>
             </footer>
           </section>
