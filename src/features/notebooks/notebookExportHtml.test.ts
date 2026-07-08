@@ -8,6 +8,7 @@ import {
   validateNotebookExportManifestSlots,
   type NotebookExportManifest,
 } from "./notebookExportHtml";
+import { isPlaceholderFigureCaption, legacyImageCaptionPlaceholder } from "./notebookEditorUtils";
 
 function manifest(slots: NotebookExportManifest["slots"], nonce = "nonce-2026") {
   return {
@@ -177,6 +178,75 @@ describe("renderExportStyles", () => {
     expect(styles).toContain("width: 100%");
     expect(styles).toContain("max-width: 100%");
     expect(styles).toContain("height: auto");
+  });
+});
+
+describe("folha branca do export (item 2)", () => {
+  it("usa folha branca com fundo externo neutro separado", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain("--ax-paper: #ffffff");
+    expect(styles).toContain("--ax-desk: #f4f1ed");
+    // A folha e branca e o fundo externo e distinto (nao a antiga folha creme).
+    expect(styles).not.toContain("--ax-paper: #faf5ef");
+  });
+
+  it("mantem texto de alto contraste e o acento cobre do Athenaeum", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain("--ax-ink: #1f2933");
+    expect(styles).toContain("--ax-ink-muted: #765f52");
+    expect(styles).toContain("--ax-accent: #a85f2a");
+  });
+
+  it("preserva o bloco de codigo escuro na folha branca (itens 8 e 9)", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain("--ax-code-block-bg: #1e2130");
+    expect(styles).toContain("--ax-code-block-ink: #f0e6dc");
+  });
+
+  it("no modo impressao remove sombra e fundo decorativo", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toMatch(/@media print \{[\s\S]*background: #ffffff/);
+    expect(styles).toMatch(/@media print \{[\s\S]*box-shadow: none/);
+  });
+});
+
+describe("dimensoes independentes de imagem no export CSS (item 7)", () => {
+  it("aplica largura em px e altura via aspect-ratio, sem transform", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain(".athenaeum-export__figure--sized");
+    expect(styles).toContain("width: var(--fig-w)");
+    expect(styles).toContain("aspect-ratio: var(--fig-aspect)");
+    expect(styles).toContain("max-width: 100%");
+    expect(styles).not.toContain("transform: scale(");
+  });
+});
+
+describe("legendas placeholder no export (itens 3 e 9)", () => {
+  it("trata legenda vazia como sem legenda", () => {
+    expect(isPlaceholderFigureCaption("")).toBe(true);
+    expect(isPlaceholderFigureCaption("   ")).toBe(true);
+    expect(isPlaceholderFigureCaption(null)).toBe(true);
+    expect(isPlaceholderFigureCaption(undefined)).toBe(true);
+  });
+
+  it("trata o texto placeholder legado exato como sem legenda", () => {
+    expect(isPlaceholderFigureCaption(legacyImageCaptionPlaceholder)).toBe(true);
+    expect(isPlaceholderFigureCaption(`  ${legacyImageCaptionPlaceholder}  `)).toBe(true);
+  });
+
+  it("preserva uma legenda real escrita pelo usuario", () => {
+    expect(isPlaceholderFigureCaption("Figura 1: fluxo do sistema")).toBe(false);
+  });
+
+  it("nao remove texto apenas parecido com o placeholder", () => {
+    expect(isPlaceholderFigureCaption("Imagem sem título. Adicione uma legenda")).toBe(false);
+    expect(isPlaceholderFigureCaption("Imagem sem título")).toBe(false);
+    expect(isPlaceholderFigureCaption(`${legacyImageCaptionPlaceholder} (revisar)`)).toBe(false);
   });
 });
 

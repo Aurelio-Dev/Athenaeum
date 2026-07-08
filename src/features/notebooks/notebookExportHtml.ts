@@ -8,6 +8,8 @@ import {
   setSanitizedResizableScaleAttribute,
 } from "./notebookDiagramScale";
 import { loadNotebookExportLoraFontFaceCss } from "./notebookExportFonts";
+import { isPlaceholderFigureCaption } from "./notebookEditorUtils";
+import { applyFigureDimensions, resolveFigureExportSizing } from "./notebookFigureDimensions";
 
 export type NotebookExportScope = "current-page" | "full-notebook";
 
@@ -599,6 +601,34 @@ function sanitizeEquationFigure(equation: HTMLElement, context: SanitizationCont
   return [figure];
 }
 
+// Aplica o tamanho da imagem no export sem transform: dimensoes independentes
+// viram largura em px + aspect-ratio (a altura e derivada, degrada
+// proporcionalmente sob max-width:100% em telas estreitas); escala legada
+// continua como largura percentual; sem nada persistido, tamanho natural.
+function applyExportImageSizing(figure: HTMLElement, imageFigure: Element) {
+  const sizing = resolveFigureExportSizing(
+    imageFigure.getAttribute("data-figure-width"),
+    imageFigure.getAttribute("data-figure-height"),
+    imageFigure.getAttribute("data-figure-scale"),
+  );
+
+  if (sizing.kind === "dimensions") {
+    applyFigureDimensions(figure, { width: sizing.width, height: sizing.height });
+    // Dimensoes vencem a escala: remove um data-figure-scale redundante que
+    // copySafeAttributes possa ter trazido.
+    figure.removeAttribute("data-figure-scale");
+    figure.classList.add("athenaeum-export__figure--sized");
+    const sizingStyle = `--fig-w: ${sizing.width}px; --fig-aspect: ${sizing.width} / ${sizing.height}`;
+    const currentStyle = figure.getAttribute("style");
+    figure.setAttribute("style", currentStyle ? `${currentStyle}; ${sizingStyle}` : sizingStyle);
+    return;
+  }
+
+  if (sizing.kind === "scale") {
+    applyExportScaleFromPercent(figure, "data-figure-scale", sizing.percent);
+  }
+}
+
 function sanitizeImageFigure(imageFigure: HTMLElement, context: SanitizationContext): Node[] {
   const figure = context.targetDocument.createElement("figure");
   copySafeAttributes(imageFigure, figure, context.pageId, context.warnings);
@@ -606,8 +636,21 @@ function sanitizeImageFigure(imageFigure: HTMLElement, context: SanitizationCont
   figure.classList.add("athenaeum-export__figure");
   figure.setAttribute("data-athenaeum-block", "figure");
   figure.setAttribute("data-figure-subtype", "image");
-  applyExportScaleAttributeAndStyle(figure, "data-figure-scale", imageFigure.getAttribute("data-figure-scale"));
-  appendSanitizedChildren(imageFigure, figure, context);
+  applyExportImageSizing(figure, imageFigure);
+
+  // Uma legenda vazia ou igual ao placeholder legado nao vira conteudo
+  // exportado (o <figcaption> e omitido); uma legenda real e preservada.
+  Array.from(imageFigure.childNodes).forEach((child) => {
+    if (
+      child instanceof HTMLElement &&
+      child.tagName.toLowerCase() === "figcaption" &&
+      isPlaceholderFigureCaption(child.textContent)
+    ) {
+      return;
+    }
+
+    sanitizeNode(child, context).forEach((safeChild) => figure.appendChild(safeChild));
+  });
 
   return [figure];
 }
@@ -758,16 +801,20 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
       --ax-serif: "Lora", Georgia, "Times New Roman", serif;
       --ax-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
       --ax-mono: "IBM Plex Mono", "Cascadia Code", Consolas, "Courier New", monospace;
-      --ax-paper: #faf5ef;
-      --ax-desk: #f0e7db;
-      --ax-ink: #1a1410;
-      --ax-ink-muted: #7a6558;
-      --ax-accent: #9c5a2e;
-      --ax-border: #d9cbbf;
-      --ax-border-soft: #e7ddd0;
-      --ax-surface-muted: #efe7dc;
-      --ax-code-bg: #f2ebe1;
-      --ax-code-inline-bg: #f2ebe1;
+      /* Folha branca (item 2): fundo externo neutro muito claro, folha #fff,
+         texto principal escuro de alto contraste, secundario cinza/marrom
+         neutro e o acento cobre/terracota do Athenaeum preservado. O bloco de
+         codigo permanece com fundo escuro (itens 8 e 9). */
+      --ax-paper: #ffffff;
+      --ax-desk: #f4f1ed;
+      --ax-ink: #1f2933;
+      --ax-ink-muted: #765f52;
+      --ax-accent: #a85f2a;
+      --ax-border: #d8d2ca;
+      --ax-border-soft: #e7e2db;
+      --ax-surface-muted: #f5f3f0;
+      --ax-code-bg: #f7f5f2;
+      --ax-code-inline-bg: #f3f1ec;
       --ax-code-block-bg: #1e2130;
       --ax-code-block-ink: #f0e6dc;
       font-family: var(--ax-sans);
@@ -968,6 +1015,21 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
       width: 100%;
       max-width: 100%;
       height: auto;
+    }
+    /* Imagem com dimensoes independentes: largura em px (limitada pela folha) e
+       altura derivada por aspect-ratio. Sob max-width:100% a largura encolhe em
+       telas estreitas e a altura acompanha, sem estourar a folha nem apagar a
+       altura persistida (height:auto so deriva o valor do aspect-ratio). A
+       legenda herda a largura visual da figura. */
+    .athenaeum-export__figure--sized {
+      width: var(--fig-w);
+      max-width: 100%;
+      margin-inline: auto;
+    }
+    .athenaeum-export__figure--sized img {
+      width: 100%;
+      height: auto;
+      aspect-ratio: var(--fig-aspect);
     }
     .athenaeum-export__missing {
       display: inline-block;

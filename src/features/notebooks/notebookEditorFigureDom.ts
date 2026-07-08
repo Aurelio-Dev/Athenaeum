@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { NotebookFigureImagePreview } from "./NotebookFigureImagePreview";
 import { applyFigureScale, parseFigureScale } from "./notebookDiagramScale";
+import { setSanitizedFigureDimensionAttributes } from "./notebookFigureDimensions";
 
 type NotebookAssetImageData = {
   id: string;
@@ -90,9 +91,17 @@ function normalizeFigureScale(figure: HTMLElement) {
   applyFigureScale(figure, parseFigureScale(figure.dataset.figureScale));
 }
 
+// Mantem apenas o par largura/altura valido (ou remove os dois). Nao adiciona
+// dimensoes a figuras que nao as tem, entao nunca reescreve blocos antigos: so
+// higieniza valores invalidos que porventura tenham entrado no DOM.
+function normalizeFigureDimensions(figure: HTMLElement) {
+  setSanitizedFigureDimensionAttributes(figure, figure.dataset.figureWidth, figure.dataset.figureHeight);
+}
+
 export function normalizeFigures(editor: HTMLElement) {
   editor.querySelectorAll<HTMLElement>(imageFigureSelector).forEach((figure) => {
     normalizeFigureScale(figure);
+    normalizeFigureDimensions(figure);
 
     const image = getDirectAssetImage(figure);
     if (!image) {

@@ -6,14 +6,17 @@
 
 // Estilo inline no proprio <code> para o trecho renderizar igual mesmo depois de
 // recarregar do banco (o innerHTML salvo carrega o estilo junto, sem depender de
-// CSS externo). Fundo escuro, monospace, sem syntax highlighting.
-// display:block faz o trecho renderizar como UMA caixa continua que cresce e
-// encolhe com o conteudo — um <code> inline com <br> dentro viraria fragmentos
-// de caixa empilhados por linha, e o WebView2 pode ate dividir o elemento
-// inline ao Enter, criando <code>s irmaos separados. white-space:pre-wrap
-// preserva quebras e espacamentos de trechos multilinhas.
+// CSS externo). Fundo escuro neutro, monospace, sem syntax highlighting.
+// display:block faz o trecho ocupar a largura disponivel como UMA caixa continua
+// (nao uma etiqueta com largura de conteudo) — um <code> inline com <br> dentro
+// viraria fragmentos de caixa empilhados por linha, e o WebView2 pode ate
+// dividir o elemento inline ao Enter, criando <code>s irmaos separados.
+// white-space:pre + overflow-x:auto preservam espacos, tabulacoes e quebras e
+// permitem scroll horizontal em linhas longas, sem quebrar o codigo
+// arbitrariamente. line-height confortavel e borda discreta completam o visual;
+// compartilhado com o editor de Notas do leitor.
 export const codeBlockStyle =
-  "display:block;background:#1E2130;color:#F0E6DC;font-family:'IBM Plex Mono',Consolas,monospace;font-size:0.85em;padding:0.5em 0.75em;border-radius:8px;margin:0.4em 0;white-space:pre-wrap;";
+  "display:block;overflow-x:auto;background:#1E2130;color:#F0E6DC;border:1px solid #34384B;font-family:'IBM Plex Mono',Consolas,monospace;font-size:0.9em;line-height:1.55;padding:0.7em 0.9em;border-radius:8px;margin:0.7em 0;white-space:pre;";
 
 export function prepareCodeElement(code: HTMLElement) {
   code.setAttribute("style", codeBlockStyle);

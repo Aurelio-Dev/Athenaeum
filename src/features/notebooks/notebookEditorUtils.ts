@@ -48,6 +48,21 @@ export const calloutIcons: Record<CalloutType, string> = {
   danger: "x",
 };
 
+// Placeholder da legenda de imagem. NAO e persistido como conteudo real: novas
+// figuras nascem com <figcaption> vazio e o texto aparece so via CSS
+// (:empty::before). Este mesmo texto era gravado como conteudo em figuras
+// antigas; o exportador o reconhece e trata como "sem legenda". A copia literal
+// em src/styles/index.css deve permanecer identica a esta.
+export const legacyImageCaptionPlaceholder = "Imagem sem título. Adicione uma legenda...";
+
+// Puro e testavel: uma legenda vazia ou exatamente igual ao placeholder legado
+// nao e uma legenda escrita pelo usuario. Texto apenas parecido (com qualquer
+// caractere a mais/menos) continua sendo legenda real e e preservado.
+export function isPlaceholderFigureCaption(text: string | null | undefined): boolean {
+  const trimmed = (text ?? "").trim();
+  return trimmed.length === 0 || trimmed === legacyImageCaptionPlaceholder;
+}
+
 export const supportedNotebookImageMimeTypes: ReadonlySet<string> = new Set([
   "image/png",
   "image/jpeg",

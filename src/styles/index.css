@@ -582,6 +582,110 @@ select {
   user-select: none;
 }
 
+/* Frame de resize livre das imagens: largura e altura independentes, oito
+   areas (cantos + lados). Tudo aqui e runtime — some na serializacao junto com
+   o preview React. Sem transform: a box reserva o tamanho real no fluxo. */
+.notebook-editor .notebook-image-frame {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+}
+
+.notebook-editor .notebook-image-frame-box {
+  position: relative;
+  /* fit-content faz a box abracar a imagem no modo natural (handles junto da
+     imagem, nao do frame); dimensoes explicitas (style inline) sobrescrevem. */
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+.notebook-editor .notebook-image-frame-box > .notebook-figure-preview-image {
+  border-radius: 6px;
+}
+
+.notebook-editor .notebook-image-resize-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--diagram-node-border);
+  border-radius: 3px;
+  background: var(--color-surface-card);
+  touch-action: none;
+  user-select: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, border-color 120ms ease;
+  z-index: 1;
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="nw"] {
+  top: -6px;
+  left: -6px;
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="ne"] {
+  top: -6px;
+  right: -6px;
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="sw"] {
+  bottom: -6px;
+  left: -6px;
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="se"] {
+  bottom: -6px;
+  right: -6px;
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="n"] {
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="s"] {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="w"] {
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%);
+}
+
+.notebook-editor .notebook-image-resize-handle[data-handle-side="e"] {
+  top: 50%;
+  right: -6px;
+  transform: translateY(-50%);
+}
+
+.notebook-editor .notebook-image-frame[data-frame-active="true"] .notebook-image-resize-handle,
+.notebook-editor .notebook-image-resize-handle:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notebook-editor .notebook-image-resize-handle:hover,
+.notebook-editor .notebook-image-resize-handle:focus-visible {
+  border-color: var(--diagram-accent);
+  outline: none;
+}
+
+.notebook-editor .notebook-image-frame[data-frame-resizing="true"] .notebook-image-frame-box {
+  outline: 1px dashed var(--diagram-node-border);
+  outline-offset: 4px;
+}
+
+@media print {
+  .notebook-editor .notebook-image-resize-handle {
+    display: none;
+  }
+}
+
 .notebook-editor [data-athenaeum-block="diagram"] {
   --notebook-diagram-accent: var(--diagram-accent);
   display: grid;
@@ -1095,6 +1199,16 @@ select {
   margin-top: 0.7em;
   color: var(--color-text-secondary);
   font-size: 0.9em;
+}
+
+/* Placeholder da legenda de imagem exibido apenas quando o figcaption esta
+   vazio: o texto nunca e persistido como conteudo (ver
+   legacyImageCaptionPlaceholder em notebookEditorUtils.ts — devem casar). */
+.notebook-editor [data-athenaeum-block="figure"][data-figure-subtype="image"] > figcaption:empty::before {
+  content: "Imagem sem título. Adicione uma legenda...";
+  color: var(--color-text-subtle);
+  font-style: italic;
+  font-weight: 500;
 }
 
 .notebook-editor [data-athenaeum-block="equation"] {

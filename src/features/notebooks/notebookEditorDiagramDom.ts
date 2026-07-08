@@ -49,6 +49,14 @@ export function getDiagramSource(diagram: HTMLElement): HTMLElement | null {
   return diagram.querySelector<HTMLElement>(':scope > [data-diagram-source="true"]');
 }
 
+// A decisao pura de teclado do Enter no diagrama vive num modulo isolado sem
+// DOM/React (testavel em Node); reexportada aqui para o editor.
+export {
+  resolveDiagramSourceEnterAction,
+  type DiagramSourceEnterAction,
+  type DiagramSourceEnterInput,
+} from "./notebookDiagramSourceKeyboard";
+
 export function findClosestDiagramSource(node: Node | null, diagram: HTMLElement): HTMLElement | null {
   const element = node instanceof Element ? node : node?.parentElement;
   const source = element?.closest('[data-diagram-source="true"]');

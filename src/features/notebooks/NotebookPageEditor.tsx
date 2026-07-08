@@ -29,6 +29,7 @@ import {
   getDiagramKind,
   getDiagramSource,
   normalizeDiagrams,
+  resolveDiagramSourceEnterAction,
   setDiagramKind,
 } from "./notebookEditorDiagramDom";
 import {
@@ -38,6 +39,7 @@ import {
   parseFigureScale,
   resizableScaleDefaultPercent,
 } from "./notebookDiagramScale";
+import { applyFigureDimensions, parseFigureDimensions } from "./notebookFigureDimensions";
 import {
   clearEquationPreviews,
   findClosestEquation,
@@ -78,6 +80,7 @@ import {
   diagramKindLabels,
   figureSubtypeLabels,
   formatAttachmentMeta,
+  isPlaceholderFigureCaption,
   notebookRichContentSelector,
   supportedNotebookImageAccept,
   supportedNotebookImageMimeTypes,
@@ -284,19 +287,25 @@ function appendSanitizedFigureClipboardBlock(wrapper: HTMLElement, figure: HTMLE
   }
 
   const scale = parseFigureScale(figure.dataset.figureScale);
+  const dimensions = parseFigureDimensions(figure.dataset.figureWidth, figure.dataset.figureHeight);
   const pastedFigure = document.createElement("figure");
   const pastedImage = document.createElement("img");
   const caption = document.createElement("figcaption");
 
   pastedFigure.dataset.athenaeumBlock = "figure";
   pastedFigure.dataset.figureSubtype = "image";
-  if (scale !== null && scale !== resizableScaleDefaultPercent) {
+  // Dimensoes independentes validas tem prioridade; senao cai na escala legada.
+  // Valores externos invalidos viram null aqui e a figura fica no tamanho natural.
+  if (dimensions) {
+    applyFigureDimensions(pastedFigure, dimensions);
+  } else if (scale !== null && scale !== resizableScaleDefaultPercent) {
     pastedFigure.dataset.figureScale = String(scale);
   }
 
   pastedImage.dataset.notebookAssetId = assetId;
   pastedImage.alt = image.getAttribute("alt") ?? "";
-  caption.textContent = figure.querySelector(":scope > figcaption")?.textContent ?? "";
+  const sourceCaption = figure.querySelector(":scope > figcaption")?.textContent ?? "";
+  caption.textContent = isPlaceholderFigureCaption(sourceCaption) ? "" : sourceCaption;
   pastedFigure.append(pastedImage, caption);
   wrapper.append(pastedFigure);
 }
@@ -956,10 +965,13 @@ export function NotebookPageEditor({
     });
 
     restoreSavedRangeOrEditorEnd();
+    // A legenda nasce vazia: o placeholder aparece so via CSS (:empty::before),
+    // nunca como conteudo persistido. Assim uma imagem sem legenda e exportada
+    // sem texto placeholder.
     insertHtml(`
       <figure data-athenaeum-block="figure" data-figure-subtype="image">
         <img data-notebook-asset-id="${escapeHtml(savedAsset.id)}" src="data:${escapeHtml(savedAsset.mimeType)};base64,${dataBase64}" alt="" />
-        <figcaption>Imagem sem título. Adicione uma legenda...</figcaption>
+        <figcaption></figcaption>
       </figure>
       <div><br></div>
     `, { placeCursorInTrailingBlock: true });
@@ -1509,38 +1521,45 @@ export function NotebookPageEditor({
 
   function handleDiagramEnterKey(event: React.KeyboardEvent<HTMLDivElement>) {
     const diagram = getCurrentDiagram();
+    const selection = window.getSelection();
+    const source =
+      diagram && selection?.anchorNode ? findClosestDiagramSource(selection.anchorNode, diagram) : null;
 
-    if (!diagram || event.ctrlKey || event.metaKey || event.altKey) {
+    const action = resolveDiagramSourceEnterAction({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      hasDiagram: Boolean(diagram),
+      hasSourceCaret: Boolean(source && selection && selection.rangeCount > 0),
+    });
+
+    if (action === "ignore") {
       return false;
     }
 
-    if (event.shiftKey) {
-      const selection = window.getSelection();
-      const source = selection?.anchorNode ? findClosestDiagramSource(selection.anchorNode, diagram) : null;
-
-      if (!selection || selection.rangeCount === 0 || !source) {
-        return false;
-      }
-
+    if (action === "insert-line-break") {
+      // Uma unica quebra: insertLineBreak insere um <br> com sentinela e ja
+      // posiciona o caret na proxima linha (mesmo mecanismo dos blocos de codigo
+      // e celulas de tabela). Substitui a insercao manual de um no de texto "\n",
+      // que nao renderizava a quebra final e exigia um segundo Shift+Enter. Na
+      // serializacao o campo fonte volta a texto puro (o <br> vira "\n").
       event.preventDefault();
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
+      document.execCommand("insertLineBreak", false);
 
-      const lineBreak = document.createTextNode("\n");
-      range.insertNode(lineBreak);
-      range.setStart(lineBreak, lineBreak.length);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      savedRangeRef.current = range.cloneRange();
+      const nextSelection = window.getSelection();
+      savedRangeRef.current =
+        nextSelection && nextSelection.rangeCount > 0 ? nextSelection.getRangeAt(0).cloneRange() : null;
 
       emitChange();
       syncActiveActions();
       return true;
     }
 
+    // action === "exit-block": Enter simples sai do diagrama.
     event.preventDefault();
-    const { block, created } = getOrCreateEditableBlockAfter(diagram);
+    const { block, created } = getOrCreateEditableBlockAfter(diagram as HTMLElement);
     savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
 
     if (created) {
