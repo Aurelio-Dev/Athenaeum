@@ -105,6 +105,10 @@ export function parseGraphSource(source: string): ParsedGraph {
       return;
     }
 
+    if (trimmedLine.includes("---") || trimmedLine.includes("-->")) {
+      return;
+    }
+
     // Split com grupo de captura preserva os separadores: índices pares são
     // labels e índices ímpares são "->" ou "--".
     const segments = trimmedLine.split(/(->|--)/).map((segment) => segment.trim());

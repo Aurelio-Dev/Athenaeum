@@ -180,8 +180,30 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       setIsBlockActive(selectionInside || pointerInsideBlockRef.current);
     }
 
+    function handleDocumentFocusIn(event: Event) {
+      if (!diagram) {
+        return;
+      }
+
+      const focusInside = event.target instanceof Node && diagram.contains(event.target);
+      if (focusInside) {
+        setIsBlockActive(true);
+        return;
+      }
+
+      pointerInsideBlockRef.current = false;
+      setIsBlockActive(false);
+    }
+
+    function handleWindowBlur() {
+      pointerInsideBlockRef.current = false;
+      setIsBlockActive(false);
+    }
+
     document.addEventListener("pointerdown", handleDocumentPointerDown, true);
     document.addEventListener("selectionchange", handleSelectionChange);
+    document.addEventListener("focusin", handleDocumentFocusIn);
+    window.addEventListener("blur", handleWindowBlur);
 
     return () => {
       frameObserver.disconnect();
@@ -189,6 +211,8 @@ export function NotebookDiagramFrame({ children }: NotebookDiagramFrameProps) {
       attributeObserver?.disconnect();
       document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
       document.removeEventListener("selectionchange", handleSelectionChange);
+      document.removeEventListener("focusin", handleDocumentFocusIn);
+      window.removeEventListener("blur", handleWindowBlur);
     };
   }, []);
 

@@ -181,6 +181,13 @@ describe("parseGraphSource", () => {
     });
   });
 
+  it("rejects malformed dash separators instead of treating leftovers as labels", () => {
+    expect(parseGraphSource("A --- B\nA --> B")).toEqual({
+      nodes: [],
+      edges: [],
+    });
+  });
+
   it("preserves labels with accents and Unicode", () => {
     expect(parseGraphSource("Início -- Revisão ✅")).toEqual({
       nodes: [

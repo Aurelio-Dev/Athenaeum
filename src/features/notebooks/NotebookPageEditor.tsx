@@ -31,6 +31,7 @@ import {
   normalizeDiagrams,
   setDiagramKind,
 } from "./notebookEditorDiagramDom";
+import { diagramScaleDefaultPercent, parseDiagramScale } from "./notebookDiagramScale";
 import {
   clearEquationPreviews,
   findClosestEquation,
@@ -208,6 +209,51 @@ function serializeNotebookEditorHtml(editor: HTMLElement) {
   clearFileAttachmentControls(clone);
 
   return clone.innerHTML;
+}
+
+function createSanitizedDiagramClipboardHtml(html: string) {
+  if (html.trim().length === 0) {
+    return null;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  const diagrams = Array.from(template.content.querySelectorAll<HTMLElement>('[data-athenaeum-block="diagram"]'));
+  if (diagrams.length === 0) {
+    return null;
+  }
+
+  const wrapper = document.createElement("div");
+  diagrams.forEach((diagram) => {
+    const kind = getDiagramKind(diagram);
+    const sourceText = getDiagramSource(diagram)?.textContent ?? "";
+    const scale = parseDiagramScale(diagram.dataset.diagramScale);
+    const pastedDiagram = document.createElement("figure");
+    const preview = document.createElement("div");
+    const source = document.createElement("figcaption");
+
+    pastedDiagram.dataset.athenaeumBlock = "diagram";
+    pastedDiagram.dataset.diagramKind = kind;
+    if (scale !== null && scale !== diagramScaleDefaultPercent) {
+      pastedDiagram.dataset.diagramScale = String(scale);
+    }
+
+    preview.dataset.diagramPreview = "true";
+    preview.contentEditable = "false";
+    source.dataset.diagramSource = "true";
+    source.spellcheck = false;
+    source.setAttribute("spellcheck", "false");
+    source.textContent = sourceText;
+    pastedDiagram.append(preview, source);
+    wrapper.append(pastedDiagram);
+  });
+
+  const trailingBlock = document.createElement("div");
+  trailingBlock.appendChild(document.createElement("br"));
+  wrapper.append(trailingBlock);
+
+  return wrapper.innerHTML;
 }
 
 function notebookEditorHasContent(editor: HTMLElement) {
@@ -1805,6 +1851,12 @@ export function NotebookPageEditor({
     }
 
     setAssetPasteError(null);
+    const diagramClipboardHtml = createSanitizedDiagramClipboardHtml(event.clipboardData.getData("text/html"));
+    if (diagramClipboardHtml) {
+      insertHtml(diagramClipboardHtml, { placeCursorInTrailingBlock: true });
+      return;
+    }
+
     const text = event.clipboardData.getData("text/plain");
 
     const editor = editorRef.current;

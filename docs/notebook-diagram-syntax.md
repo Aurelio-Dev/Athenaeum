@@ -1,6 +1,6 @@
 # Sintaxe dos Blocos de Diagrama do Notebook
 
-Ultima atualizacao: 07/07/2026 (Fase 8.4)
+Ultima atualizacao: 07/07/2026 (Fase 7.2 QA final)
 
 Os blocos `data-athenaeum-block="diagram"` guardam apenas texto na fonte
 (`data-diagram-source`). O SVG do preview e a descricao matematica sao gerados
@@ -21,6 +21,8 @@ somente em runtime e nunca sao persistidos no HTML salvo.
   `A -- B -- C` e `A -> B -- C` tambem funcionam).
 - Linhas vazias, linhas sem separador e relacoes com nos vazios sao ignoradas
   com seguranca — o restante da fonte continua valido.
+- Em `graph`, separadores malformados como `A --- B` e `A --> B` sao
+  rejeitados; eles nao criam labels residuais como `- B` ou `> B`.
 - Nos sao deduplicados por label, preservando a ordem de aparicao.
 - Arestas direcionadas repetidas sao deduplicadas por sentido (`A -> B` e
   `B -> A` sao arestas diferentes).
@@ -112,6 +114,9 @@ interno.
 - a escala e preservada ao salvar/reabrir, ao copiar/colar o bloco e ao
   trocar entre `diagram`, `graph` e `flowchart`; o Modo limpo usa exatamente
   a mesma escala do modo normal;
+- ao colar um diagrama copiado dentro do editor, o HTML do clipboard e
+  sanitizado para preservar somente `data-diagram-kind`, `data-diagram-source`
+  e `data-diagram-scale` valido; previews SVG e handles continuam runtime;
 - handles, contorno de selecao, transform e dimensoes medidas sao apenas
   runtime — nunca aparecem no HTML salvo nem em impressao;
 - o atributo legado `data-diagram-width` (fase anterior, nao lancado) e
@@ -135,6 +140,9 @@ interno.
 - Nao ha layout force-directed, edicao visual nem persistencia de SVG.
 - O redimensionamento e sempre proporcional (uniforme); nao ha resize
   horizontal/vertical independente, rotacao nem drag and drop do bloco.
+- Nao ha quebra automatica em multiplas linhas para `diagram`.
+- Nao ha pesos, multigrafos, self-loops especializados, edicao visual de nos
+  ou citacoes automaticas nesta fase.
 - Quando o conteudo natural e mais largo que o editor (cadeias longas de
   `diagram`, ciclos com descricao extensa), o bloco inteiro e reduzido
   uniformemente para caber — o layout interno nao reflui. A grade de `graph`

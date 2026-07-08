@@ -56,14 +56,15 @@ assets, anexos, equacoes, callouts ou toolbars.
 | Fase 8.2 | Concluida | Refinamento tipografico da descricao matematica do Cycle Graph. | `C`/`Cn`, `V` e `E` passaram a ter uma classe propria (`notebook-graph-cycle-math-variable`, italico serifado, peso 600) separada dos glifos (`=`, `{`, `}`) e dos valores dos conjuntos, aproximando a notacao de escrita matematica academica; o indice de `Cn` (`<sub>`) permanece ereto, seguindo a convencao tipografica de variavel italica com digito reto. Titulo do bloco passou a italico leve (peso 500) para casar com as letras de conjunto. Labels dos vertices no SVG do ciclo ficaram no peso 600 (antes 650, herdado da UI) para ler mais leve em serif sem perder legibilidade. Nenhum token novo foi criado — reuso de `--diagram-font-math`. | `npm run typecheck`, `npm test -- --run`, `npm run build` e `git diff --check`. |
 | Fase 8.3 | Concluida | Refino tipografico final do Cycle Graph. | A descricao matematica do Cycle Graph passou a usar Lora de forma mais editorial, com peso 500 em `Cn`, `V`, `E`, glifos e itens dos conjuntos. O texto descritivo (`grafo ciclo com n vertices`) deixou de ser italico; apenas as variaveis matematicas continuam em serif italico. A cor da descricao matematica foi isolada em `--diagram-math-text`, preto no modo claro e branco no modo escuro, e os labels dos vertices do ciclo tambem passaram a usar Lora com peso 500. Nenhuma logica, parser, resize, persistencia ou atributo `data-*` foi alterado. | `npm run typecheck`, `npm test -- --run`, `npm run build` e `git diff --check`. |
 | Fase 8.4 | Concluida | Refinamento cromatico academico do Cycle Graph. | A estrutura normal do Cycle Graph deixou de herdar o cobre/terracota de `--diagram-edge` e `--diagram-node-border`: arestas, contorno dos vertices, labels e descricao matematica agora usam tokens neutros especificos (`--diagram-cycle-*`) apontando para `--color-text-primary`, ficando preto/quase preto no modo claro e branco/quase branco no modo escuro. O preenchimento dos vertices segue integrado ao fundo do preview por `--diagram-cycle-vertex-fill`. A tipografia Lora do ciclo foi reduzida para peso normal (`400`) no CSS para aliviar `Cn`, `V`, `E`, conjuntos e labels. Terracota permanece reservada aos estados de interacao globais (selecao, foco, hover, resize e toolbar). `diagram`, grade de `graph`, `flowchart`, parser, resize e persistencia nao mudaram. | `npm run typecheck`, `npm test -- --run`, `npm run build` e `git diff --check`. |
+| Fase 7.2 | Concluida | QA final e encerramento funcional dos diagramas. | Revisao tecnica confirmou a separacao entre parser, analise, previews, frame escalavel e serializacao. Foram corrigidas duas falhas reais: o estado ativo do `NotebookDiagramFrame` agora e limpo ao focar fora do bloco ou quando a janela perde foco, evitando handles presos; e o paste interno de diagramas reconstrui somente blocos `data-athenaeum-block="diagram"` sanitizados, preservando `data-diagram-kind`, `data-diagram-source` e `data-diagram-scale` valido sem colar HTML arbitrario. `parseGraphSource` tambem passou a rejeitar separadores malformados como `A --- B`/`A --> B`, coberto por teste unitario. Diagram, Graph, Cycle Graph e Flowchart ficam funcionalmente concluidos para o escopo atual. | `npm run typecheck`, `npm test -- --run`, `npm run build` e `git diff --check`. |
 
-Ressalvas mantidas apos a Fase 8.4:
+Ressalvas mantidas apos a Fase 7.2:
 
 - `graph` agora tem preview SVG runtime para relacoes `A -> B` e `A -- B`;
   fontes de `graph` com `A -- B` deixaram de cair no fallback textual. Em
   `diagram` e `flowchart`, linhas `A -- B` continuam invalidas por decisao de
   escopo (parser compartilhado inalterado).
-  '- O `Modo limpo` e global do editor enquanto a pagina esta aberta; ele nao e
+- O `Modo limpo` e global do editor enquanto a pagina esta aberta; ele nao e
   persistido em `data-*`, `app_settings` ou HTML salvo.
 - No modo limpo, o titulo interno e a area `Fonte` somem visualmente, mas a
   fonte textual segue no DOM editavel e volta ao desativar o modo.
@@ -74,6 +75,9 @@ Ressalvas mantidas apos a Fase 8.4:
   50..160, % do tamanho natural); transform, dimensoes medidas, box e handles
   sao apenas runtime e nao aparecem no HTML salvo. Ausencia do atributo (ou
   100) = tamanho natural; valores invalidos sao removidos na normalizacao.
+- Copy/paste interno de diagramas preserva tipo, fonte textual e escala
+  persistida quando o clipboard contem HTML de bloco `diagram`; o paste segue
+  sanitizado e nao importa HTML arbitrario.
 - O atributo legado `data-diagram-width` (Macrofase 8) nao e mais criado;
   blocos que ainda o possuem sao migrados em `normalizeDiagrams` para uma
   escala aproximada (largura NN% vira escala NN% com clamp 50..160) e o
@@ -86,6 +90,8 @@ Ressalvas mantidas apos a Fase 8.4:
 - Cadeias em linha unica no formato `A -> B -> C` sao expandidas em relacoes
   consecutivas; em `graph`, cadeias `A -- B -- C` e mistas `A -> B -- C`
   tambem sao expandidas.
+- Separadores malformados como `A --- B` e `A --> B` sao rejeitados por
+  `parseGraphSource`, sem criar labels residuais como `- B` ou `> B`.
 - Em `graph`, ciclos simples nao direcionados (>= 3 vertices, conectado, grau
   2 em todos os vertices, |E| = |V|, sem self-loop, sem aresta direcionada)
   ganham layout circular e descricao matematica runtime (`Cn`, `V`, `E`).
@@ -106,6 +112,8 @@ Ressalvas mantidas apos a Fase 8.4:
   cruzadas.
 - O SVG continua sendo runtime; a decisao de nao persistir SVG no HTML salvo
   permanece obrigatoria.
+- Encerramento funcional: `Diagram`, `Graph`, `Cycle Graph` e `Flowchart`
+  estao concluidos para o escopo atual.
 
 ## Arquitetura Atual
 
@@ -302,6 +310,11 @@ centralizados como tokens de diagrama.
   cordas e ciclos parciais permanecem na grade.
 - O layout circular foi pensado para 3 a ~12 vertices; acima disso o circulo
   continua correto, mas labels podem ficar densos.
+- Diagram nao quebra automaticamente em multiplas linhas.
+- Nao ha edicao visual de nos, drag and drop do bloco, rotacao ou resize livre
+  por eixo.
+- Nao ha suporte especializado para pesos, multigrafos, self-loops ou citacoes
+  automaticas nesta fase.
 - Estados vazio/invalido estao mais orientativos em `diagram` do que em
   `flowchart` e `graph`.
 - Parte da legibilidade depende de `color-mix`; e bom manter validacao visual
@@ -369,33 +382,24 @@ um toggle visual temporario na toolbar contextual. O escopo seguro foi mantido:
   de nos;
 - `flowchart` passou a usar altura SVG runtime proporcional ao conteudo, com
   teto para manter o card contido;
-- `graph` passou a usar `parseDiagramSource` e layout em grade deterministica
-  para relacoes `A -> B`;
+- `graph` passou a usar `parseGraphSource`, com `A -> B` direcionado, `A -- B`
+  nao direcionado, grade deterministica para grafos fora do ciclo e layout
+  circular para ciclos simples nao direcionados;
 - o modo limpo oculta a fonte visualmente e suaviza bordas internas apenas em
   runtime;
-- o parser, o HTML persistido, o autosave, o paste, a selecao/range e a toolbar
-  contextual nao foram alterados;
+- o HTML persistido permanece leve, sem SVG runtime; o paste interno de
+  diagramas e sanitizado e preserva tipo, fonte e escala;
 - fontes de `graph` sem relacoes validas continuam no fallback textual.
 
-Proxima fase pequena sugerida:
+Encerramento da Fase 7.2: `Diagram`, `Graph`, `Cycle Graph` e `Flowchart`
+estao funcionalmente concluidos para o escopo atual.
 
-**Fase 6F - Estados consistentes e validacao visual dos diagramas**
+Observacoes para manutencao futura:
 
-Escopo recomendado:
-
-- padronizar estados vazio/invalido entre `diagram`, `flowchart` e `graph`;
-- documentar exemplos curtos para cada tipo no proprio bloco ou na ajuda futura;
-- validar visualmente `diagram`, `graph` e `flowchart` em claro/escuro;
-- manter SVG runtime fora do HTML persistido;
-- nao alterar parser, autosave, selecao/range, paste, assets ou toolbar.
-
-Validacao minima da Fase 6F:
-
-- `diagram` simples e com multiplas relacoes continua renderizando igual;
-- `graph` com 2 a 8 nos continua contido no card;
-- `flowchart` de 4 a 8 etapas continua legivel;
-- modo limpo continua ocultando apenas a fonte, sem remover preview, nos,
-  setas ou conexoes;
-- conteudo invalido continua seguro e orientativo;
-- HTML salvo continua sem SVG runtime;
-- `npm run typecheck`, `npm test -- --run` e `git diff --check` passam.
+- qualquer evolucao de parser deve preservar `parseDiagramSource` como contrato
+  compartilhado de `diagram` e `flowchart`;
+- qualquer evolucao de layout deve manter SVG runtime fora do HTML persistido;
+- novos recursos como force-directed, edicao visual, drag and drop, rotacao,
+  resize por eixo, pesos, multigrafos, self-loops especializados ou citacoes
+  automaticas devem ser tratados como fases novas, nao como continuidade deste
+  encerramento.

@@ -1,5 +1,15 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog técnico 07/07/2026 — QA final dos diagramas do Notebook:**
+> a Fase 7.2 encerrou funcionalmente `Diagram`, `Graph`, `Cycle Graph` e
+> `Flowchart` para o escopo atual. A revisão corrigiu o estado ativo dos
+> handles de resize ao sair por foco/perda de janela, preservou copy/paste
+> interno de diagramas com `data-diagram-kind`, `data-diagram-source` e
+> `data-diagram-scale` sanitizados, e rejeitou separadores malformados em
+> `graph` como `A --- B`/`A --> B`. Não houve alteração de tokens de cor,
+> paleta de tags, backend, migrations, dependências ou formato persistido além
+> da preservação já prevista de `data-diagram-scale`.
+>
 > **Changelog 07/07/2026 — Refinos da toolbar compacta do Caderno:**
 > o botão `...` foi alinhado ao canto direito da toolbar, `Vincular PDF` passou
 > a aparecer como botão com ícone e texto `PDF`, e os ícones/glifos da toolbar
