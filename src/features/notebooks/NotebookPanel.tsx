@@ -25,7 +25,10 @@ import {
   setSetting,
   unlinkDocumentFromNotebook,
   updateNotebookInfo,
+  writeNotebookExport,
   type LinkedDocument,
+  type NotebookExportWriteResult,
+  type NotebookExportWriteWarning,
   type NotebookInfo,
   type NotebookReadingStatus,
 } from "../../lib/database";
@@ -34,7 +37,7 @@ import type { LibraryCollection, LibraryDocument, NotebookPage, SubjectTag } fro
 import { DocumentPickerModal } from "../library/DocumentPickerModal";
 import { TagSelector } from "../library/TagSelector";
 import { getNotebookExportDefaultFileName } from "./notebookExportFileName";
-import { buildNotebookExportHtml, type NotebookExportBuildResult, type NotebookExportScope } from "./notebookExportHtml";
+import { buildNotebookExportHtml, type NotebookExportBuildResult, type NotebookExportScope, type NotebookExportWarning } from "./notebookExportHtml";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
   notebookDetailsCollapseBreakpoint,
@@ -164,6 +167,41 @@ function getNotebookExportErrorMessage(error: unknown) {
   }
 
   return "Não foi possível preparar a exportação.";
+}
+
+function getNotebookExportWriteErrorMessage(error: unknown) {
+  // Erros do comando Rust chegam como string via invoke.
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Não foi possível gravar o arquivo de exportação.";
+}
+
+function formatExportFileSize(bytes: number) {
+  if (bytes < 1024) {
+    return `${formatCount(bytes)} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${formatCount(Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatNotebookExportBuildWarning(warning: NotebookExportWarning) {
+  return warning.message;
+}
+
+function formatNotebookExportWriteWarning(warning: NotebookExportWriteWarning) {
+  const location = [warning.slotId, warning.pageId ? `página ${warning.pageId}` : null].filter(Boolean).join(" - ");
+
+  return location ? `${warning.message} (${location})` : warning.message;
 }
 
 function NotebookHeaderIcon() {
@@ -566,6 +604,8 @@ export function NotebookPanel({
   const [isPreparingExport, setIsPreparingExport] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [preparedExport, setPreparedExport] = useState<NotebookExportPreparation | null>(null);
+  const [isWritingExport, setIsWritingExport] = useState(false);
+  const [exportResult, setExportResult] = useState<NotebookExportWriteResult | null>(null);
   const [normalSpacingMode, setNormalSpacingMode] = useState<NotebookSpacingMode>("normal");
   const [focusSpacingMode, setFocusSpacingMode] = useState<NotebookSpacingMode>("comfortable");
   const [openedAt] = useState(() => new Date().toISOString());
@@ -918,11 +958,12 @@ export function NotebookPanel({
     setExportScope("full-notebook");
     setExportError(null);
     setPreparedExport(null);
+    setExportResult(null);
     setIsExportDialogOpen(true);
   }
 
   function closeNotebookExportDialog() {
-    if (isPreparingExport) {
+    if (isPreparingExport || isWritingExport) {
       return;
     }
 
@@ -933,6 +974,7 @@ export function NotebookPanel({
   async function prepareNotebookExport() {
     setExportError(null);
     setPreparedExport(null);
+    setExportResult(null);
     setIsPreparingExport(true);
 
     try {
@@ -982,6 +1024,30 @@ export function NotebookPanel({
       setExportError(getNotebookExportErrorMessage(error));
     } finally {
       setIsPreparingExport(false);
+    }
+  }
+
+  async function runNotebookExport() {
+    if (!preparedExport) {
+      return;
+    }
+
+    setExportError(null);
+    setIsWritingExport(true);
+
+    try {
+      const result = await writeNotebookExport({
+        destinationPath: preparedExport.destinationPath,
+        html: preparedExport.build.html,
+        manifest: preparedExport.build.manifest,
+      });
+
+      setExportResult(result);
+    } catch (error) {
+      console.warn("Nao foi possivel gravar a exportacao do caderno.", error);
+      setExportError(getNotebookExportWriteErrorMessage(error));
+    } finally {
+      setIsWritingExport(false);
     }
   }
 
@@ -1968,6 +2034,7 @@ export function NotebookPanel({
                       setExportScope("current-page");
                       setExportError(null);
                       setPreparedExport(null);
+                      setExportResult(null);
                     }}
                     className="mt-1"
                   />
@@ -1988,6 +2055,7 @@ export function NotebookPanel({
                       setExportScope("full-notebook");
                       setExportError(null);
                       setPreparedExport(null);
+                      setExportResult(null);
                     }}
                     className="mt-1"
                   />
@@ -2018,10 +2086,58 @@ export function NotebookPanel({
                     {preparedExport.build.manifest.slots.length === 1 ? "sentinela" : "sentinelas"}
                     {preparedExport.build.warnings.length > 0 ? ` - ${formatCount(preparedExport.build.warnings.length)} avisos` : ""}
                   </p>
+                  {preparedExport.build.warnings.length > 0 ? (
+                    <ul className="grid gap-1 text-xs text-text-secondary">
+                      {preparedExport.build.warnings.map((warning, index) => (
+                        <li key={`${warning.code}-${warning.pageId}-${index}`} className="break-words [overflow-wrap:anywhere]">
+                          {formatNotebookExportBuildWarning(warning)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <p className="break-words text-xs font-medium text-text-primary [overflow-wrap:anywhere] [word-break:break-word]" title={preparedExport.destinationPath}>
                     {preparedExport.destinationPath}
                   </p>
-                  <p className="text-xs text-text-secondary">O arquivo final será gerado em uma fase posterior.</p>
+                  {!exportResult ? (
+                    <p className="text-xs text-text-secondary">Clique em Exportar para gravar o arquivo HTML.</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {exportResult ? (
+                <div className="grid gap-2 rounded-lg border border-border-subtle bg-surface-card px-4 py-3">
+                  <p className="font-semibold text-status-green-text">Exportação concluída</p>
+                  <p className="text-xs text-text-secondary">
+                    {formatCount(exportResult.embeddedAssets)}{" "}
+                    {exportResult.embeddedAssets === 1 ? "imagem incorporada" : "imagens incorporadas"} -{" "}
+                    {formatCount(exportResult.embeddedAttachments)}{" "}
+                    {exportResult.embeddedAttachments === 1 ? "anexo incorporado" : "anexos incorporados"}
+                  </p>
+                  <p className="text-xs text-text-secondary">{formatExportFileSize(exportResult.bytesWritten)}</p>
+                  {exportResult.missingResources > 0 ? (
+                    <p className="text-xs text-text-secondary">
+                      {formatCount(exportResult.missingResources)}{" "}
+                      {exportResult.missingResources === 1 ? "recurso indisponível" : "recursos indisponíveis"}
+                    </p>
+                  ) : null}
+                  {exportResult.warnings.length > 0 ? (
+                    <div className="grid gap-1 text-xs text-text-secondary">
+                      <p>
+                        {formatCount(exportResult.warnings.length)}{" "}
+                        {exportResult.warnings.length === 1 ? "aviso" : "avisos"}
+                      </p>
+                      <ul className="grid gap-1">
+                        {exportResult.warnings.map((warning, index) => (
+                          <li key={`${warning.code}-${warning.slotId ?? "sem-slot"}-${index}`} className="break-words [overflow-wrap:anywhere]">
+                            {formatNotebookExportWriteWarning(warning)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <p className="break-words text-xs font-medium text-text-primary [overflow-wrap:anywhere] [word-break:break-word]" title={exportResult.path}>
+                    {exportResult.path}
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -2029,20 +2145,38 @@ export function NotebookPanel({
             <footer className="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
               <button
                 type="button"
-                disabled={isPreparingExport}
+                disabled={isPreparingExport || isWritingExport}
                 className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={closeNotebookExportDialog}
               >
-                {preparedExport ? "Fechar" : "Cancelar"}
+                {preparedExport || exportResult ? "Fechar" : "Cancelar"}
               </button>
-              <button
-                type="button"
-                disabled={isPreparingExport}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() => void prepareNotebookExport()}
-              >
-                {isPreparingExport ? "Preparando..." : preparedExport ? "Selecionar outro destino" : "Selecionar destino"}
-              </button>
+              {preparedExport && !exportResult ? (
+                <button
+                  type="button"
+                  disabled={isPreparingExport || isWritingExport}
+                  className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void prepareNotebookExport()}
+                >
+                  {isPreparingExport ? "Preparando..." : "Trocar destino"}
+                </button>
+              ) : null}
+              {!exportResult ? (
+                <button
+                  type="button"
+                  disabled={isPreparingExport || isWritingExport}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => (preparedExport ? void runNotebookExport() : void prepareNotebookExport())}
+                >
+                  {preparedExport
+                    ? isWritingExport
+                      ? "Exportando..."
+                      : "Exportar"
+                    : isPreparingExport
+                      ? "Preparando..."
+                      : "Selecionar destino"}
+                </button>
+              ) : null}
             </footer>
           </section>
         </div>

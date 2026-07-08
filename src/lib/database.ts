@@ -6,6 +6,9 @@ import { getSubjectTagTone, registerSubjectTagTone } from "../styles/designToken
 import { isHighlightColor } from "../types/annotation";
 import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
+// Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
+// da exportacao em features/notebooks; nao duplicamos o tipo aqui.
+import type { NotebookExportManifest } from "../features/notebooks/notebookExportHtml";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
@@ -1225,6 +1228,57 @@ export type NotebookExportDestinationRequest = {
 export async function selectNotebookExportDestination(request: NotebookExportDestinationRequest): Promise<string | null> {
   return invoke<string | null>("select_notebook_export_destination", {
     defaultFileName: request.defaultFileName,
+  });
+}
+
+// Escrita final da exportacao: o Rust resolve cada slot (imagem/anexo) no
+// banco, embute o base64 em streaming e grava o arquivo com temp + rename
+// (sobrescrita recuperavel via diretorio de backup exclusivo).
+// O manifest e o HTML vem do builder do frontend (notebookExportHtml.ts).
+
+// Contrato fechado com os codigos emitidos por write_notebook_export no Rust.
+// Aviso significa que um recurso individual nao pode ser embutido, mas a
+// estrutura do export esta integra: a linha do banco nao existe mais
+// (referencia orfa), o arquivo foi apagado do disco, o MIME do asset esta fora
+// da allowlist, o MIME do anexo foi normalizado para octet-stream, ou a limpeza
+// do backup de recuperacao falhou depois do HTML ja exportado. Todo o resto —
+// divergencia estrutural HTML/manifest, kind fora do contrato, id malformado e
+// propriedade (recurso de outro caderno/pagina) — e FATAL no Rust e aborta a
+// exportacao inteira, nunca chega como aviso.
+export type NotebookExportWriteWarningCode =
+  | "missing-resource"
+  | "missing-file"
+  | "invalid-asset-mime-type"
+  | "unknown-attachment-mime-type"
+  | "backup-cleanup-failed";
+
+export type NotebookExportWriteWarning = {
+  code: NotebookExportWriteWarningCode;
+  slotId: string | null;
+  pageId: number | null;
+  message: string;
+};
+
+export type NotebookExportWriteResult = {
+  path: string;
+  bytesWritten: number;
+  embeddedAssets: number;
+  embeddedAttachments: number;
+  missingResources: number;
+  warnings: NotebookExportWriteWarning[];
+};
+
+export type WriteNotebookExportRequest = {
+  destinationPath: string;
+  html: string;
+  manifest: NotebookExportManifest;
+};
+
+export async function writeNotebookExport(request: WriteNotebookExportRequest): Promise<NotebookExportWriteResult> {
+  return invoke<NotebookExportWriteResult>("write_notebook_export", {
+    destinationPath: request.destinationPath,
+    html: request.html,
+    manifest: request.manifest,
   });
 }
 
