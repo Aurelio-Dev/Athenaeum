@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createNotebookExportSlotSentinel,
   parseNotebookExportSlotSentinels,
+  renderExportStyles,
   validateNotebookExportManifestSlots,
   type NotebookExportManifest,
 } from "./notebookExportHtml";
@@ -87,5 +88,36 @@ describe("validateNotebookExportManifestSlots", () => {
     const validation = validateNotebookExportManifestSlots("<!--ATHENAEUM_SLOT:nonce-errado:slot-1-->", exportManifest);
 
     expect(validation.errors).toContain("Sentinela slot-1 usa nonce inesperado.");
+  });
+});
+
+describe("renderExportStyles", () => {
+  it("keeps exported diagrams visually clean and neutral", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain(".athenaeum-export__diagram {");
+    expect(styles).toContain("border: 0");
+    expect(styles).toContain("background: transparent");
+    expect(styles).toContain("stroke: #1f1a17");
+    expect(styles).toContain("fill: #ffffff");
+    expect(styles).not.toContain(".athenaeum-export__diagram {\n      border: 1px solid #d8cdc2");
+    expect(styles).not.toContain("stroke: #8a6042");
+    expect(styles).not.toContain("fill: #7d5336");
+  });
+
+  it("does not include KaTeX font CSS by default", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).not.toContain("@font-face{font-display:block;font-family:KaTeX");
+    expect(styles).not.toContain("data:font/woff2;base64,");
+    expect(styles).toContain(".athenaeum-export__equation-fallback");
+  });
+
+  it("includes KaTeX font CSS only when supplied by the async export flow", () => {
+    const styles = renderExportStyles({ katexStyles: '@font-face{font-family:KaTeX_Main;src:url("data:font/woff2;base64,AA==") format("woff2")}.katex{}' });
+
+    expect(styles).toContain("@font-face{font-family:KaTeX_Main");
+    expect(styles).toContain("data:font/woff2;base64,");
+    expect(styles).toContain(".katex{}");
   });
 });

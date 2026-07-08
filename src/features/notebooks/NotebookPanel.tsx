@@ -37,7 +37,7 @@ import type { LibraryCollection, LibraryDocument, NotebookPage, SubjectTag } fro
 import { DocumentPickerModal } from "../library/DocumentPickerModal";
 import { TagSelector } from "../library/TagSelector";
 import { getNotebookExportDefaultFileName } from "./notebookExportFileName";
-import { buildNotebookExportHtml, type NotebookExportBuildResult, type NotebookExportScope, type NotebookExportWarning } from "./notebookExportHtml";
+import { buildNotebookExportHtml, type NotebookExportScope, type NotebookExportWarning } from "./notebookExportHtml";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
   notebookDetailsCollapseBreakpoint,
@@ -67,10 +67,14 @@ type NotebookSaveStatus = "saved" | "dirty" | "saving" | "error";
 
 type NotebookExportPreparation = {
   notebookId: number;
+  notebookTitle: string;
   scope: NotebookExportScope;
   pageIds: number[];
   destinationPath: string;
-  build: NotebookExportBuildResult;
+  createdAt: string;
+  nonce: string;
+  manifestSlotCount: number;
+  warnings: NotebookExportWarning[];
 };
 
 const editorZoomOptions = [75, 90, 100, 110, 125, 150] as const;
@@ -1005,7 +1009,7 @@ export function NotebookPanel({
       }
 
       const exportTitle = infoDraftTitleRef.current.trim() || notebookTitle || notebookInfo?.title || "Caderno";
-      const build = buildNotebookExportHtml({
+      const build = await buildNotebookExportHtml({
         notebookId,
         notebookTitle: exportTitle,
         scope: exportScope,
@@ -1014,10 +1018,14 @@ export function NotebookPanel({
 
       setPreparedExport({
         notebookId,
+        notebookTitle: exportTitle,
         scope: exportScope,
         pageIds,
         destinationPath,
-        build,
+        createdAt: build.manifest.createdAt,
+        nonce: build.manifest.nonce,
+        manifestSlotCount: build.manifest.slots.length,
+        warnings: build.warnings,
       });
     } catch (error) {
       console.warn("Nao foi possivel preparar a exportacao do caderno.", error);
@@ -1036,10 +1044,25 @@ export function NotebookPanel({
     setIsWritingExport(true);
 
     try {
+      const persistedPages = await listNotebookPages(preparedExport.notebookId);
+      const persistedPagesById = new Map(persistedPages.map((page) => [page.id, page]));
+      const selectedPages = preparedExport.pageIds.map((pageId) => persistedPagesById.get(pageId)).filter((page): page is NotebookPage => Boolean(page));
+      if (selectedPages.length !== preparedExport.pageIds.length) {
+        throw new Error("Nao foi possivel carregar todas as paginas persistidas para exportacao.");
+      }
+
+      const build = await buildNotebookExportHtml({
+        notebookId: preparedExport.notebookId,
+        notebookTitle: preparedExport.notebookTitle,
+        scope: preparedExport.scope,
+        pages: selectedPages,
+        createdAt: new Date(preparedExport.createdAt),
+        nonce: preparedExport.nonce,
+      });
       const result = await writeNotebookExport({
         destinationPath: preparedExport.destinationPath,
-        html: preparedExport.build.html,
-        manifest: preparedExport.build.manifest,
+        html: build.html,
+        manifest: build.manifest,
       });
 
       setExportResult(result);
@@ -2082,13 +2105,13 @@ export function NotebookPanel({
                     {preparedExport.pageIds.length === 1 ? "página" : "páginas"}
                   </p>
                   <p className="text-xs text-text-secondary">
-                    Manifest: {formatCount(preparedExport.build.manifest.slots.length)}{" "}
-                    {preparedExport.build.manifest.slots.length === 1 ? "sentinela" : "sentinelas"}
-                    {preparedExport.build.warnings.length > 0 ? ` - ${formatCount(preparedExport.build.warnings.length)} avisos` : ""}
+                    Manifest: {formatCount(preparedExport.manifestSlotCount)}{" "}
+                    {preparedExport.manifestSlotCount === 1 ? "sentinela" : "sentinelas"}
+                    {preparedExport.warnings.length > 0 ? ` - ${formatCount(preparedExport.warnings.length)} avisos` : ""}
                   </p>
-                  {preparedExport.build.warnings.length > 0 ? (
+                  {preparedExport.warnings.length > 0 ? (
                     <ul className="grid gap-1 text-xs text-text-secondary">
-                      {preparedExport.build.warnings.map((warning, index) => (
+                      {preparedExport.warnings.map((warning, index) => (
                         <li key={`${warning.code}-${warning.pageId}-${index}`} className="break-words [overflow-wrap:anywhere]">
                           {formatNotebookExportBuildWarning(warning)}
                         </li>

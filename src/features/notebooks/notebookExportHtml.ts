@@ -1,4 +1,6 @@
 import type { NotebookPage } from "../../types/library";
+import type { NotebookEquationStaticRenderResult } from "./notebookExportKatex";
+import { renderNotebookDiagramStaticSvg } from "./notebookDiagramStaticSvg";
 
 export type NotebookExportScope = "current-page" | "full-notebook";
 
@@ -46,6 +48,12 @@ export type BuildNotebookExportHtmlInput = {
   createdAt?: Date;
   nonce?: string;
 };
+
+export type NotebookExportStyleOptions = {
+  katexStyles?: string;
+};
+
+type NotebookEquationStaticRenderer = (source: string) => NotebookEquationStaticRenderResult;
 
 export type NotebookExportParsedSentinel = {
   nonce: string;
@@ -331,6 +339,11 @@ type SanitizationContext = {
   pageId: number;
   slots: NotebookExportManifestSlot[];
   warnings: NotebookExportWarning[];
+  diagramOccurrence: number;
+  equationRenderer?: NotebookEquationStaticRenderer;
+  styleRequirements: {
+    hasRenderedEquation: boolean;
+  };
 };
 
 function createSlotComment(context: SanitizationContext, slot: Omit<NotebookExportManifestSlot, "slotId" | "occurrence">) {
@@ -347,6 +360,147 @@ function createSlotComment(context: SanitizationContext, slot: Omit<NotebookExpo
 function getClosestFigureCaption(element: Element) {
   const figure = element.closest("figure");
   return figure?.querySelector("figcaption")?.textContent?.trim() || undefined;
+}
+
+function readDiagramSourceNodeText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  if (node instanceof HTMLBRElement) {
+    return "\n";
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return "";
+  }
+
+  const childText = Array.from(node.childNodes).map(readDiagramSourceNodeText).join("");
+  const tagName = node.tagName.toLowerCase();
+
+  if ((tagName === "div" || tagName === "p") && childText.length > 0 && !childText.endsWith("\n")) {
+    return `${childText}\n`;
+  }
+
+  return childText;
+}
+
+function normalizeDiagramSourceText(sourceText: string) {
+  return sourceText
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function readDiagramSourceElementText(source: Element) {
+  return Array.from(source.childNodes).map(readDiagramSourceNodeText).join("");
+}
+
+function getExportDiagramSourceText(diagram: Element) {
+  const sources = Array.from(diagram.querySelectorAll(':scope > [data-diagram-source="true"]'));
+
+  if (sources.length > 0) {
+    return normalizeDiagramSourceText(sources.map(readDiagramSourceElementText).join("\n"));
+  }
+
+  const clone = diagram.cloneNode(true);
+  if (clone instanceof Element) {
+    clone.querySelectorAll('[data-diagram-preview="true"]').forEach((preview) => preview.remove());
+    return normalizeDiagramSourceText(clone.textContent ?? "");
+  }
+
+  return "";
+}
+
+function normalizeEquationSourceText(sourceText: string) {
+  return sourceText.replace(/\u00a0/g, " ").trim();
+}
+
+function getExportEquationSourceText(equation: Element) {
+  const source = equation.querySelector(':scope > [data-equation-source="true"]');
+
+  if (source) {
+    return normalizeEquationSourceText(source.textContent ?? "");
+  }
+
+  const clone = equation.cloneNode(true);
+  if (clone instanceof Element) {
+    clone.querySelectorAll('[data-equation-preview="true"]').forEach((preview) => preview.remove());
+    return normalizeEquationSourceText(clone.textContent ?? "");
+  }
+
+  return "";
+}
+
+function escapeEquationFallbackSource(value: string) {
+  return escapeHtml(value)
+    .replace(/\b(javascript|file|blob):/gi, "$1&#58;")
+    .replace(/\bon(error|click)=/gi, (match) => `${match.slice(0, -1)}&#61;`);
+}
+
+function renderUnavailableEquationFallback(source: string) {
+  const sourceHtml = source.length > 0 ? `<code class="athenaeum-export__equation-source">${escapeEquationFallbackSource(source)}</code>` : "";
+
+  return `<div class="athenaeum-export__equation-fallback" role="note">
+  <strong>Equacao nao renderizada</strong>
+  <span>A equacao nao pode ser renderizada neste export.</span>
+  ${sourceHtml}
+</div>`;
+}
+
+function sanitizeDiagramFigure(diagram: HTMLElement, context: SanitizationContext): Node[] {
+  const figure = context.targetDocument.createElement("figure");
+  copySafeAttributes(diagram, figure, context.pageId, context.warnings);
+
+  context.diagramOccurrence += 1;
+
+  const renderedDiagram = renderNotebookDiagramStaticSvg({
+    kind: diagram.getAttribute("data-diagram-kind"),
+    source: getExportDiagramSourceText(diagram),
+    scale: diagram.getAttribute("data-diagram-scale"),
+    idPrefix: `athenaeum-export-diagram-${context.pageId}-${context.diagramOccurrence}`,
+  });
+  const staticContent = context.targetDocument.createElement("div");
+  staticContent.className = "athenaeum-export__diagram-static";
+  staticContent.innerHTML = renderedDiagram.html;
+
+  figure.classList.add("athenaeum-export__diagram");
+  figure.setAttribute("data-athenaeum-block", "diagram");
+  figure.setAttribute("data-diagram-kind", renderedDiagram.kind);
+  if (renderedDiagram.scalePercent === 100) {
+    figure.removeAttribute("data-diagram-scale");
+  } else {
+    figure.setAttribute("data-diagram-scale", String(renderedDiagram.scalePercent));
+  }
+  figure.appendChild(staticContent);
+
+  return [figure];
+}
+
+function sanitizeEquationFigure(equation: HTMLElement, context: SanitizationContext): Node[] {
+  const figure = context.targetDocument.createElement("figure");
+  copySafeAttributes(equation, figure, context.pageId, context.warnings);
+
+  const source = getExportEquationSourceText(equation);
+  const renderedEquation = context.equationRenderer?.(source) ?? {
+    status: "fallback",
+    html: renderUnavailableEquationFallback(source),
+    source,
+  };
+  const staticContent = context.targetDocument.createElement("div");
+  staticContent.className = "athenaeum-export__equation-static";
+  staticContent.innerHTML = renderedEquation.html;
+
+  if (renderedEquation.status === "rendered") {
+    context.styleRequirements.hasRenderedEquation = true;
+  }
+
+  figure.classList.add("athenaeum-export__equation");
+  figure.setAttribute("data-athenaeum-block", "equation");
+  figure.appendChild(staticContent);
+
+  return [figure];
 }
 
 function sanitizeAssetImage(image: HTMLImageElement, context: SanitizationContext): Node[] {
@@ -436,6 +590,14 @@ function sanitizeNode(node: Node, context: SanitizationContext): Node[] {
     return sanitizeAttachmentFigure(node as HTMLElement, context);
   }
 
+  if (tagName === "figure" && node.getAttribute("data-athenaeum-block") === "diagram") {
+    return sanitizeDiagramFigure(node as HTMLElement, context);
+  }
+
+  if (tagName === "figure" && node.getAttribute("data-athenaeum-block") === "equation") {
+    return sanitizeEquationFigure(node as HTMLElement, context);
+  }
+
   if (!allowedElements.has(tagName)) {
     const fragment = context.targetDocument.createDocumentFragment();
     appendSanitizedChildren(node, fragment, context);
@@ -461,7 +623,9 @@ function sanitizePageContent(page: NotebookPage, context: SanitizationContext) {
   return targetContainer.innerHTML;
 }
 
-function renderExportStyles() {
+export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
+  const katexStyles = options.katexStyles?.trim();
+
   return `
     :root {
       color-scheme: light;
@@ -526,10 +690,122 @@ function renderExportStyles() {
       padding: 0.9rem;
       background: #fbf7f2;
     }
+    ${katexStyles ? `${katexStyles}\n` : ""}
+    .athenaeum-export__equation {
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+    .athenaeum-export__equation-static {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .athenaeum-export__equation-rendered .katex-display {
+      margin: 0.35rem 0;
+    }
+    .athenaeum-export__equation-fallback {
+      display: grid;
+      gap: 0.45rem;
+      color: #6b625c;
+      font-size: 0.92rem;
+    }
+    .athenaeum-export__equation-fallback strong {
+      color: #1f1a17;
+    }
+    .athenaeum-export__equation-source {
+      display: block;
+      margin-top: 0.15rem;
+      white-space: pre-wrap;
+      color: #4f4740;
+      font-family: "IBM Plex Mono", Consolas, monospace;
+      font-size: 0.82rem;
+    }
+    .athenaeum-export__diagram {
+      width: min(100%, 52rem);
+      max-width: 100%;
+      margin: 0.35rem auto;
+      padding: 0.05rem 0;
+      border: 0;
+      background: transparent;
+    }
+    .athenaeum-export__diagram-static {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .athenaeum-export__diagram-visual {
+      display: flex;
+      justify-content: center;
+      width: max-content;
+      max-width: 100%;
+      margin-inline: auto;
+    }
+    .athenaeum-export__diagram svg {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin-inline: auto;
+    }
+    .notebook-diagram-visual-edge,
+    .notebook-flowchart-visual-edge {
+      fill: none;
+      stroke: #1f1a17;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2px;
+      opacity: 0.9;
+      vector-effect: non-scaling-stroke;
+    }
+    .notebook-diagram-visual-arrowhead,
+    .notebook-flowchart-visual-arrowhead {
+      fill: #1f1a17;
+      opacity: 0.92;
+    }
+    .notebook-diagram-visual-node,
+    .notebook-flowchart-visual-node {
+      fill: #ffffff;
+      stroke: #6b625c;
+      stroke-width: 1.5px;
+      vector-effect: non-scaling-stroke;
+    }
+    .notebook-flowchart-visual-node--terminal {
+      fill: #ffffff;
+    }
+    .notebook-graph-cycle-vertex {
+      fill: #ffffff;
+      stroke: #1f1a17;
+      stroke-width: 1.5px;
+      vector-effect: non-scaling-stroke;
+    }
+    .notebook-diagram-visual-label,
+    .notebook-flowchart-visual-label {
+      fill: #1f1a17;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12.25px;
+      letter-spacing: 0;
+    }
+    .notebook-graph-cycle-vertex-label {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 11.75px;
+    }
+    .athenaeum-export__diagram-fallback {
+      display: grid;
+      gap: 0.45rem;
+      color: #6b625c;
+      font-size: 0.92rem;
+    }
+    .athenaeum-export__diagram-fallback strong {
+      color: #1f1a17;
+    }
+    .athenaeum-export__diagram-source {
+      margin: 0.25rem 0 0;
+      white-space: pre-wrap;
+      color: #4f4740;
+      font-family: "IBM Plex Mono", Consolas, monospace;
+      font-size: 0.82rem;
+    }
   `;
 }
 
-function renderExportHtmlDocument(title: string, bodyHtml: string) {
+function renderExportHtmlDocument(title: string, bodyHtml: string, styleOptions: NotebookExportStyleOptions = {}) {
   const escapedTitle = escapeHtml(title);
 
   return `<!doctype html>
@@ -539,7 +815,7 @@ function renderExportHtmlDocument(title: string, bodyHtml: string) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; object-src 'none'; base-uri 'none'; form-action 'none'; connect-src 'none'">
   <title>${escapedTitle}</title>
-  <style>${renderExportStyles()}</style>
+  <style>${renderExportStyles(styleOptions)}</style>
 </head>
 <body>
 ${bodyHtml}
@@ -547,7 +823,29 @@ ${bodyHtml}
 </html>`;
 }
 
-export function buildNotebookExportHtml(input: BuildNotebookExportHtmlInput): NotebookExportBuildResult {
+function pageMayContainEquation(page: NotebookPage) {
+  return /data-athenaeum-block\s*=\s*["']equation["']/i.test(page.content) || /data-equation-source\s*=\s*["']true["']/i.test(page.content);
+}
+
+async function loadEquationRendererIfNeeded(pages: NotebookPage[]): Promise<NotebookEquationStaticRenderer | undefined> {
+  if (!pages.some(pageMayContainEquation)) {
+    return undefined;
+  }
+
+  const { renderNotebookEquationStaticHtml } = await import("./notebookExportKatex");
+  return renderNotebookEquationStaticHtml;
+}
+
+async function loadKatexStylesIfNeeded(hasRenderedEquation: boolean) {
+  if (!hasRenderedEquation) {
+    return "";
+  }
+
+  const { resolveNotebookExportKatexStyles } = await import("./notebookExportKatex");
+  return resolveNotebookExportKatexStyles(true);
+}
+
+export async function buildNotebookExportHtml(input: BuildNotebookExportHtmlInput): Promise<NotebookExportBuildResult> {
   if (input.pages.length === 0) {
     throw new Error("Nao ha paginas para exportar.");
   }
@@ -557,6 +855,8 @@ export function buildNotebookExportHtml(input: BuildNotebookExportHtmlInput): No
   const targetDocument = document.implementation.createHTMLDocument("Athenaeum export");
   const slots: NotebookExportManifestSlot[] = [];
   const warnings: NotebookExportWarning[] = [];
+  const styleRequirements = { hasRenderedEquation: false };
+  const equationRenderer = await loadEquationRendererIfNeeded(input.pages);
   const sanitizedPages = input.pages.map((page) => {
     const pageContext: SanitizationContext = {
       targetDocument,
@@ -564,6 +864,9 @@ export function buildNotebookExportHtml(input: BuildNotebookExportHtmlInput): No
       pageId: page.id,
       slots,
       warnings,
+      diagramOccurrence: 0,
+      equationRenderer,
+      styleRequirements,
     };
 
     return {
@@ -596,7 +899,8 @@ export function buildNotebookExportHtml(input: BuildNotebookExportHtmlInput): No
     )
     .join("\n")}
 </main>`;
-  const html = renderExportHtmlDocument(input.notebookTitle, bodyHtml);
+  const katexStyles = await loadKatexStylesIfNeeded(styleRequirements.hasRenderedEquation);
+  const html = renderExportHtmlDocument(input.notebookTitle, bodyHtml, { katexStyles });
   const validation = validateNotebookExportManifestSlots(html, manifest);
 
   validation.errors.forEach((message) => {
