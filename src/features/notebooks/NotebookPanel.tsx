@@ -34,6 +34,7 @@ import type { LibraryCollection, LibraryDocument, NotebookPage, SubjectTag } fro
 import { DocumentPickerModal } from "../library/DocumentPickerModal";
 import { TagSelector } from "../library/TagSelector";
 import { getNotebookExportDefaultFileName } from "./notebookExportFileName";
+import { buildNotebookExportHtml, type NotebookExportBuildResult, type NotebookExportScope } from "./notebookExportHtml";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
   notebookDetailsCollapseBreakpoint,
@@ -61,13 +62,12 @@ type EditorStats = {
 
 type NotebookSaveStatus = "saved" | "dirty" | "saving" | "error";
 
-type NotebookExportScope = "current-page" | "full-notebook";
-
 type NotebookExportPreparation = {
   notebookId: number;
   scope: NotebookExportScope;
   pageIds: number[];
   destinationPath: string;
+  build: NotebookExportBuildResult;
 };
 
 const editorZoomOptions = [75, 90, 100, 110, 125, 150] as const;
@@ -943,9 +943,17 @@ export function NotebookPanel({
 
       await saveActivePage();
 
-      const pageIds = exportScope === "current-page" ? (activePageIdRef.current === null ? [] : [activePageIdRef.current]) : pages.map((page) => page.id);
+      const persistedPages = await listNotebookPages(notebookId);
+      const pageIds =
+        exportScope === "current-page" ? (activePageIdRef.current === null ? [] : [activePageIdRef.current]) : persistedPages.map((page) => page.id);
       if (pageIds.length === 0) {
         throw new Error("Não há páginas para exportar.");
+      }
+
+      const persistedPagesById = new Map(persistedPages.map((page) => [page.id, page]));
+      const selectedPages = pageIds.map((pageId) => persistedPagesById.get(pageId)).filter((page): page is NotebookPage => Boolean(page));
+      if (selectedPages.length !== pageIds.length) {
+        throw new Error("Não foi possível carregar todas as páginas persistidas para exportação.");
       }
 
       const defaultFileName = getNotebookExportDefaultFileName(infoDraftTitleRef.current || notebookTitle || notebookInfo?.title || "Caderno");
@@ -954,11 +962,20 @@ export function NotebookPanel({
         return;
       }
 
+      const exportTitle = infoDraftTitleRef.current.trim() || notebookTitle || notebookInfo?.title || "Caderno";
+      const build = buildNotebookExportHtml({
+        notebookId,
+        notebookTitle: exportTitle,
+        scope: exportScope,
+        pages: selectedPages,
+      });
+
       setPreparedExport({
         notebookId,
         scope: exportScope,
         pageIds,
         destinationPath,
+        build,
       });
     } catch (error) {
       console.warn("Nao foi possivel preparar a exportacao do caderno.", error);
@@ -1995,6 +2012,11 @@ export function NotebookPanel({
                   <p className="text-xs text-text-secondary">
                     {exportPreparedScopeLabel} - {formatCount(preparedExport.pageIds.length)}{" "}
                     {preparedExport.pageIds.length === 1 ? "página" : "páginas"}
+                  </p>
+                  <p className="text-xs text-text-secondary">
+                    Manifest: {formatCount(preparedExport.build.manifest.slots.length)}{" "}
+                    {preparedExport.build.manifest.slots.length === 1 ? "sentinela" : "sentinelas"}
+                    {preparedExport.build.warnings.length > 0 ? ` - ${formatCount(preparedExport.build.warnings.length)} avisos` : ""}
                   </p>
                   <p className="break-words text-xs font-medium text-text-primary [overflow-wrap:anywhere] [word-break:break-word]" title={preparedExport.destinationPath}>
                     {preparedExport.destinationPath}
