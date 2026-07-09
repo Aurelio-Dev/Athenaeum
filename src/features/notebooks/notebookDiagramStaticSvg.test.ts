@@ -72,3 +72,139 @@ describe("renderNotebookDiagramStaticSvg", () => {
     expect(result.html).not.toContain("<b>");
   });
 });
+
+describe("renderNotebookDiagramStaticSvg (detalhes do grafo)", () => {
+  it("exports the SVG together with the graph details for a valid cycle graph", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+    });
+
+    expect(result.status).toBe("rendered");
+    expect(result.hasGraphDetails).toBe(true);
+    expect(result.html).toContain("<svg");
+    expect(result.html).toContain('class="athenaeum-export__graph-layout"');
+    expect(result.html).toContain('class="athenaeum-export__graph-details"');
+    // Identificação, V e E.
+    expect(result.html).toContain("<sub>3</sub>");
+    expect(result.html).toContain("grafo ciclo com 3 vértices");
+    expect(result.html).toContain("{A, B}");
+    expect(result.html).toContain("{C, A}");
+  });
+
+  it("keeps the details outside of the SVG element", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+    });
+
+    const svgClose = result.html.indexOf("</svg>");
+    const detailsStart = result.html.indexOf("athenaeum-export__graph-details");
+    expect(svgClose).toBeGreaterThan(-1);
+    expect(detailsStart).toBeGreaterThan(svgClose);
+    // O SVG em si não contém o bloco textual de detalhes.
+    const svgMarkup = result.html.slice(result.html.indexOf("<svg"), svgClose);
+    expect(svgMarkup).not.toContain("athenaeum-export__graph-details");
+  });
+
+  it("shows the details only once (no duplication)", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+    });
+
+    expect(result.html.match(/athenaeum-export__graph-details/g)).toHaveLength(1);
+    expect(result.html.match(/grafo ciclo com 3 vértices/g)).toHaveLength(1);
+  });
+
+  it("shows V and E without an identification line for a directed graph", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -> B\nB -> C",
+    });
+
+    expect(result.status).toBe("rendered");
+    expect(result.hasGraphDetails).toBe(true);
+    expect(result.html).toContain('class="athenaeum-export__graph-details"');
+    expect(result.html).not.toContain("athenaeum-export__graph-identification");
+    expect(result.html).toContain("(A, B)");
+  });
+
+  it("does not leak the raw diagram source syntax into the exported graph", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -> B\nB -> C",
+    });
+
+    expect(result.html).not.toContain(" -> ");
+    expect(result.html).not.toContain(" -- ");
+  });
+
+  it("keeps the persisted scale on the block while rendering the SVG at natural size", () => {
+    const resized = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+      scale: "140",
+    });
+    const natural = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+    });
+
+    // A escala persistida é preservada para o bloco, mas o SVG não recebe
+    // transform: scale() nem largura ampliada (sizing igual ao natural).
+    expect(resized.scalePercent).toBe(140);
+    expect(resized.html).not.toContain("transform: scale(");
+    const resizedWidth = resized.html.match(/<svg[^>]*\swidth="([\d.]+)"/)?.[1];
+    const naturalWidth = natural.html.match(/<svg[^>]*\swidth="([\d.]+)"/)?.[1];
+    expect(resizedWidth).toBe(naturalWidth);
+  });
+
+  it("keeps working for a legacy graph without a scale attribute", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+    });
+
+    expect(result.scalePercent).toBe(100);
+    expect(result.hasGraphDetails).toBe(true);
+    expect(result.html).toContain("<svg");
+  });
+
+  it("preserves the current fallback for an invalid or empty graph (no details)", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "somente texto",
+    });
+
+    expect(result.status).toBe("fallback");
+    expect(result.hasGraphDetails).toBe(false);
+    expect(result.html).not.toContain("athenaeum-export__graph-details");
+    expect(result.html).not.toContain("<svg");
+  });
+
+  it("does not add graph details to non-graph diagrams", () => {
+    const diagram = renderNotebookDiagramStaticSvg({ kind: "diagram", source: "A -> B" });
+    const flowchart = renderNotebookDiagramStaticSvg({
+      kind: "flowchart",
+      source: "Início -> Fim",
+    });
+
+    expect(diagram.hasGraphDetails).toBe(false);
+    expect(diagram.html).not.toContain("athenaeum-export__graph-details");
+    expect(flowchart.hasGraphDetails).toBe(false);
+    expect(flowchart.html).not.toContain("athenaeum-export__graph-details");
+  });
+
+  it("does not emit runtime controls, contenteditable or scale transforms", () => {
+    const result = renderNotebookDiagramStaticSvg({
+      kind: "graph",
+      source: "A -- B\nB -- C\nC -- A",
+    });
+
+    expect(result.html).not.toContain("contenteditable");
+    expect(result.html).not.toContain("notebook-diagram-resize-handle");
+    expect(result.html).not.toContain("notebook-diagram-frame");
+    expect(result.html).not.toContain("transform: scale(");
+  });
+});

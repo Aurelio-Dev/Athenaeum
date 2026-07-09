@@ -214,6 +214,33 @@ describe("folha branca do export (item 2)", () => {
   });
 });
 
+describe("layout de grafo com detalhes no export CSS", () => {
+  it("posiciona desenho e detalhes de forma responsiva com flex e quebra", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain(".athenaeum-export__graph-layout");
+    expect(styles).toContain("flex-wrap: wrap");
+    expect(styles).toContain(".athenaeum-export__graph-details");
+    expect(styles).toContain(".athenaeum-export__graph-item");
+    expect(styles).toContain("overflow-wrap: anywhere");
+  });
+
+  it("mantem o SVG do grafo responsivo e sem transform de escala", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toMatch(/\.athenaeum-export__graph-visual svg \{[^}]*max-width: 100%/);
+    expect(styles).toMatch(/\.athenaeum-export__graph-visual svg \{[^}]*height: auto/);
+    expect(styles).not.toContain("transform: scale(");
+  });
+
+  it("no modo impressao permite quebra do grafo grande mas mantem o desenho inteiro", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toMatch(/@media print \{[\s\S]*\.athenaeum-export__graph \{[\s\S]*break-inside: auto/);
+    expect(styles).toMatch(/@media print \{[\s\S]*\.athenaeum-export__graph-visual \{[\s\S]*break-inside: avoid/);
+  });
+});
+
 describe("dimensoes independentes de imagem no export CSS (item 7)", () => {
   it("aplica largura em px e altura via aspect-ratio, sem transform", () => {
     const styles = renderExportStyles();

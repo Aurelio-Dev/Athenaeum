@@ -3,6 +3,7 @@ import { type CSSProperties, useId, useMemo } from "react";
 import { NotebookDiagramFrame, useDiagramFrameWidth } from "./NotebookDiagramFrame";
 import type { ParsedGraph } from "./notebookDiagramParser";
 import { detectSimpleCycle, type SimpleCycle } from "./notebookGraphAnalysis";
+import { buildCycleEdgeItems, buildCycleVertexItems, describeCycle } from "./notebookGraphDetails";
 
 type NotebookGraphPreviewProps = {
   graph: ParsedGraph;
@@ -144,32 +145,9 @@ function getCycleLabelHorizontalExtent(labelX: number, labelWidth: number, ancho
   return [labelX - labelWidth / 2, labelX + labelWidth / 2] as const;
 }
 
-type CycleMathVertex = {
-  id: string;
-  label: string;
-};
-
-type CycleMathItem = {
-  key: string;
-  content: string;
-};
-
-// V e E da descrição matemática usam o label original (não truncado) — o
-// truncamento em CycleGraphPreview é só para o desenho SVG, nunca para
-// identificação de vértice.
-function buildCycleVertexItems(vertices: CycleMathVertex[]): CycleMathItem[] {
-  return vertices.map((vertex) => ({ key: vertex.id, content: vertex.label }));
-}
-
-function buildCycleEdgeItems(vertices: CycleMathVertex[]): CycleMathItem[] {
-  return vertices.map((vertex, index) => {
-    const nextVertex = vertices[(index + 1) % vertices.length];
-    return {
-      key: `${vertex.id}-${nextVertex.id}`,
-      content: `{${vertex.label}, ${nextVertex.label}}`,
-    };
-  });
-}
+// V e E da descrição matemática usam o label original (não truncado) via
+// buildCycleVertexItems/buildCycleEdgeItems (notebookGraphDetails), a mesma
+// fonte de verdade reutilizada pela exportação HTML.
 
 // Layout circular determinístico para ciclos simples: primeiro vértice no
 // topo, percurso em sentido horário e labels radiais fora do círculo.
@@ -232,52 +210,58 @@ function CycleGraphPreview({ graph, cycle }: CycleGraphPreviewProps) {
   const accessibleTitle = `Grafo ciclo com ${vertexCount} vértices e ${vertexCount} arestas`;
 
   return (
-    <div className="notebook-graph-visual-host" aria-label={accessibleTitle}>
+    <div className="notebook-graph-cycle-shell">
       <div className="notebook-graph-cycle-layout">
-        <svg
-          role="img"
-          viewBox={viewBox}
-          className="notebook-graph-visual notebook-graph-visual--cycle"
-          style={visualStyle}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <title>{accessibleTitle}</title>
-          <g>
-            {edgeEndpoints.map((edge) => (
-              <line
-                key={edge.id}
-                className="notebook-diagram-visual-edge"
-                x1={edge.x1}
-                y1={edge.y1}
-                x2={edge.x2}
-                y2={edge.y2}
-              />
-            ))}
-          </g>
-          <g>
-            {vertices.map((vertex) => (
-              <g key={vertex.id}>
-                <title>{vertex.label}</title>
-                <circle className="notebook-graph-cycle-vertex" cx={vertex.x} cy={vertex.y} r={cycleVertexRadius} />
-                <text
-                  className="notebook-diagram-visual-label notebook-graph-cycle-vertex-label"
-                  x={vertex.labelX}
-                  y={vertex.labelY}
-                  dominantBaseline="middle"
-                  textAnchor={vertex.anchor}
-                >
-                  {vertex.displayLabel}
-                </text>
-              </g>
-            ))}
-          </g>
-        </svg>
+        <div className="notebook-graph-cycle-visual-region">
+          <NotebookDiagramFrame>
+            <div className="notebook-graph-visual-host" aria-label={accessibleTitle}>
+              <svg
+                role="img"
+                viewBox={viewBox}
+                className="notebook-graph-visual notebook-graph-visual--cycle"
+                style={visualStyle}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <title>{accessibleTitle}</title>
+                <g>
+                  {edgeEndpoints.map((edge) => (
+                    <line
+                      key={edge.id}
+                      className="notebook-diagram-visual-edge"
+                      x1={edge.x1}
+                      y1={edge.y1}
+                      x2={edge.x2}
+                      y2={edge.y2}
+                    />
+                  ))}
+                </g>
+                <g>
+                  {vertices.map((vertex) => (
+                    <g key={vertex.id}>
+                      <title>{vertex.label}</title>
+                      <circle className="notebook-graph-cycle-vertex" cx={vertex.x} cy={vertex.y} r={cycleVertexRadius} />
+                      <text
+                        className="notebook-diagram-visual-label notebook-graph-cycle-vertex-label"
+                        x={vertex.labelX}
+                        y={vertex.labelY}
+                        dominantBaseline="middle"
+                        textAnchor={vertex.anchor}
+                      >
+                        {vertex.displayLabel}
+                      </text>
+                    </g>
+                  ))}
+                </g>
+              </svg>
+            </div>
+          </NotebookDiagramFrame>
+        </div>
         <div className="notebook-graph-cycle-math">
           <p className="notebook-graph-cycle-math-title">
             <span className="notebook-graph-cycle-math-variable">
               C<sub>{vertexCount}</sub>
             </span>
-            : grafo ciclo com {vertexCount} vértices
+            : {describeCycle(vertexCount)}
           </p>
           <p className="notebook-graph-cycle-math-set">
             <span className="notebook-graph-cycle-math-variable">V</span>
@@ -441,12 +425,21 @@ function GridGraphPreview({ graph }: NotebookGraphPreviewProps) {
   );
 }
 
+// O cycle graph monta o próprio NotebookDiagramFrame internamente, envolvendo
+// só o SVG: a identificação/V/E precisam ficar fora do transform: scale() da
+// escala persistida, para não perder legibilidade junto com o desenho.
+// Grafos sem ciclo detectado não têm detalhes textuais, então continuam
+// inteiramente dentro do frame, como antes.
 export function NotebookGraphPreview({ graph }: NotebookGraphPreviewProps) {
   const cycle = useMemo(() => detectSimpleCycle(graph), [graph]);
 
+  if (cycle) {
+    return <CycleGraphPreview graph={graph} cycle={cycle} />;
+  }
+
   return (
     <NotebookDiagramFrame>
-      {cycle ? <CycleGraphPreview graph={graph} cycle={cycle} /> : <GridGraphPreview graph={graph} />}
+      <GridGraphPreview graph={graph} />
     </NotebookDiagramFrame>
   );
 }

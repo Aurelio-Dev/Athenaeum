@@ -182,7 +182,13 @@
   --diagram-cycle-vertex-fill: var(--diagram-node-bg);
   --diagram-cycle-vertex-label: var(--diagram-cycle-ink);
   --diagram-cycle-math-text: var(--diagram-cycle-ink);
-  --diagram-math-font-size: 0.88em;
+  /* Único consumidor: .notebook-graph-cycle-math. Agora que esse bloco fica
+     fora do transform: scale() do frame, este valor É o tamanho visual final
+     (não mais multiplicado pela escala persistida). Em em, relativo à base do
+     editor (.notebook-editor usa text-sm do Tailwind, 14px): 0.95em ≈ 13.3px
+     para a identificação, e o conjunto V/E (0.98em aninhado) fica ≈ 13px —
+     dentro da faixa legível de 13-15px, sem introduzir um valor px avulso. */
+  --diagram-math-font-size: 0.95em;
   --diagram-card-bg: color-mix(in srgb, var(--diagram-accent) 3%, var(--color-surface-card));
   --diagram-card-border: color-mix(in srgb, var(--diagram-accent) 16%, var(--color-border-subtle));
   --diagram-card-highlight: color-mix(in srgb, var(--color-surface-card) 72%, transparent);
@@ -195,8 +201,15 @@
   --diagram-preview-padding: 0.62em 0.7em;
   --diagram-preview-gap: 0.25em;
   --diagram-node-bg: color-mix(in srgb, var(--color-surface-card) 93%, var(--color-surface-muted));
-  --diagram-node-terminal-bg: color-mix(in srgb, var(--diagram-accent) 8%, var(--color-surface-card));
+  /* Sem realce de marca: nos terminais de fluxograma usam o mesmo fundo dos
+     nos comuns (alinhado ao export, onde ambos ja sao identicos). */
+  --diagram-node-terminal-bg: var(--diagram-node-bg);
   --diagram-node-border: color-mix(in srgb, var(--diagram-accent) 30%, var(--color-border-subtle));
+  /* Contorno do NO desenhado no SVG (diagram/grafo-nao-ciclo/fluxograma):
+     cinza escuro neutro, igual a linguagem sobria dos cycle graphs — distinto
+     de --diagram-node-border, que continua servindo outros usos de UI (ex.:
+     alca de redimensionar imagem) e nao deve mudar de cor aqui. */
+  --diagram-node-stroke-color: var(--color-text-secondary);
   --diagram-node-text: var(--color-text-primary);
   --diagram-node-muted-text: color-mix(in srgb, var(--diagram-accent) 72%, var(--color-text-secondary));
   --diagram-node-radius: 8px;
@@ -206,8 +219,10 @@
   --diagram-visual-height: 5.5rem;
   --diagram-graph-visual-height: 14rem;
   --diagram-flowchart-visual-height: min(24rem, 48vh);
-  --diagram-edge: color-mix(in srgb, var(--diagram-accent) 82%, var(--color-text-secondary));
-  --diagram-edge-active: var(--diagram-accent);
+  /* Aresta e seta de diagram/grafo-nao-ciclo/fluxograma: mesma tinta neutra
+     (--diagram-cycle-ink) ja usada pelos cycle graphs, sem realce de marca. */
+  --diagram-edge: var(--diagram-cycle-ink);
+  --diagram-edge-active: var(--diagram-cycle-ink);
   --diagram-edge-width: 2px;
   --diagram-edge-opacity: 0.9;
   --diagram-arrow: var(--diagram-edge-active);
@@ -447,6 +462,18 @@ select {
   padding-left: 0.75em;
   margin: 0.5em 0;
   color: var(--color-text-secondary);
+}
+
+/* O preflight do Tailwind nao define border-color proprio para <hr> (so
+   border-top-width); sem esta regra o separador inserido via
+   insertHorizontalRule herda o cinza generico de fallback do Tailwind, que nao
+   e um token do projeto nem se adapta ao tema escuro. Usa o mesmo tom discreto
+   das demais bordas do app (igual ao separador ja usado no export). */
+.notebook-editor hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.65) 0;
 }
 
 .notebook-editor [data-athenaeum-block="table"] {
@@ -703,6 +730,12 @@ select {
 .notebook-editor [data-diagram-preview="true"] {
   display: flex;
   min-height: var(--diagram-preview-min-height);
+  /* Este bloco é item de grid de [data-athenaeum-block="diagram"]; sem
+     min-width:0 seu min-width:auto (padrão de item flex/grid) herdaria o
+     tamanho natural (max-content) do conteúdo escalável lá dentro como piso,
+     e o bloco vazaria pela lateral em vez de encolher com o editor. */
+  min-width: 0;
+  max-width: 100%;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -779,11 +812,13 @@ select {
   position: relative;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
 }
 
 .notebook-editor .notebook-diagram-frame-box {
   position: relative;
   max-width: 100%;
+  min-width: 0;
   margin-inline: auto;
 }
 
@@ -894,7 +929,7 @@ select {
 .notebook-editor .notebook-diagram-visual-node {
   vector-effect: non-scaling-stroke;
   fill: var(--diagram-node-bg);
-  stroke: var(--diagram-node-border);
+  stroke: var(--diagram-node-stroke-color);
   stroke-width: var(--diagram-node-stroke-width);
   rx: var(--diagram-node-radius);
 }
@@ -907,6 +942,19 @@ select {
   font-weight: 650;
 }
 
+/* Contêiner do cycle graph com detalhes: fica FORA do NotebookDiagramFrame
+   (logo, fora do transform: scale() da escala persistida), com largura real
+   (100% do preview, nunca max-content) — por isso pode ser o próprio contexto
+   de container query que decide lado a lado vs. empilhado, com a tipografia
+   de identificação/V/E sempre no tamanho estável definido em CSS. */
+.notebook-editor .notebook-graph-cycle-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: notebook-graph-cycle-shell;
+}
+
 .notebook-editor .notebook-graph-cycle-layout {
   display: flex;
   width: 100%;
@@ -916,10 +964,41 @@ select {
   gap: 0.5em 1.4em;
 }
 
-.notebook-editor .notebook-graph-cycle-layout .notebook-graph-visual--cycle {
-  width: auto;
+/* Região visual do cycle graph: item de flex com BASE definida (14rem), que
+   reserva no fluxo a largura real do desenho. O NotebookDiagramFrame lá dentro
+   volta a ser width:100% desta região (seu contrato normal, como no grafo em
+   grade), então a caixa escalada nunca ultrapassa a região — sem overflow do
+   SVG sobre o texto. Espelha o export, onde o visual é flex 0 1 e os detalhes
+   flex 1 1. flex-grow 0 mantém a coluna do desenho justa (sem espaço morto);
+   shrink 1 permite comprimir até o limiar do container query empilhar. */
+.notebook-editor .notebook-graph-cycle-visual-region {
+  flex: 0 1 14rem;
+  min-width: 0;
   max-width: 100%;
-  flex: 0 1 auto;
+}
+
+/* Limiar de empilhamento: soma das bases confortáveis lado a lado — 14rem do
+   desenho + 13rem do texto (flex-basis de .notebook-graph-cycle-math) + o gap
+   de 1.4em (~1.25rem) ≈ 28.25rem. Empilha em <= 30rem para dar folga: o par
+   passa a coluna ANTES de o texto começar a comprimir de forma ilegível. A
+   consulta observa a largura real do shell externo (fora do transform da
+   escala), então reage no mesmo instante ao Modo limpo, ao redimensionamento
+   da janela e à abertura/fechamento dos painéis. */
+@container notebook-graph-cycle-shell (max-width: 30rem) {
+  .notebook-editor .notebook-graph-cycle-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notebook-editor .notebook-graph-cycle-visual-region {
+    flex-basis: auto;
+    max-width: 100%;
+  }
+
+  .notebook-editor .notebook-graph-cycle-math {
+    max-width: 100%;
+    flex-basis: auto;
+  }
 }
 
 .notebook-editor .notebook-graph-cycle-vertex {
@@ -1029,7 +1108,7 @@ select {
 .notebook-editor .notebook-flowchart-visual-node {
   vector-effect: non-scaling-stroke;
   fill: var(--diagram-node-bg);
-  stroke: var(--diagram-node-border);
+  stroke: var(--diagram-node-stroke-color);
   stroke-width: var(--diagram-node-stroke-width);
   rx: var(--diagram-node-radius);
 }
@@ -1050,6 +1129,10 @@ select {
 .notebook-editor [data-diagram-source="true"] {
   display: block;
   min-height: 3em;
+  /* Também é item de grid de [data-athenaeum-block="diagram"]; mesmo piso de
+     min-width:auto do item vizinho de preview, então o mesmo tratamento. */
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--diagram-source-border);
   border-radius: 5px 5px 7px 7px;
   background: var(--diagram-source-bg);

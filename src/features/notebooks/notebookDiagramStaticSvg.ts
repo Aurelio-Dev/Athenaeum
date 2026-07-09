@@ -1,6 +1,7 @@
 import { parseDiagramSource, parseGraphSource, type ParsedDiagram, type ParsedGraph } from "./notebookDiagramParser";
 import { diagramScaleDefaultPercent, parseDiagramScale } from "./notebookDiagramScale";
 import { detectSimpleCycle, type SimpleCycle } from "./notebookGraphAnalysis";
+import { buildGraphDetailsModel, renderGraphDetailsHtml } from "./notebookGraphDetails";
 import { diagramKindLabels, isDiagramKind, type DiagramKind } from "./notebookEditorUtils";
 
 export type NotebookDiagramStaticSvgRenderStatus = "rendered" | "fallback";
@@ -11,6 +12,10 @@ export type NotebookDiagramStaticSvgRenderResult = {
   html: string;
   source: string;
   scalePercent: number;
+  // Verdadeiro quando o HTML traz o bloco textual de detalhes do grafo
+  // (identificação, V e E) ao lado do SVG. Usado pela exportação para marcar a
+  // figura com a classe do layout de grafo.
+  hasGraphDetails: boolean;
 };
 
 export type RenderNotebookDiagramStaticSvgInput = {
@@ -657,6 +662,19 @@ function wrapRenderedSvg(kind: DiagramKind, svg: string) {
 </div>`;
 }
 
+// Grafo com detalhes: desenho e conjuntos (identificação, V e E) como irmãos
+// dentro de um layout flexível. O texto fica fora do SVG (selecionável,
+// pesquisável e copiável) e o CSS de exportação os coloca lado a lado quando há
+// espaço, empilhando quando não há.
+function wrapGraphWithDetails(svg: string, detailsHtml: string) {
+  return `<div class="athenaeum-export__graph-layout">
+  <div class="athenaeum-export__graph-visual">
+  ${svg}
+</div>
+  ${detailsHtml}
+</div>`;
+}
+
 export function renderNotebookDiagramStaticSvg(
   input: RenderNotebookDiagramStaticSvgInput,
 ): NotebookDiagramStaticSvgRenderResult {
@@ -676,15 +694,27 @@ export function renderNotebookDiagramStaticSvg(
         html: renderFallbackHtml(kind, source),
         source,
         scalePercent,
+        hasGraphDetails: false,
       };
     }
+
+    // O SVG do grafo é gerado em tamanho natural (escala 100): a escala
+    // persistida controla a figura inteira via largura no HTML exportado, sem
+    // transform: scale() e sem overflow. Assim o desenho ocupa a coluna
+    // disponível e os detalhes permanecem legíveis.
+    const svg = renderGraphSvg(graph, idBase, diagramScaleDefaultPercent);
+    const detailsModel = buildGraphDetailsModel(graph);
+    const html = detailsModel
+      ? wrapGraphWithDetails(svg, renderGraphDetailsHtml(detailsModel))
+      : wrapRenderedSvg(kind, svg);
 
     return {
       kind,
       status: "rendered",
-      html: wrapRenderedSvg(kind, renderGraphSvg(graph, idBase, scalePercent)),
+      html,
       source,
       scalePercent,
+      hasGraphDetails: detailsModel !== null,
     };
   }
 
@@ -697,6 +727,7 @@ export function renderNotebookDiagramStaticSvg(
       html: renderFallbackHtml(kind, source),
       source,
       scalePercent,
+      hasGraphDetails: false,
     };
   }
 
@@ -711,5 +742,6 @@ export function renderNotebookDiagramStaticSvg(
     ),
     source,
     scalePercent,
+    hasGraphDetails: false,
   };
 }

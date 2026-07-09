@@ -567,6 +567,12 @@ function sanitizeDiagramFigure(diagram: HTMLElement, context: SanitizationContex
   staticContent.innerHTML = renderedDiagram.html;
 
   figure.classList.add("athenaeum-export__diagram");
+  // Grafos com detalhes ganham uma classe extra que ativa o layout desenho +
+  // conjuntos (V e E) e as regras de impressão específicas, sem alterar os
+  // demais tipos de diagrama.
+  if (renderedDiagram.hasGraphDetails) {
+    figure.classList.add("athenaeum-export__graph");
+  }
   figure.setAttribute("data-athenaeum-block", "diagram");
   figure.setAttribute("data-diagram-kind", renderedDiagram.kind);
   applyExportScaleFromPercent(figure, "data-diagram-scale", renderedDiagram.scalePercent);
@@ -1261,6 +1267,65 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
       font-family: var(--ax-mono);
       font-size: 0.82rem;
     }
+    /* Grafo com detalhes: desenho e conjuntos (identificacao, V e E) lado a lado
+       em telas largas; com flex-wrap eles empilham naturalmente quando nao ha
+       espaco (tela estreita, bloco reduzido ou impressao), sem depender de
+       JavaScript nem da largura do editor. O tamanho persistido controla a
+       figura inteira; o SVG ocupa sua area com max-width:100% e sem overflow. */
+    .athenaeum-export__graph-layout {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem 1.75rem;
+    }
+    .athenaeum-export__graph-visual {
+      display: flex;
+      justify-content: center;
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .athenaeum-export__graph-visual svg {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin-inline: auto;
+    }
+    .athenaeum-export__graph-details {
+      flex: 1 1 14rem;
+      min-width: 0;
+      max-width: min(100%, 26rem);
+      color: var(--ax-ink);
+      font-family: var(--ax-serif);
+      font-size: 0.98rem;
+      line-height: 1.6;
+    }
+    .athenaeum-export__graph-details p {
+      margin: 0 0 0.35em;
+      overflow-wrap: anywhere;
+    }
+    .athenaeum-export__graph-details p:last-child {
+      margin-bottom: 0;
+    }
+    /* Letras C, V e E: variaveis matematicas em italico com destaque discreto. */
+    .athenaeum-export__graph-variable {
+      font-style: italic;
+      color: var(--ax-accent);
+    }
+    .athenaeum-export__graph-variable sub {
+      font-style: normal;
+    }
+    .athenaeum-export__graph-set {
+      font-family: var(--ax-mono);
+      font-size: 0.92rem;
+    }
+    .athenaeum-export__graph-set-glyph {
+      color: var(--ax-ink-muted);
+    }
+    .athenaeum-export__graph-item {
+      overflow-wrap: anywhere;
+    }
     @media print {
       body {
         background: #ffffff;
@@ -1284,6 +1349,22 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
       .athenaeum-export__figure {
         break-inside: avoid;
         page-break-inside: avoid;
+      }
+      /* Grafo grande pode ser maior que uma pagina: permite a quebra da figura
+         (evita pagina vazia/overflow), mas mantem o desenho inteiro e a
+         identificacao junto do conteudo que a segue. A especificidade extra
+         sobrepoe o break-inside: avoid herdado de ".athenaeum-export figure". */
+      .athenaeum-export figure.athenaeum-export__graph {
+        break-inside: auto;
+        page-break-inside: auto;
+      }
+      .athenaeum-export__graph-visual {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .athenaeum-export__graph-identification {
+        break-after: avoid;
+        page-break-after: avoid;
       }
       .athenaeum-export pre {
         white-space: pre-wrap;
