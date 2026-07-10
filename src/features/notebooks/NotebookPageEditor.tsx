@@ -41,9 +41,12 @@ import {
 } from "./notebookDiagramScale";
 import { applyFigureDimensions, parseFigureDimensions } from "./notebookFigureDimensions";
 import {
+  clearEquationRuntimeClasses,
   clearEquationPreviews,
   findClosestEquation,
   getEquationSource,
+  notebookEquationActiveClassName,
+  notebookEquationCleanModeClassName,
   normalizeEquations,
 } from "./notebookEditorEquationDom";
 import {
@@ -59,6 +62,7 @@ import {
   AlignRightIcon,
   AttachmentIcon,
   CalloutIcon,
+  ChevronDownIcon,
   CitationIcon,
   EquationIcon,
   FigureIcon,
@@ -128,6 +132,7 @@ type ActiveCalloutControls = {
 type ActiveEquationControls = {
   top: number;
   left: number;
+  isCleanMode: boolean;
 };
 
 type ActiveDiagramControls = {
@@ -137,7 +142,16 @@ type ActiveDiagramControls = {
 };
 
 export type NotebookSpacingMode = "compact" | "normal" | "comfortable" | "wide";
+type NotebookToolbarVariant = "default" | "focus";
+type TextStyleCommand = "paragraph" | "h1" | "h2" | "h3";
 type AlignmentCommand = "justifyLeft" | "justifyCenter" | "justifyRight" | "justifyFull";
+
+const textStyleOptions: Array<{ command: TextStyleCommand; label: string }> = [
+  { command: "paragraph", label: "Texto normal" },
+  { command: "h1", label: "Título 1" },
+  { command: "h2", label: "Título 2" },
+  { command: "h3", label: "Título 3" },
+];
 
 const alignmentOptions: Array<{ command: AlignmentCommand; label: string }> = [
   { command: "justifyLeft", label: "Alinhar à esquerda" },
@@ -212,6 +226,7 @@ function readFileAsDataBase64(file: File, itemLabel = "imagem do clipboard"): Pr
 export function serializeNotebookEditorHtml(editor: HTMLElement) {
   const clone = editor.cloneNode(true) as HTMLElement;
 
+  clearEquationRuntimeClasses(clone);
   normalizeDiagrams(clone);
   // O HTML salvo carrega apenas data-diagram-scale: nenhuma variável CSS
   // runtime, transform, dimensão medida ou handle sobrevive à serialização.
@@ -265,6 +280,7 @@ function appendSanitizedEquationClipboardBlock(wrapper: HTMLElement, equation: H
   const source = document.createElement("figcaption");
 
   pastedEquation.dataset.athenaeumBlock = "equation";
+  pastedEquation.classList.remove(notebookEquationCleanModeClassName);
   if (scale !== null && scale !== resizableScaleDefaultPercent) {
     pastedEquation.dataset.equationScale = String(scale);
   }
@@ -317,6 +333,7 @@ export function createSanitizedNotebookClipboardHtml(html: string) {
 
   const template = document.createElement("template");
   template.innerHTML = html;
+  clearEquationRuntimeClasses(template.content);
 
   const richBlocks = Array.from(
     template.content.querySelectorAll<HTMLElement>(
@@ -507,11 +524,13 @@ export function NotebookPageEditor({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const activeEquationElementRef = useRef<HTMLElement | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
   const localImageInputRef = useRef<HTMLInputElement | null>(null);
   const localAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const zoomScale = zoomPercent / 100;
+  const toolbarVariant: NotebookToolbarVariant = isFocusMode ? "focus" : "default";
   const spacingConfig = notebookSpacingConfig[spacingMode];
   const editorFontSize = 14 * zoomScale;
   const editorLineHeight = editorFontSize * spacingConfig.lineHeight;
@@ -542,6 +561,15 @@ export function NotebookPageEditor({
   const [activeEquation, setActiveEquation] = useState<ActiveEquationControls | null>(null);
   const [isEmpty, setIsEmpty] = useState(initialNotebookContentIsEmpty(initialContent));
 
+  useEffect(() => {
+    setIsTextMenuOpen(false);
+    setIsListMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLinkPopoverOpen(false);
+    setIsCiteMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  }, [toolbarVariant]);
+
   const syncActiveActions = useCallback(() => {
     const editor = editorRef.current;
     const selection = window.getSelection();
@@ -550,6 +578,8 @@ export function NotebookPageEditor({
     );
 
     if (!isSelectionInEditor || !editor || !selection) {
+      activeEquationElementRef.current?.classList.remove(notebookEquationActiveClassName);
+      activeEquationElementRef.current = null;
       setActiveActions(new Set());
       setActiveAlignment(null);
       setIsSelectionInLink(false);
@@ -650,15 +680,24 @@ export function NotebookPageEditor({
     const equation = findClosestEquation(selection.anchorNode, editor);
 
     if (equation && editorShell) {
+      if (activeEquationElementRef.current !== equation) {
+        activeEquationElementRef.current?.classList.remove(notebookEquationActiveClassName);
+      }
+      equation.classList.add(notebookEquationActiveClassName);
+      activeEquationElementRef.current = equation;
+
       const shellRect = editorShell.getBoundingClientRect();
       const equationRect = equation.getBoundingClientRect();
-      const maxLeft = Math.max(8, shellRect.width - 210);
+      const maxLeft = Math.max(8, shellRect.width - 320);
 
       setActiveEquation({
         top: Math.max(8, equationRect.top - shellRect.top - 38),
         left: Math.min(Math.max(8, equationRect.left - shellRect.left), maxLeft),
+        isCleanMode: equation.classList.contains(notebookEquationCleanModeClassName),
       });
     } else {
+      activeEquationElementRef.current?.classList.remove(notebookEquationActiveClassName);
+      activeEquationElementRef.current = null;
       setActiveEquation(null);
     }
 
@@ -670,6 +709,7 @@ export function NotebookPageEditor({
     const editor = editorRef.current;
     if (editor) {
       editor.innerHTML = initialContent;
+      clearEquationRuntimeClasses(editor);
       normalizeCallouts(editor);
       normalizeDiagrams(editor);
       normalizeEquations(editor);
@@ -1583,6 +1623,17 @@ export function NotebookPageEditor({
     syncActiveActions();
   }
 
+  function toggleCurrentEquationCleanMode() {
+    const equation = getCurrentEquation();
+    if (!equation) {
+      return;
+    }
+
+    const shouldEnable = !equation.classList.contains(notebookEquationCleanModeClassName);
+    equation.classList.toggle(notebookEquationCleanModeClassName, shouldEnable);
+    syncActiveActions();
+  }
+
   function handleEquationDeletionKey(event: React.KeyboardEvent<HTMLDivElement>) {
     const editor = editorRef.current;
     const selection = window.getSelection();
@@ -1850,6 +1901,24 @@ export function NotebookPageEditor({
     setIsMoreMenuOpen(false);
   }
 
+  function applyParagraphStyle() {
+    restoreSavedRangeOrEditorEnd();
+    document.execCommand("formatBlock", false, "<div>");
+    emitChange();
+    syncActiveActions();
+    setIsTextMenuOpen(false);
+    setIsListMenuOpen(false);
+    setIsReferenceMenuOpen(false);
+    setIsInsertMenuOpen(false);
+    setIsLayoutMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  }
+
+  function applyEditorActionFromMenu(action: EditorAction) {
+    restoreSavedRangeOrEditorEnd();
+    applyAction(action);
+  }
+
   function applyMaintenanceCommand(command: "clear-formatting" | "unlink") {
     restoreSavedRange();
 
@@ -2048,9 +2117,13 @@ export function NotebookPageEditor({
   const toolbarIconButtonClassName = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const toolbarHeadingButtonClassName = `inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-2 transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const toolbarPdfButtonClassName = `inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
+  const toolbarChipButtonClassName = `notebook-toolbar-focus-menu-button inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const activeToolbarButtonClassName = "bg-primary-soft text-[var(--color-sidebar-text)]";
   const toolbarSeparator = <span className="mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
+  const focusToolbarSeparator = <span className="notebook-toolbar-focus-separator mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
   const menuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg";
+  const compactMenuPanelClassName = "absolute left-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-56 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg";
+  const centeredCompactMenuPanelClassName = "absolute left-1/2 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-56 max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg";
   const menuSectionLabelClassName = "px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle";
   const menuItemClassName = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const plainMenuItemClassName = "block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
@@ -2066,6 +2139,7 @@ export function NotebookPageEditor({
   const orderedListButton = getToolbarButton("ordered-list");
   const blockquoteButton = getToolbarButton("blockquote");
   const codeButton = getToolbarButton("code");
+  const isParagraphActive = !activeActions.has("h1") && !activeActions.has("h2") && !activeActions.has("h3") && !activeActions.has("blockquote");
 
   const closePeerToolbarMenus = () => {
     setIsTextMenuOpen(false);
@@ -2108,6 +2182,74 @@ export function NotebookPageEditor({
       </button>
     );
   }
+
+  const textMenu = isTextMenuOpen ? (
+    <div className={compactMenuPanelClassName} role="menu" aria-label="Estilo do texto">
+      <p className={menuSectionLabelClassName}>Texto</p>
+      {textStyleOptions.map((option) => {
+        const isActive = option.command === "paragraph" ? isParagraphActive : activeActions.has(option.command);
+
+        return (
+          <button
+            key={option.command}
+            type="button"
+            role="menuitemradio"
+            aria-checked={isActive}
+            className={`${plainMenuItemClassName} ${isActive ? activeMenuItemClassName : ""}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              if (option.command === "paragraph") {
+                applyParagraphStyle();
+                return;
+              }
+
+              applyEditorActionFromMenu(option.command);
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+      <div className="my-1 h-px bg-border-subtle" />
+      <button
+        type="button"
+        role="menuitem"
+        className={plainMenuItemClassName}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyMaintenanceCommand("clear-formatting")}
+      >
+        Limpar formatação
+      </button>
+    </div>
+  ) : null;
+
+  const listMenu = isListMenuOpen ? (
+    <div className={centeredCompactMenuPanelClassName} role="menu" aria-label="Listas">
+      <p className={menuSectionLabelClassName}>Listas</p>
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={activeActions.has("unordered-list")}
+        className={`${menuItemClassName} ${activeActions.has("unordered-list") ? activeMenuItemClassName : ""}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyEditorActionFromMenu("unordered-list")}
+      >
+        {unorderedListButton.icon}
+        Lista com marcadores
+      </button>
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={activeActions.has("ordered-list")}
+        className={`${menuItemClassName} ${activeActions.has("ordered-list") ? activeMenuItemClassName : ""}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => applyEditorActionFromMenu("ordered-list")}
+      >
+        {orderedListButton.icon}
+        Lista numerada
+      </button>
+    </div>
+  ) : null;
 
   const insertMenuContent = (
     <>
@@ -2207,8 +2349,46 @@ export function NotebookPageEditor({
     </>
   );
 
+  const insertMenu = isInsertMenuOpen ? (
+    <div className={menuPanelClassName} role="menu" aria-label="Inserir">
+      {insertMenuContent}
+    </div>
+  ) : null;
+
   const moreMenu = isMoreMenuOpen ? (
     <div className={menuPanelClassName}>
+      {toolbarVariant === "focus" ? (
+        <>
+          <p className={menuSectionLabelClassName}>Formatação</p>
+          <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={() => applyEditorActionFromMenu("blockquote")}>
+            {blockquoteButton.icon}
+            Citação em bloco
+          </button>
+          <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={() => applyEditorActionFromMenu("code")}>
+            {codeButton.icon}
+            Bloco de código
+          </button>
+          <div className="my-1 h-px bg-border-subtle" />
+          <p className={menuSectionLabelClassName}>Referências</p>
+          <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openCiteMenu}>
+            <CitationIcon />
+            Inserir citação
+          </button>
+          <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openLinkPopover}>
+            <LinkIcon />
+            Inserir link
+          </button>
+          <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openLocalAttachmentPicker}>
+            <AttachmentIcon />
+            Anexar arquivo
+          </button>
+          <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openPdfPickerFromToolbar}>
+            <PdfToolbarIcon />
+            Vincular PDF
+          </button>
+          <div className="my-1 h-px bg-border-subtle" />
+        </>
+      ) : null}
       {insertMenuContent}
       <div className="my-1 h-px bg-border-subtle" />
       {layoutMenuContent}
@@ -2287,6 +2467,78 @@ export function NotebookPageEditor({
     </button>
   );
 
+  const textMenuButton = (
+    <button
+      type="button"
+      title="Texto"
+      aria-label="Texto"
+      aria-haspopup="menu"
+      aria-expanded={isTextMenuOpen}
+      className={toolbarChipButtonClassName}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        saveCurrentRange();
+      }}
+      onClick={() => {
+        const shouldOpen = !isTextMenuOpen;
+        closePeerToolbarMenus();
+        setIsTextMenuOpen(shouldOpen);
+      }}
+    >
+      <span className="notebook-toolbar-focus-compact-icon text-sm font-bold leading-none" aria-hidden="true">T</span>
+      <span className="notebook-toolbar-focus-label">Texto</span>
+      <span className="notebook-toolbar-focus-chevron"><ChevronDownIcon /></span>
+    </button>
+  );
+
+  const listMenuButton = (
+    <button
+      type="button"
+      title="Listas"
+      aria-label="Listas"
+      aria-haspopup="menu"
+      aria-expanded={isListMenuOpen}
+      className={toolbarChipButtonClassName}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        saveCurrentRange();
+      }}
+      onClick={() => {
+        const shouldOpen = !isListMenuOpen;
+        closePeerToolbarMenus();
+        setIsListMenuOpen(shouldOpen);
+      }}
+    >
+      <span className="notebook-toolbar-focus-compact-icon" aria-hidden="true">{unorderedListButton.icon}</span>
+      <span className="notebook-toolbar-focus-label">Listas</span>
+      <span className="notebook-toolbar-focus-chevron"><ChevronDownIcon /></span>
+    </button>
+  );
+
+  const insertMenuButton = (
+    <button
+      type="button"
+      title="Inserir"
+      aria-label="Inserir"
+      aria-haspopup="menu"
+      aria-expanded={isInsertMenuOpen}
+      className={toolbarChipButtonClassName}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        saveCurrentRange();
+      }}
+      onClick={() => {
+        const shouldOpen = !isInsertMenuOpen;
+        closePeerToolbarMenus();
+        setIsInsertMenuOpen(shouldOpen);
+      }}
+    >
+      <span className="notebook-toolbar-focus-compact-icon text-base leading-none" aria-hidden="true">+</span>
+      <span className="notebook-toolbar-focus-label">Inserir</span>
+      <span className="notebook-toolbar-focus-chevron"><ChevronDownIcon /></span>
+    </button>
+  );
+
   const moreMenuButton = (
     <div className="relative shrink-0">
       <button
@@ -2312,7 +2564,7 @@ export function NotebookPageEditor({
     </div>
   );
 
-  const toolbarControls = (
+  const defaultToolbarControls = (
     <>
       {renderToolbarActionButton(h1Button, toolbarHeadingButtonClassName)}
       {renderToolbarActionButton(h2Button, toolbarHeadingButtonClassName)}
@@ -2337,6 +2589,21 @@ export function NotebookPageEditor({
     </>
   );
 
+  const focusToolbarControls = (
+    <>
+      {textMenuButton}
+      {focusToolbarSeparator}
+      {renderToolbarActionButton(boldButton)}
+      {renderToolbarActionButton(italicButton)}
+      {focusToolbarSeparator}
+      {listMenuButton}
+      {focusToolbarSeparator}
+      {insertMenuButton}
+      <span className="min-w-2 flex-1" aria-hidden="true" />
+      {moreMenuButton}
+    </>
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <input
@@ -2354,14 +2621,18 @@ export function NotebookPageEditor({
         tabIndex={-1}
         onChange={(event) => void handleLocalAttachmentSelected(event)}
       />
-      <div className="shrink-0 border-b border-border-subtle py-2">
+      <div className={`shrink-0 border-b border-border-subtle py-2 ${toolbarVariant === "focus" ? "notebook-editor-toolbar-shell--focus" : ""}`}>
         <div
           ref={toolbarRef}
+          data-toolbar-variant={toolbarVariant}
           className={`relative flex h-11 min-w-0 flex-nowrap items-center overflow-visible border border-border-subtle bg-[var(--card)] shadow-sm ${
-            isFocusMode ? "mx-auto w-fit max-w-full justify-center gap-1 rounded-lg px-2" : `gap-1 rounded-lg pr-2 ${contentInsetClassName}`
+            toolbarVariant === "focus" ? `gap-1 rounded-lg ${contentInsetClassName}` : `gap-1 rounded-lg pr-2 ${contentInsetClassName}`
           }`}
         >
-          {toolbarControls}
+          {toolbarVariant === "focus" ? focusToolbarControls : defaultToolbarControls}
+          {toolbarVariant === "focus" ? textMenu : null}
+          {toolbarVariant === "focus" ? listMenu : null}
+          {toolbarVariant === "focus" ? insertMenu : null}
 
           {isLinkPopoverOpen ? (
             <div className={`absolute top-[calc(100%+6px)] z-40 flex w-72 items-center gap-2 rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg ${
@@ -2557,6 +2828,20 @@ export function NotebookPageEditor({
             style={{ top: activeEquation.top, left: activeEquation.left }}
           >
             <span className="px-2 text-text-subtle">Equação</span>
+            <button
+              type="button"
+              title={activeEquation.isCleanMode ? "Mostrar fonte LaTeX" : "Ocultar fonte LaTeX e ativar o modo limpo"}
+              aria-label={activeEquation.isCleanMode ? "Mostrar fonte LaTeX" : "Ativar modo limpo da equação"}
+              aria-pressed={activeEquation.isCleanMode}
+              className={`rounded-md px-2 py-1 transition ${
+                activeEquation.isCleanMode ? "bg-primary-soft text-primary" : "hover:bg-surface-muted hover:text-text-primary"
+              }`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={toggleCurrentEquationCleanMode}
+            >
+              {activeEquation.isCleanMode ? "Mostrar fonte" : "Modo limpo"}
+            </button>
+            <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
             <button
               type="button"
               className="rounded-md px-2 py-1 text-status-red transition hover:bg-status-red hover:text-status-red-text"

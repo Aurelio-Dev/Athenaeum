@@ -11,6 +11,15 @@ type EquationPreviewRoot = {
 
 const equationPreviewRoots = new WeakMap<HTMLElement, EquationPreviewRoot>();
 
+export const notebookEquationCleanModeClassName = "notebook-equation--clean-mode";
+export const notebookEquationActiveClassName = "notebook-equation--active";
+
+export function clearEquationRuntimeClasses(root: ParentNode) {
+  root.querySelectorAll<HTMLElement>('[data-athenaeum-block="equation"]').forEach((equation) => {
+    equation.classList.remove(notebookEquationCleanModeClassName, notebookEquationActiveClassName);
+  });
+}
+
 export function findClosestEquation(node: Node | null, editor: HTMLElement): HTMLElement | null {
   const element = node instanceof Element ? node : node?.parentElement;
   const equation = element?.closest('[data-athenaeum-block="equation"]');
