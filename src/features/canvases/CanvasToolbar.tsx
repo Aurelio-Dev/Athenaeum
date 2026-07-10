@@ -63,6 +63,14 @@ function LineIcon({ size = 20 }: IconProps) {
   );
 }
 
+function PencilIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} {...iconBase}>
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+
 function RectIcon({ size = 20 }: IconProps) {
   return (
     <svg width={size} height={size} {...iconBase}>
@@ -113,12 +121,15 @@ function ChevronIcon({ size = 12 }: IconProps) {
   );
 }
 
+// Inclui todos os tipos (Record exige as chaves), mesmo os que nao aparecem no
+// popup "Formas" (line e um botao proprio; freedraw e o Lapis).
 const shapeIcons: Record<CanvasShapeType, (props: IconProps) => JSX.Element> = {
   rect: RectIcon,
   diamond: DiamondIcon,
   ellipse: EllipseIcon,
   arrow: ArrowIcon,
   line: LineIcon,
+  freedraw: PencilIcon,
 };
 
 const shapeLabels: Record<CanvasShapeType, string> = {
@@ -127,6 +138,7 @@ const shapeLabels: Record<CanvasShapeType, string> = {
   ellipse: "Elipse",
   arrow: "Seta",
   line: "Linha",
+  freedraw: "Lápis",
 };
 
 // Botao de ferramenta da barra. Estilo de pilula com destaque quando ativo.
@@ -218,6 +230,9 @@ export function CanvasToolbar({ tool, onSelectTool, onTogglePan }: CanvasToolbar
 
       <div className="mx-1 h-6 w-px bg-[var(--color-border-subtle)]" />
 
+      <ToolButton label="Lápis" active={tool === "freedraw"} onClick={() => onSelectTool("freedraw")}>
+        <PencilIcon />
+      </ToolButton>
       <ToolButton label="Linha" active={tool === "line"} onClick={() => onSelectTool("line")}>
         <LineIcon />
       </ToolButton>

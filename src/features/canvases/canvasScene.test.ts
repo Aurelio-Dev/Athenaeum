@@ -38,10 +38,27 @@ describe("parseCanvasContent", () => {
         { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
         { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
         { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
+        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
       ],
     };
 
     expect(parseCanvasContent(JSON.stringify(scene))).toEqual(scene);
+  });
+
+  it("descarta freedraw com menos de dois pontos", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "f-vazio", type: "freedraw", x: 0, y: 0, width: 0, height: 0, points: [] },
+        { id: "f-um-ponto", type: "freedraw", x: 0, y: 0, width: 0, height: 0, points: [1, 2] },
+        { id: "f-ok", type: "freedraw", x: 0, y: 0, width: 10, height: 4, points: [0, 0, 10, 4] },
+      ],
+    });
+
+    const result = parseCanvasContent(raw);
+    expect(result.shapes.map((shape) => shape.id)).toEqual(["f-ok"]);
   });
 
   it("descarta seta/linha sem os dois pontos e descarta points invalidos", () => {

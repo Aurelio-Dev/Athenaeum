@@ -11,9 +11,9 @@
 
 // Tipos de forma suportados. Todos compartilham os mesmos campos (sem campos
 // exclusivos por tipo por enquanto): as formas de caixa (rect, diamond, ellipse)
-// usam x/y/width/height; as direcionais (arrow, line) usam x/y como ancora e
-// points ([x1, y1, x2, y2]) relativos a x/y.
-export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line";
+// usam x/y/width/height; as direcionais (arrow, line) e o traco livre (freedraw)
+// usam x/y como ancora e points ([x1, y1, x2, y2, ...]) relativos a x/y.
+export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line" | "freedraw";
 
 export type CanvasShape = {
   id: string;
@@ -22,8 +22,9 @@ export type CanvasShape = {
   y: number;
   width: number;
   height: number;
-  // Pontos relativos a (x, y). Usado por "arrow" e "line" ([x1, y1, x2, y2]);
-  // vazio nas formas de caixa (rect, diamond, ellipse), que usam width/height.
+  // Pontos relativos a (x, y). Usado por "arrow"/"line" ([x1, y1, x2, y2]) e por
+  // "freedraw" (caminho flat [x1, y1, x2, y2, ...]); vazio nas formas de caixa
+  // (rect, diamond, ellipse), que usam width/height.
   points: number[];
   rotation: number;
   stroke: string;
@@ -66,7 +67,7 @@ function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-const canvasShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "arrow", "line"];
+const canvasShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "arrow", "line", "freedraw"];
 
 function isCanvasShapeType(value: unknown): value is CanvasShapeType {
   return typeof value === "string" && (canvasShapeTypes as readonly string[]).includes(value);
@@ -130,9 +131,12 @@ function parseShape(value: unknown): CanvasShape | null {
 
   const points = parsePoints(value.points);
 
-  // Seta e linha sao direcionais: sem os dois pontos ([x1, y1, x2, y2]) a forma
-  // e degenerada e nao teria o que renderizar.
-  if ((value.type === "arrow" || value.type === "line") && points.length < 4) {
+  // Formas baseadas em points (arrow, line, freedraw): sem ao menos dois pontos
+  // (4 numeros) a forma e degenerada e nao teria o que renderizar.
+  if (
+    (value.type === "arrow" || value.type === "line" || value.type === "freedraw") &&
+    points.length < 4
+  ) {
     return null;
   }
 

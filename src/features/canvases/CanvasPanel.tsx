@@ -20,9 +20,12 @@ const minimumZoom = 0.25;
 const maximumZoom = 4;
 
 type Point = { x: number; y: number };
-// Forma em construcao durante o arrasto: guarda o tipo da ferramenta e os dois
-// pontos (inicio/atual) em coordenadas do mundo do Quadro.
-type DraftShape = { type: CanvasShapeType; start: Point; current: Point };
+// Forma em construcao. As ferramentas de arrasto (rect/diamond/ellipse/arrow/
+// line) guardam inicio/atual; o lapis (freedraw) acumula um caminho de pontos.
+// Uniao discriminada por type para o TypeScript garantir o acesso correto.
+type DraftShape =
+  | { type: Exclude<CanvasShapeType, "freedraw">; start: Point; current: Point }
+  | { type: "freedraw"; points: Point[] };
 // Geometria resolvida de uma forma — o suficiente para renderiza-la.
 type ShapeGeometry = { x: number; y: number; width: number; height: number; points: number[] };
 
@@ -33,8 +36,11 @@ const shapeDefaultStrokeWidth = 2;
 const selectionStroke = "#B0592B";
 // Abaixo disso trata-se de um clique sem arrasto: nao cria forma degenerada.
 const minShapeSize = 3;
-// Aumenta a area clicavel das formas direcionais finas (seta/linha).
+// Aumenta a area clicavel das formas de traco fino (seta/linha/freedraw).
 const directionalHitStrokeWidth = 12;
+// Distancia minima (em coordenadas do stage) entre pontos capturados do lapis:
+// evita arrays enormes e pontos redundantes em movimento lento.
+const freedrawMinDistance = 3;
 
 function diamondPoints(width: number, height: number): number[] {
   // Losango inscrito na caixa width x height, em coordenadas locais (relativas a x/y).
@@ -63,6 +69,30 @@ function geometryFromDrag(type: CanvasShapeType, start: Point, current: Point): 
     return null;
   }
   return { x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width, height, points: [] };
+}
+
+// Resolve a geometria de um traco livre. Mesma convencao das direcionais: ancora
+// no primeiro ponto e guarda os demais relativos a ela. width/height ficam com a
+// caixa delimitadora do traco (nao usados na renderizacao, mas coerentes com o
+// schema). Retorna null com menos de 2 pontos (clique unico sem arrastar).
+function geometryFromFreedraw(points: Point[]): ShapeGeometry | null {
+  if (points.length < 2) {
+    return null;
+  }
+
+  const anchor = points[0];
+  const flat: number[] = [];
+  let maxX = 0;
+  let maxY = 0;
+  for (const point of points) {
+    const relativeX = point.x - anchor.x;
+    const relativeY = point.y - anchor.y;
+    flat.push(relativeX, relativeY);
+    maxX = Math.max(maxX, Math.abs(relativeX));
+    maxY = Math.max(maxY, Math.abs(relativeY));
+  }
+
+  return { x: anchor.x, y: anchor.y, width: maxX, height: maxY, points: flat };
 }
 
 type RenderShapeOptions = {
@@ -125,6 +155,20 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
       );
     case "line":
       return <Line key={options.key} {...common} points={points} hitStrokeWidth={directionalHitStrokeWidth} />;
+    case "freedraw":
+      // tension 0.5 suaviza o traco sem bezier completo; caps/joins arredondados
+      // evitam o serrilhado nas curvas.
+      return (
+        <Line
+          key={options.key}
+          {...common}
+          points={points}
+          tension={0.5}
+          lineCap="round"
+          lineJoin="round"
+          hitStrokeWidth={directionalHitStrokeWidth}
+        />
+      );
     default: {
       // Garante exaustividade: um tipo novo sem case quebra a compilacao aqui.
       const exhaustive: never = type;
@@ -559,7 +603,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           return;
         }
         drawStartRef.current = point;
-        setDraft({ type: activeTool, start: point, current: point });
+        if (activeTool === "freedraw") {
+          // Lapis: comeca a acumular o caminho a partir do primeiro ponto.
+          setDraft({ type: "freedraw", points: [point] });
+        } else {
+          setDraft({ type: activeTool, start: point, current: point });
+        }
         setSelectedId(null);
         return;
       }
@@ -586,7 +635,24 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     if (!point) {
       return;
     }
-    setDraft((current) => (current ? { ...current, current: point } : current));
+
+    if (toolRef.current === "freedraw") {
+      // Acrescenta o ponto so se o cursor andou mais que o limiar desde o ultimo
+      // ponto capturado (evita arrays enormes e pontos redundantes).
+      setDraft((current) => {
+        if (!current || current.type !== "freedraw") {
+          return current;
+        }
+        const last = current.points[current.points.length - 1];
+        if (Math.hypot(point.x - last.x, point.y - last.y) < freedrawMinDistance) {
+          return current;
+        }
+        return { type: "freedraw", points: [...current.points, point] };
+      });
+      return;
+    }
+
+    setDraft((current) => (current && current.type !== "freedraw" ? { ...current, current: point } : current));
   }, []);
 
   const handleStageMouseUp = useCallback(() => {
@@ -604,8 +670,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       return;
     }
 
-    const geometry = geometryFromDrag(currentDraft.type, currentDraft.start, currentDraft.current);
-    // Clique sem arrasto real: nao cria forma.
+    const geometry =
+      currentDraft.type === "freedraw"
+        ? geometryFromFreedraw(currentDraft.points)
+        : geometryFromDrag(currentDraft.type, currentDraft.start, currentDraft.current);
+    // Clique sem arrasto real (ou traco com menos de 2 pontos): nao cria forma.
     if (!geometry) {
       return;
     }
@@ -742,7 +811,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   }, [applyStageTransform, isCollapsed]);
 
   // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Esc sai do modo
-  // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo,
+  // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo, P = lapis,
   // Delete/Backspace = remover a selecao. Gated pelo ponteiro dentro do Quadro
   // para nao sequestrar o teclado de outros paineis.
   useEffect(() => {
@@ -766,6 +835,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       if (event.key === "r" || event.key === "R") {
         setTool("rect");
+        return;
+      }
+
+      if (event.key === "p" || event.key === "P") {
+        setTool("freedraw");
         return;
       }
 
@@ -933,7 +1007,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                 ? (() => {
                     // Preview tracejado durante o desenho: mesma geometria/tipo da
                     // forma final, so que sem interacao e com traco pontilhado.
-                    const geometry = geometryFromDrag(draft.type, draft.start, draft.current);
+                    const geometry =
+                      draft.type === "freedraw"
+                        ? geometryFromFreedraw(draft.points)
+                        : geometryFromDrag(draft.type, draft.start, draft.current);
                     return geometry
                       ? renderCanvasShape(draft.type, geometry, {
                           strokeColor: shapeDefaultStroke,
