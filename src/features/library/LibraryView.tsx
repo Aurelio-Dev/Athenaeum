@@ -6,6 +6,7 @@ import { AppShell } from "../../components/AppShell";
 import { SettingsPanel, settingsPanelHeight, settingsPanelWidth } from "../settings/SettingsPanel";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
+import emptyLibraryIllustration from "../../assets/images/empty-library.png";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
@@ -807,16 +808,16 @@ export function LibraryView() {
               />
             ) : activeRoute.type === "collection" ? (
               <EmptyState
-                icon={FolderOpenIcon}
-                title="Coleção vazia"
-                description="Nenhum documento nesta coleção ainda."
+                illustration={{ src: emptyLibraryIllustration, alt: "" }}
+                title="Nenhum documento aqui"
+                description="Adicione PDFs e artigos para começar."
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
             ) : allDocuments.length === 0 && !isTrashRoute ? (
               <EmptyState
-                icon={LibraryBigIcon}
-                title="Sua biblioteca está vazia"
-                description="Adicione seu primeiro documento para começar."
+                illustration={{ src: emptyLibraryIllustration, alt: "" }}
+                title="Nenhum documento aqui"
+                description="Adicione PDFs e artigos para começar."
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
             ) : (

@@ -1,7 +1,11 @@
 import type { ElementType } from "react";
 
 export interface EmptyStateProps {
-  icon: ElementType;
+  icon?: ElementType;
+  illustration?: {
+    src: string;
+    alt: string;
+  };
   title: string;
   description: string;
   action?: {
@@ -10,14 +14,15 @@ export interface EmptyStateProps {
   };
 }
 
-// Estado vazio neutro e reutilizavel. O icone chega como componente via prop
-// (ElementType) — o EmptyState nao decide cor por estado nem desenha SVG proprio.
-export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
+// Estado vazio neutro e reutilizavel. O visual chega como icone ou ilustracao;
+// o EmptyState nao decide cor por estado nem desenha SVG proprio.
+export function EmptyState({ icon: Icon, illustration, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex h-full flex-col items-center justify-center p-12 text-center">
-      <Icon aria-hidden className="h-12 w-12 text-text-secondary" />
-      <h2 className="mt-3 text-base font-medium text-text-primary">{title}</h2>
-      <p className="mt-1 text-sm text-text-secondary">{description}</p>
+      {illustration ? <img src={illustration.src} alt={illustration.alt} className="h-12 w-auto" /> : null}
+      {!illustration && Icon ? <Icon aria-hidden className="h-12 w-12 text-text-secondary" /> : null}
+      <h2 className="mt-3 font-sans text-base font-semibold text-text-primary">{title}</h2>
+      <p className="mt-1 font-sans text-sm font-normal text-text-secondary">{description}</p>
       {action ? (
         <button
           type="button"

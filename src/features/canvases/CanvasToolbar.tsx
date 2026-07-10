@@ -134,6 +134,25 @@ function ShapesIcon({ size = 20 }: IconProps) {
   );
 }
 
+function ImageIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} {...iconBase}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9" r="1.5" />
+      <path d="m5 18 5-5 3 3 2-2 4 4" />
+    </svg>
+  );
+}
+
+function FrameIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} {...iconBase}>
+      <rect x="4" y="5" width="16" height="14" rx="1" strokeDasharray="3 2" />
+      <path d="M7 9h4" />
+    </svg>
+  );
+}
+
 function ChevronIcon({ size = 12 }: IconProps) {
   return (
     <svg width={size} height={size} {...iconBase}>
@@ -152,6 +171,8 @@ const shapeIcons: Record<CanvasShapeType, (props: IconProps) => JSX.Element> = {
   line: LineIcon,
   freedraw: PencilIcon,
   text: TextIcon,
+  image: ImageIcon,
+  frame: FrameIcon,
 };
 
 const shapeLabels: Record<CanvasShapeType, string> = {
@@ -162,6 +183,8 @@ const shapeLabels: Record<CanvasShapeType, string> = {
   line: "Linha",
   freedraw: "Lápis",
   text: "Texto",
+  image: "Imagem",
+  frame: "Frame",
 };
 
 // Botao de ferramenta da barra. Estilo de pilula com destaque quando ativo.
@@ -315,6 +338,16 @@ export function CanvasToolbar({ tool, onSelectTool, onTogglePan }: CanvasToolbar
           </div>
         ) : null}
       </div>
+
+      <ToolButton label="Imagem" active={tool === "image"} onClick={() => onSelectTool("image")}>
+        <ImageIcon />
+      </ToolButton>
+
+      <div className="mx-1 h-6 w-px bg-[var(--color-border-subtle)]" />
+
+      <ToolButton label="Frame" active={tool === "frame"} onClick={() => onSelectTool("frame")}>
+        <FrameIcon />
+      </ToolButton>
     </div>
   );
 }

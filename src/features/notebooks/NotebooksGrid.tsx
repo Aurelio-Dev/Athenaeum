@@ -41,7 +41,7 @@ export function NotebooksGrid({ notebooks, collections, isLoading, hasError, onC
         <span className="opacity-50">
           <NotebookIllustration size={64} />
         </span>
-        <h2 className="mt-4 font-serif text-base font-medium text-text-primary">Nenhum caderno ainda</h2>
+        <h2 className="mt-4 font-sans text-base font-semibold text-text-primary">Nenhum caderno ainda</h2>
         <button
           type="button"
           onClick={onCreate}

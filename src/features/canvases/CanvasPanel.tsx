@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Arrow, Circle, Ellipse, Layer, Line, Rect, Shape, Stage, Text } from "react-konva";
+import { Arrow, Circle, Ellipse, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text } from "react-konva";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
-import { getCanvasContent, saveCanvasContent } from "../../lib/database";
+import { getCanvasContent, loadCanvasFiles, saveCanvasContent, saveCanvasFile } from "../../lib/database";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
 import {
   createShapeId,
@@ -32,7 +32,7 @@ type Point = { x: number; y: number };
 // line) guardam inicio/atual; o lapis (freedraw) acumula um caminho de pontos.
 // Uniao discriminada por type para o TypeScript garantir o acesso correto.
 type DraftShape =
-  | { type: Exclude<CanvasShapeType, "freedraw" | "text">; start: Point; current: Point }
+  | { type: Exclude<CanvasShapeType, "freedraw" | "text" | "image">; start: Point; current: Point }
   | { type: "freedraw"; points: Point[] };
 type EditingText = { id: string; value: string };
 // Geometria resolvida de uma forma — o suficiente para renderiza-la.
@@ -55,6 +55,10 @@ const freedrawMinDistance = 3;
 const eraserRadius = 12;
 const textDefaultFontSize = 16;
 const textLineHeight = 1.2;
+const frameStroke = "#7A6558";
+const maximumImageSide = 400;
+const maximumImageBytes = 4 * 1024 * 1024;
+const allowedImageMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
 function getCanvasUiFontFamily(): string {
   return getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
@@ -78,9 +82,55 @@ function measureTextBox(text: string, fontSize: number, fontFamily: string): { w
   };
 }
 
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Não foi possível ler a imagem selecionada."));
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Não foi possível ler a imagem selecionada."));
+        return;
+      }
+      const separatorIndex = reader.result.indexOf(",");
+      if (separatorIndex < 0) {
+        reject(new Error("O conteúdo da imagem selecionada é inválido."));
+        return;
+      }
+      resolve(reader.result.slice(separatorIndex + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadHtmlImage(mimeType: string, dataBase64: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new window.Image();
+    image.onload = () => {
+      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+        reject(new Error("A imagem selecionada não possui dimensões válidas."));
+        return;
+      }
+      resolve(image);
+    };
+    image.onerror = () => reject(new Error("Não foi possível decodificar a imagem selecionada."));
+    image.src = `data:${mimeType};base64,${dataBase64}`;
+  });
+}
+
+function imageErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return typeof error === "string" && error.length > 0 ? error : "Não foi possível inserir a imagem.";
+}
+
 // Resolve a geometria de uma forma a partir do arrasto (inicio -> atual). Retorna
 // null quando o arrasto e pequeno demais (clique sem desenho real).
-function geometryFromDrag(type: Exclude<CanvasShapeType, "freedraw" | "text">, start: Point, current: Point): ShapeGeometry | null {
+function geometryFromDrag(
+  type: Exclude<CanvasShapeType, "freedraw" | "text" | "image">,
+  start: Point,
+  current: Point,
+): ShapeGeometry | null {
   const dx = current.x - start.x;
   const dy = current.y - start.y;
 
@@ -141,6 +191,7 @@ type RenderShapeOptions = {
   textColor: string;
   fontSize: number;
   fontFamily: string;
+  image: HTMLImageElement | null;
 };
 
 // Renderiza qualquer tipo de forma como o node Konva correspondente. Fonte unica
@@ -231,6 +282,81 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
           onDblClick={options.onDblClick}
           onDragEnd={options.onDragEnd}
         />
+      );
+    case "image":
+      if (options.image) {
+        return <KonvaImage key={options.key} {...common} image={options.image} width={width} height={height} />;
+      }
+      return (
+        <Group
+          key={options.key}
+          x={x}
+          y={y}
+          rotation={options.rotation}
+          draggable={options.draggable}
+          onMouseDown={options.onMouseDown}
+          onDragEnd={options.onDragEnd}
+        >
+          <Rect
+            width={width}
+            height={height}
+            fill="#D8D2CC"
+            stroke={options.strokeColor === "transparent" ? frameStroke : options.strokeColor}
+            strokeWidth={options.strokeWidth}
+          />
+          <Rect
+            x={Math.max(6, width * 0.25)}
+            y={Math.max(6, height * 0.25)}
+            width={Math.max(16, width * 0.5)}
+            height={Math.max(14, height * 0.5)}
+            stroke="#7A6558"
+            strokeWidth={1.5}
+          />
+          <Line
+            points={[
+              Math.max(8, width * 0.28),
+              Math.max(12, height * 0.68),
+              width * 0.43,
+              height * 0.48,
+              width * 0.53,
+              height * 0.58,
+              width * 0.7,
+              height * 0.38,
+            ]}
+            stroke="#7A6558"
+            strokeWidth={1.5}
+          />
+        </Group>
+      );
+    case "frame":
+      return (
+        <Group
+          key={options.key}
+          x={x}
+          y={y}
+          rotation={options.rotation}
+          listening={!options.dashed}
+          draggable={options.draggable}
+          onMouseDown={options.onMouseDown}
+          onDragEnd={options.onDragEnd}
+        >
+          <Rect
+            width={width}
+            height={height}
+            stroke={options.strokeColor}
+            strokeWidth={options.strokeWidth}
+            dash={[6, 4]}
+            perfectDrawEnabled={false}
+          />
+          <Text
+            y={-16}
+            text="Frame"
+            fontSize={12}
+            fontFamily={options.fontFamily}
+            fill={options.strokeColor}
+            listening={false}
+          />
+        </Group>
       );
     default: {
       // Garante exaustividade: um tipo novo sem case quebra a compilacao aqui.
@@ -404,6 +530,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [editingText, setEditingText] = useState<EditingText | null>(null);
   const [canvasUiFontFamily] = useState(getCanvasUiFontFamily);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingImagePointRef = useRef<Point | null>(null);
+  const imageImportInProgressRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const [imageCache, setImageCache] = useState<Map<string, HTMLImageElement>>(() => new Map());
+  const [imageError, setImageError] = useState("");
   // Posicao do cursor com a Borracha ativa (circulo indicador, nao persistido).
   const [eraserCursor, setEraserCursor] = useState<Point | null>(null);
 
@@ -461,6 +593,90 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Autosave com o mesmo debounce de 750ms do Leitor. O flush exato fica com o
   // handleClose/flush de unmount abaixo.
   const { schedule: scheduleSave, cancel: cancelSave } = useReaderPersistence(persistScene, 750);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const handleImageFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0];
+      event.currentTarget.value = "";
+      const insertionPoint = pendingImagePointRef.current;
+      pendingImagePointRef.current = null;
+
+      if (!file || !insertionPoint || imageImportInProgressRef.current) {
+        return;
+      }
+
+      imageImportInProgressRef.current = true;
+      setImageError("");
+      try {
+        if (!allowedImageMimeTypes.has(file.type)) {
+          throw new Error("Selecione uma imagem PNG, JPEG, GIF ou WebP.");
+        }
+        if (file.size > maximumImageBytes) {
+          throw new Error("A imagem deve ter no máximo 4MB.");
+        }
+
+        const dataBase64 = await readFileAsBase64(file);
+        const image = await loadHtmlImage(file.type, dataBase64);
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        const scale = Math.min(1, maximumImageSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const fileId = crypto.randomUUID();
+
+        // O Rust grava e registra o arquivo antes de a cena passar a referencia-lo.
+        // Se o save falhar, nenhuma forma quebrada entra no Quadro.
+        await saveCanvasFile(canvasId, { fileId, mimeType: file.type, dataBase64 });
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        setImageCache((current) => {
+          const next = new Map(current);
+          next.set(fileId, image);
+          return next;
+        });
+
+        const newShape: CanvasShape = {
+          id: createShapeId(),
+          type: "image",
+          x: insertionPoint.x,
+          y: insertionPoint.y,
+          width,
+          height,
+          points: [],
+          rotation: 0,
+          stroke: shapeDefaultStroke,
+          strokeWidth: shapeDefaultStrokeWidth,
+          fill: null,
+          text: "",
+          fontSize: textDefaultFontSize,
+          fileId,
+        };
+        const nextShapes = [...shapesRef.current, newShape];
+        shapesRef.current = nextShapes;
+        setShapes(nextShapes);
+        setSelectedId(newShape.id);
+        scheduleSave();
+      } catch (error) {
+        if (isMountedRef.current) {
+          setImageError(imageErrorMessage(error));
+        }
+      } finally {
+        imageImportInProgressRef.current = false;
+      }
+    },
+    [canvasId, scheduleSave],
+  );
 
   const finishTextEditing = useCallback(() => {
     const editing = editingTextRef.current;
@@ -678,12 +894,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       x: (pointer.x - stage.x()) / oldScale,
       y: (pointer.y - stage.y()) / oldScale,
     };
-    let direction = event.evt.deltaY > 0 ? -1 : 1;
-
-    // Trackpads sinalizam o gesto de pinca com ctrlKey e delta invertido.
-    if (event.evt.ctrlKey) {
-      direction *= -1;
-    }
+    // Ctrl + scroll deve seguir o mesmo sentido da roda comum. Alguns
+    // trackpads tambem sinalizam a pinça com ctrlKey, mas o delta ja traz o
+    // sentido correto para o zoom do canvas.
+    const direction = event.evt.deltaY > 0 ? -1 : 1;
 
     const newScale = clampZoom(direction > 0 ? oldScale * zoomStep : oldScale / zoomStep);
     stage.scale({ x: newScale, y: newScale });
@@ -763,6 +977,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         if (!point) {
           return;
         }
+        if (activeTool === "image") {
+          pendingImagePointRef.current = point;
+          setImageError("");
+          imageInputRef.current?.click();
+          return;
+        }
         if (activeTool === "text") {
           // Impede a acao padrao do mousedown de competir com o foco do editor
           // HTML que sera montado por este mesmo gesto.
@@ -781,6 +1001,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             fill: null,
             text: "",
             fontSize: textDefaultFontSize,
+            fileId: null,
           };
           const nextShapes = [...shapesRef.current, newShape];
           shapesRef.current = nextShapes;
@@ -912,11 +1133,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       height: geometry.height,
       points: geometry.points,
       rotation: 0,
-      stroke: shapeDefaultStroke,
+      stroke: currentDraft.type === "frame" ? frameStroke : shapeDefaultStroke,
       strokeWidth: shapeDefaultStrokeWidth,
       fill: null,
       text: "",
       fontSize: textDefaultFontSize,
+      fileId: null,
     };
     setShapes((current) => [...current, newShape]);
     setSelectedId(newShape.id);
@@ -993,9 +1215,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [isMaximized, movePanel, panel.id, refreshStageSoon]);
 
-  // Load ao montar: hidrata formas e o transform do stage a partir do content
-  // persistido. Conteudo antigo (Excalidraw) ou corrompido abre como cena vazia,
-  // sem erro para o usuario (parseCanvasContent nunca lanca).
+  // Load ao montar: hidrata a cena e reconstrói as imagens mantidas em disco.
+  // Falha em um arquivo individual degrada para o placeholder sem impedir que
+  // o restante do Quadro seja aberto.
   useEffect(() => {
     if (!Number.isFinite(canvasId)) {
       hasLoadedRef.current = true;
@@ -1005,7 +1227,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     let cancelled = false;
     void (async () => {
       try {
-        const raw = await getCanvasContent(canvasId);
+        const [raw, files] = await Promise.all([
+          getCanvasContent(canvasId),
+          loadCanvasFiles(canvasId).catch((error) => {
+            console.warn("Não foi possível carregar os arquivos do quadro.", error);
+            return [];
+          }),
+        ]);
         if (cancelled) {
           return;
         }
@@ -1013,6 +1241,23 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         stageTransformRef.current = scene.stage;
         setShapes(scene.shapes);
         applyStageTransform();
+
+        const loadedImages = new Map<string, HTMLImageElement>();
+        for (const file of files) {
+          try {
+            const image = await loadHtmlImage(file.mimeType, file.dataBase64);
+            if (cancelled) {
+              return;
+            }
+            loadedImages.set(file.fileId, image);
+          } catch (error) {
+            // Arquivo corrompido: a forma permanece e renderiza o placeholder.
+            console.warn(`Não foi possível decodificar a imagem ${file.fileId} do quadro.`, error);
+          }
+        }
+        if (!cancelled) {
+          setImageCache(loadedImages);
+        }
       } catch (error) {
         // Quadro nao encontrado ou falha de leitura: abre vazio, sem alarde.
         console.warn("Nao foi possivel carregar o quadro.", error);
@@ -1038,7 +1283,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
   // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Esc sai do modo
   // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo, P = lapis,
-  // E = borracha, T = texto, Delete/Backspace = remover a selecao. Gated pelo ponteiro
+  // E = borracha, T = texto, I = imagem, F = frame, Delete/Backspace = remover a selecao. Gated pelo ponteiro
   // dentro do Quadro para nao sequestrar o teclado de outros paineis.
   useEffect(() => {
     function handleToolKeys(event: KeyboardEvent) {
@@ -1076,6 +1321,16 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       if (event.key === "t" || event.key === "T") {
         setTool("text");
+        return;
+      }
+
+      if (event.key === "i" || event.key === "I") {
+        setTool("image");
+        return;
+      }
+
+      if (event.key === "f" || event.key === "F") {
+        setTool("frame");
         return;
       }
 
@@ -1214,6 +1469,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             }
           }}
         >
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            className="hidden"
+            onChange={(event) => void handleImageFileChange(event)}
+          />
           <Stage
             ref={stageRef}
             width={stageSize.width}
@@ -1236,7 +1498,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                   { x: shape.x, y: shape.y, width: shape.width, height: shape.height, points: shape.points },
                   {
                     key: shape.id,
-                    strokeColor: shape.id === selectedId ? selectionStroke : shape.stroke,
+                    strokeColor:
+                      shape.id === selectedId ? selectionStroke : shape.type === "image" ? "transparent" : shape.stroke,
                     strokeWidth: shape.strokeWidth,
                     fill: shape.fill,
                     rotation: shape.rotation,
@@ -1244,6 +1507,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                     textColor: shape.stroke,
                     fontSize: shape.fontSize,
                     fontFamily: canvasUiFontFamily,
+                    image: shape.fileId ? imageCache.get(shape.fileId) ?? null : null,
                     draggable: tool === "select",
                     onMouseDown: (event) => {
                       if (toolRef.current !== "select") {
@@ -1274,7 +1538,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                         : geometryFromDrag(draft.type, draft.start, draft.current);
                     return geometry
                       ? renderCanvasShape(draft.type, geometry, {
-                          strokeColor: shapeDefaultStroke,
+                          strokeColor: draft.type === "frame" ? frameStroke : shapeDefaultStroke,
                           strokeWidth: shapeDefaultStrokeWidth,
                           fill: null,
                           rotation: 0,
@@ -1282,6 +1546,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                           textColor: shapeDefaultStroke,
                           fontSize: textDefaultFontSize,
                           fontFamily: canvasUiFontFamily,
+                          image: null,
                           dashed: true,
                         })
                       : null;
@@ -1302,6 +1567,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
               ) : null}
             </Layer>
           </Stage>
+          {imageError ? (
+            <p
+              role="alert"
+              className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-status-red px-3 py-2 text-sm font-semibold text-status-red-text shadow-md"
+            >
+              {imageError}
+            </p>
+          ) : null}
           {editingText
             ? (() => {
                 const shape = shapes.find((candidate) => candidate.id === editingText.id && candidate.type === "text");

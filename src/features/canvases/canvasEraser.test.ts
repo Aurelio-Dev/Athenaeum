@@ -17,6 +17,7 @@ function buildShape(overrides: Partial<CanvasShape> & Pick<CanvasShape, "id" | "
     fill: null,
     text: "",
     fontSize: 16,
+    fileId: null,
     ...overrides,
   };
 }

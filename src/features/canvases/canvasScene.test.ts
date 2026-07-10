@@ -23,6 +23,7 @@ describe("parseCanvasContent", () => {
           fill: null,
           text: "",
           fontSize: 16,
+          fileId: null,
         },
       ],
     };
@@ -36,12 +37,14 @@ describe("parseCanvasContent", () => {
       schemaVersion: 1,
       stage: { x: 0, y: 0, scale: 1 },
       shapes: [
-        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
-        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
-        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
-        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
-        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
-        { id: "t", type: "text", x: 8, y: 9, width: 72, height: 38, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "Linha 1\nLinha 2", fontSize: 18 },
+        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
+        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
+        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
+        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
+        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
+        { id: "t", type: "text", x: 8, y: 9, width: 72, height: 38, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "Linha 1\nLinha 2", fontSize: 18, fileId: null },
+        { id: "i", type: "image", x: 12, y: 14, width: 320, height: 180, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: "file-1" },
+        { id: "fr", type: "frame", x: 20, y: 25, width: 400, height: 240, points: [], rotation: 0, stroke: "#7A6558", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
       ],
     };
 
@@ -75,8 +78,63 @@ describe("parseCanvasContent", () => {
         fill: null,
         text: "Athenaeum",
         fontSize: 16,
+        fileId: null,
       },
     ]);
+  });
+
+  it("descarta imagens sem fileId e preserva imagens referenciadas", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "sem-id", type: "image", x: 0, y: 0, width: 100, height: 80 },
+        { id: "id-vazio", type: "image", x: 0, y: 0, width: 100, height: 80, fileId: "" },
+        { id: "id-espacos", type: "image", x: 0, y: 0, width: 100, height: 80, fileId: "   " },
+        { id: "valida", type: "image", x: 5, y: 6, width: 100, height: 80, fileId: "asset-1" },
+      ],
+    });
+
+    const result = parseCanvasContent(raw);
+    expect(result.shapes).toHaveLength(1);
+    expect(result.shapes[0]).toMatchObject({ id: "valida", type: "image", fileId: "asset-1" });
+  });
+
+  it("preserva frame valido e aplica a regra atual de caixas a dimensoes negativas", () => {
+    const validFrame = {
+      id: "frame-valido",
+      type: "frame",
+      x: 24,
+      y: 36,
+      width: 320,
+      height: 180,
+      points: [],
+      rotation: 0,
+      stroke: "#7A6558",
+      strokeWidth: 2,
+      fill: null,
+      text: "",
+      fontSize: 16,
+      fileId: null,
+    };
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        validFrame,
+        { ...validFrame, id: "frame-width-negativo", width: -120 },
+        { ...validFrame, id: "frame-height-negativo", height: -80 },
+      ],
+    });
+
+    const result = parseCanvasContent(raw);
+    expect(result.shapes[0]).toEqual(validFrame);
+    // O parser atual preserva dimensoes finitas negativas em todas as formas de
+    // caixa; a normalizacao para valores positivos acontece na criacao por arrasto.
+    expect(result.shapes[1]).toMatchObject({ id: "frame-width-negativo", width: -120, height: 180 });
+    expect(result.shapes[2]).toMatchObject({ id: "frame-height-negativo", width: 320, height: -80 });
   });
 
   it("descarta freedraw com menos de dois pontos", () => {
@@ -124,6 +182,7 @@ describe("parseCanvasContent", () => {
         fill: null,
         text: "",
         fontSize: 16,
+        fileId: null,
       },
     ]);
   });
@@ -188,6 +247,7 @@ describe("parseCanvasContent", () => {
         fill: null,
         text: "",
         fontSize: 16,
+        fileId: null,
       },
     ]);
   });

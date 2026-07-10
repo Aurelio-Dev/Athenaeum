@@ -1112,7 +1112,7 @@ export async function saveCanvasContent(canvasId: number, contentJson: string) {
 // Imagens do quadro: a persistencia fisica (escrita atomica em disco + linha
 // em canvas_files) e dos comandos Rust — aqui so os wrappers tipados de
 // invoke. dataBase64 e o corpo do dataURL do Excalidraw, sem o prefixo
-// "data:...;base64," (o Rust decodifica e valida o limite de 10MB).
+// "data:...;base64," (o Rust decodifica e valida o limite de 4MB).
 export type CanvasFilePayload = {
   fileId: string;
   mimeType: string;

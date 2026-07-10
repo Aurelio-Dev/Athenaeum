@@ -70,16 +70,10 @@ function samplePolyline(vertices: Point[], closed: boolean, step: number): Point
 // entrarem (Fase 4); quando entrarem, aplicar a rotacao aqui tambem.
 function sampleShapeOutline(shape: CanvasShape, step: number): Point[] {
   switch (shape.type) {
-    case "rect": {
-      const vertices = [
-        { x: shape.x, y: shape.y },
-        { x: shape.x + shape.width, y: shape.y },
-        { x: shape.x + shape.width, y: shape.y + shape.height },
-        { x: shape.x, y: shape.y + shape.height },
-      ];
-      return samplePolyline(vertices, true, step);
-    }
-    case "text": {
+    case "rect":
+    case "text":
+    case "image":
+    case "frame": {
       const vertices = [
         { x: shape.x, y: shape.y },
         { x: shape.x + shape.width, y: shape.y },

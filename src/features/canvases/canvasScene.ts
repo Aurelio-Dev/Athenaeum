@@ -13,7 +13,7 @@
 // exclusivos por tipo por enquanto): as formas de caixa (rect, diamond, ellipse)
 // usam x/y/width/height; as direcionais (arrow, line) e o traco livre (freedraw)
 // usam x/y como ancora e points ([x1, y1, x2, y2, ...]) relativos a x/y.
-export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line" | "freedraw" | "text";
+export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line" | "freedraw" | "text" | "image" | "frame";
 
 export type CanvasShape = {
   id: string;
@@ -32,6 +32,7 @@ export type CanvasShape = {
   fill: string | null;
   text: string;
   fontSize: number;
+  fileId: string | null;
 };
 
 export type CanvasSceneContent = {
@@ -86,7 +87,17 @@ function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-const canvasShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "arrow", "line", "freedraw", "text"];
+const canvasShapeTypes: readonly CanvasShapeType[] = [
+  "rect",
+  "diamond",
+  "ellipse",
+  "arrow",
+  "line",
+  "freedraw",
+  "text",
+  "image",
+  "frame",
+];
 
 function isCanvasShapeType(value: unknown): value is CanvasShapeType {
   return typeof value === "string" && (canvasShapeTypes as readonly string[]).includes(value);
@@ -167,6 +178,11 @@ function parseShape(value: unknown): CanvasShape | null {
   }
 
   const fontSize = finiteNumber(value.fontSize, defaultFontSize);
+  const fileId = typeof value.fileId === "string" && value.fileId.trim().length > 0 ? value.fileId : null;
+  // Uma imagem sem referencia ao arquivo fisico nao pode ser reconstruida.
+  if (value.type === "image" && fileId === null) {
+    return null;
+  }
 
   return {
     id: value.id,
@@ -182,6 +198,7 @@ function parseShape(value: unknown): CanvasShape | null {
     fill: typeof value.fill === "string" ? value.fill : null,
     text,
     fontSize: fontSize > 0 ? fontSize : defaultFontSize,
+    fileId,
   };
 }
 

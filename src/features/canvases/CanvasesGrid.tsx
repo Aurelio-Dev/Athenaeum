@@ -39,7 +39,7 @@ export function CanvasesGrid({ canvases, collections, isLoading, hasError, onCre
     return (
       <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
         <div className="h-16 w-24 rounded-lg opacity-60" style={dotGridBackground} aria-hidden="true" />
-        <h2 className="mt-4 font-serif text-base font-medium text-text-primary">Nenhum quadro ainda</h2>
+        <h2 className="mt-4 font-sans text-base font-semibold text-text-primary">Nenhum quadro ainda</h2>
         <button
           type="button"
           onClick={onCreate}
