@@ -9,6 +9,10 @@ import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
 import type { NotebookExportManifest } from "../features/notebooks/notebookExportHtml";
+// Formato do conteudo do Quadro (engine Konva). canvasScene.ts nao importa nada
+// do projeto, entao nao ha risco de ciclo; reusamos a string canonica para o
+// INSERT nao divergir do parser.
+import { emptyCanvasContentJson } from "../features/canvases/canvasScene";
 
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
@@ -1038,10 +1042,13 @@ export async function listCanvases(collectionId: string): Promise<Canvas[]> {
 
 export async function createCanvas(collectionId: string, title = "Quadro sem título"): Promise<Canvas> {
   const database = await getDatabase();
-  const insertResult = await database.execute("INSERT INTO canvases (collection_id, title) VALUES ($1, $2)", [
-    collectionId,
-    title,
-  ]);
+  // Passa o content explicito no formato Konva vazio em vez de herdar o DEFAULT
+  // antigo da coluna (formato Excalidraw, ainda na migration 0012). Assim um
+  // Quadro novo ja nasce no formato atual e nao depende do fallback do parser.
+  const insertResult = await database.execute(
+    "INSERT INTO canvases (collection_id, title, content) VALUES ($1, $2, $3)",
+    [collectionId, title, emptyCanvasContentJson],
+  );
   const canvasId = insertResult.lastInsertId;
 
   if (typeof canvasId !== "number") {
@@ -1077,9 +1084,10 @@ export async function moveCanvasToTrash(canvasId: number) {
   await database.execute("UPDATE canvases SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1", [canvasId]);
 }
 
-// Cena do Excalidraw serializada ({elements, appState}, SEM imagens — elas
-// vivem em disco via canvas_files, carregadas pelo comando Rust
-// load_canvas_files).
+// Cena do Quadro serializada no formato Konva (ver canvasScene.ts), SEM imagens
+// — elas vivem em disco via canvas_files, carregadas pelo comando Rust
+// load_canvas_files. Conteudo antigo do Excalidraw ainda pode existir no banco;
+// o parseCanvasContent no frontend abre esses casos como cena vazia.
 export async function getCanvasContent(canvasId: number): Promise<string> {
   const database = await getDatabase();
   const [row] = await database.select<Array<{ content: string }>>("SELECT content FROM canvases WHERE id = $1", [
