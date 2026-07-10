@@ -11,7 +11,7 @@
 
 Athenaeum reúne, num único app de desktop, uma biblioteca pessoal de
 PDFs, um leitor com anotações, cadernos de estudo com editor rico,
-quadros visuais baseados em Excalidraw e configurações de aparência e
+quadros visuais com canvas próprio baseado em Konva e configurações de aparência e
 comportamento. Tudo é organizado por coleções, tags e busca local, e
 persistido num banco SQLite no próprio computador — sem conta, nuvem ou
 servidor remoto.
@@ -58,8 +58,8 @@ sem depender do app.
 
 ### Quadros
 
-Quadros usam o [Excalidraw](https://excalidraw.com/) para desenho livre
-e diagramação, com os arquivos armazenados localmente junto ao restante
+Quadros usam [Konva](https://konvajs.org/) com uma interface própria do
+Athenaeum. Os arquivos permanecem armazenados localmente junto ao restante
 dos dados do app.
 
 ### Ajustes
@@ -81,7 +81,7 @@ e variante do ícone do app.
 | Frontend | React 18 + TypeScript + Tailwind CSS |
 | Renderização de PDF | pdf.js |
 | Banco de dados | SQLite (FTS5) via `tauri-plugin-sql` |
-| Quadros | Excalidraw |
+| Quadros | Konva + react-konva |
 | Equações | KaTeX |
 | Testes | Vitest |
 | Build | Vite |
@@ -106,7 +106,7 @@ implementação. Exemplos:
   etapas pensada para nunca deixar arquivo órfão se algo falhar no meio
   do caminho.
 - **Arquivos de Quadros** (`save_canvas_file` / `load_canvas_files`) —
-  leitura e escrita dos arquivos Excalidraw no storage do app.
+  leitura e escrita dos arquivos binários dos Quadros no storage do app.
 - **Imagens e anexos de Cadernos** (`save_notebook_asset`,
   `save_notebook_file_attachment`, `open_notebook_file_attachment`,
   `delete_notebook_file_attachment`) — imagens e anexos ficam no disco,
@@ -225,7 +225,7 @@ src/
 │   ├── library/          # Biblioteca: cards, importação, toolbar, detalhes
 │   ├── reader/           # Leitor de PDF, anotações, painéis laterais
 │   ├── notebooks/        # Cadernos: editor rico, páginas, exportação HTML
-│   ├── canvases/         # Quadros baseados em Excalidraw
+│   ├── canvases/         # Quadros com canvas Konva e interface própria
 │   └── settings/         # Interface de configurações
 ├── lib/                  # Acesso ao SQLite e utilitários
 ├── styles/               # Design tokens e CSS global

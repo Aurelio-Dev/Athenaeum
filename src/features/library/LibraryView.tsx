@@ -63,8 +63,8 @@ import { LibraryToolbar } from "./LibraryToolbar";
 import { RenameLibraryItemModal } from "./RenameLibraryItemModal";
 
 const ReaderModal = lazy(() => import("./ReaderModal").then((module) => ({ default: module.ReaderModal })));
-// Lazy pelo mesmo motivo do leitor: o Excalidraw e pesado e so entra no
-// bundle quando o primeiro quadro for aberto.
+// A superficie grafica do Quadro so entra no bundle quando o primeiro painel
+// desse tipo for aberto.
 const CanvasPanel = lazy(() => import("../canvases/CanvasPanel").then((module) => ({ default: module.CanvasPanel })));
 
 type PendingConfirmation =
@@ -968,8 +968,7 @@ export function LibraryView() {
           />
         ))}
 
-      {/* Paineis de quadro: editor Excalidraw (lazy — o chunk so carrega ao
-          abrir o primeiro quadro). */}
+      {/* Paineis de quadro: superficie Konva em lazy-load. */}
       {floatingPanelsList
         .filter((floatingPanel) => floatingPanel.type === "canvas")
         .map((floatingPanel) => (

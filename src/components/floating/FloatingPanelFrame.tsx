@@ -24,11 +24,8 @@ type FloatingPanelFrameProps = {
   onFocusPanel?: () => void;
   onResize?: (size: { width: number; height: number }) => void;
   // Disparado UMA vez ao fim de um arrasto que moveu o painel de verdade
-  // (clique parado no header nao conta). Uso principal: o painel de Quadro
-  // chama excalidrawAPI.refresh() aqui — o Excalidraw cacheia a posicao do
-  // container e nao percebe mudancas de left/top (so de tamanho, via
-  // ResizeObserver proprio), entao sem isso o mapeamento cursor->cena fica
-  // defasado pelo delta do arrasto.
+  // (clique parado no header nao conta). Superficies graficas usam este ponto
+  // para sincronizar dimensoes e redesenhar depois da mudanca de geometria.
   onMoveEnd?: () => void;
   children: ReactNode;
 };
@@ -159,14 +156,9 @@ export function FloatingPanelFrame({ panel, width, height, minWidth, minHeight, 
         zIndex: panel.zIndex,
       }}
       data-floating-panel-id={panel.id}
-      // Capture de POINTERDOWN (nao mousedown): qualquer clique/toque dentro
-      // do painel — header, corpo, botoes, canvas — traz ele para o topo da
-      // pilha antes do evento seguir para o alvo, como uma janela de SO.
-      //
-      // pointerdown de proposito: o Excalidraw chama preventDefault() no
-      // pointerdown do canvas, o que SUPRIME os eventos de mouse de
-      // compatibilidade (mousedown nunca dispara la) — com mousedown, o corpo
-      // inteiro do Quadro ficava sem foco. pointerdown sempre dispara.
+      // Capture de pointerdown: qualquer interacao por mouse, caneta ou toque
+      // dentro do painel — header, corpo, botoes ou canvas — traz ele para o
+      // topo da pilha antes do evento seguir para o alvo, como uma janela de SO.
       //
       // Sem excecao para botoes/inputs: subir o zIndex nao recria o no DOM
       // (o React so atualiza o style do aside), entao o click do controle

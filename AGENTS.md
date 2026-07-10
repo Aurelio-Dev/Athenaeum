@@ -427,7 +427,7 @@ src/
   helpers.
 
 - `src/features/canvases/`:
-  Excalidraw-based canvases.
+  Konva-based canvases with application-owned UI.
 
 - `src/features/settings/`:
   settings interface.
