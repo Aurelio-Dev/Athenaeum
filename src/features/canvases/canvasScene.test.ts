@@ -16,6 +16,7 @@ describe("parseCanvasContent", () => {
           y: 20,
           width: 100,
           height: 60,
+          points: [],
           rotation: 0,
           stroke: "#2C1A10",
           strokeWidth: 2,
@@ -25,6 +26,53 @@ describe("parseCanvasContent", () => {
     };
 
     expect(parseCanvasContent(JSON.stringify(scene))).toEqual(scene);
+  });
+
+  it("aceita os tipos novos e preserva points nas formas direcionais", () => {
+    const scene: CanvasSceneContent = {
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
+        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
+        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
+        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
+      ],
+    };
+
+    expect(parseCanvasContent(JSON.stringify(scene))).toEqual(scene);
+  });
+
+  it("descarta seta/linha sem os dois pontos e descarta points invalidos", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "arrow-sem-pontos", type: "arrow", x: 0, y: 0, width: 10, height: 10 },
+        { id: "line-um-ponto", type: "line", x: 0, y: 0, width: 10, height: 10, points: [0, 0] },
+        { id: "rect-points-ruins", type: "rect", x: 0, y: 0, width: 10, height: 10, points: [1, "x", 3] },
+      ],
+    });
+
+    const result = parseCanvasContent(raw);
+    // As duas direcionais sao descartadas; o rect fica com points saneado para [].
+    expect(result.shapes).toEqual([
+      {
+        id: "rect-points-ruins",
+        type: "rect",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        points: [],
+        rotation: 0,
+        stroke: "#2C1A10",
+        strokeWidth: 2,
+        fill: null,
+      },
+    ]);
   });
 
   it("retorna cena vazia para string vazia (JSON.parse falha)", () => {
@@ -66,7 +114,7 @@ describe("parseCanvasContent", () => {
         { id: "sem-tipo", x: 0, y: 0, width: 10, height: 10 },
         { type: "rect", x: 0, y: 0, width: 10, height: 10 }, // sem id
         { id: "geometria-ruim", type: "rect", x: "a", y: 0, width: 10, height: 10 },
-        { id: "outra-forma", type: "ellipse", x: 0, y: 0, width: 10, height: 10 },
+        { id: "tipo-desconhecido", type: "star", x: 0, y: 0, width: 10, height: 10 },
         "nao e objeto",
       ],
     });
@@ -80,6 +128,7 @@ describe("parseCanvasContent", () => {
         y: 0,
         width: 10,
         height: 10,
+        points: [],
         rotation: 0,
         stroke: "#2C1A10",
         strokeWidth: 2,

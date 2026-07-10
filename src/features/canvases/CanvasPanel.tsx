@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Layer, Rect, Shape, Stage } from "react-konva";
+import { Arrow, Ellipse, Layer, Line, Rect, Shape, Stage } from "react-konva";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
 import { getCanvasContent, saveCanvasContent } from "../../lib/database";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
-import { parseCanvasContent, type CanvasSceneContent, type CanvasShape } from "./canvasScene";
+import { parseCanvasContent, type CanvasSceneContent, type CanvasShape, type CanvasShapeType } from "./canvasScene";
+import { CanvasToolbar, isShapeTool, type CanvasTool } from "./CanvasToolbar";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
 
 const collapsedHeight = 42;
@@ -18,19 +19,119 @@ const zoomStep = 1.08;
 const minimumZoom = 0.25;
 const maximumZoom = 4;
 
-// Ferramentas temporarias da Fase 2 (ver comentario no componente): "select"
-// para escolher/mover e "rect" para desenhar retangulos.
-type CanvasMode = "select" | "rect";
-// Retangulo em construcao durante o arrasto no modo "rect".
-type DraftRect = { x: number; y: number; width: number; height: number };
+type Point = { x: number; y: number };
+// Forma em construcao durante o arrasto: guarda o tipo da ferramenta e os dois
+// pontos (inicio/atual) em coordenadas do mundo do Quadro.
+type DraftShape = { type: CanvasShapeType; start: Point; current: Point };
+// Geometria resolvida de uma forma — o suficiente para renderiza-la.
+type ShapeGeometry = { x: number; y: number; width: number; height: number; points: number[] };
 
 const shapeDefaultStroke = "#2C1A10";
 const shapeDefaultStrokeWidth = 2;
 // Realce visual (apenas em runtime) da forma selecionada — nao altera o stroke
 // persistido da forma.
 const selectionStroke = "#B0592B";
-// Abaixo disso trata-se de um clique sem arrasto: nao cria retangulo degenerado.
+// Abaixo disso trata-se de um clique sem arrasto: nao cria forma degenerada.
 const minShapeSize = 3;
+// Aumenta a area clicavel das formas direcionais finas (seta/linha).
+const directionalHitStrokeWidth = 12;
+
+function diamondPoints(width: number, height: number): number[] {
+  // Losango inscrito na caixa width x height, em coordenadas locais (relativas a x/y).
+  return [width / 2, 0, width, height / 2, width / 2, height, 0, height / 2];
+}
+
+// Resolve a geometria de uma forma a partir do arrasto (inicio -> atual). Retorna
+// null quando o arrasto e pequeno demais (clique sem desenho real).
+function geometryFromDrag(type: CanvasShapeType, start: Point, current: Point): ShapeGeometry | null {
+  const dx = current.x - start.x;
+  const dy = current.y - start.y;
+
+  // Seta/linha sao direcionais: ancoram no inicio e guardam os pontos relativos
+  // [0, 0, dx, dy]. Inicio -> fim importa (a ponta da seta fica no fim).
+  if (type === "arrow" || type === "line") {
+    if (Math.abs(dx) < minShapeSize && Math.abs(dy) < minShapeSize) {
+      return null;
+    }
+    return { x: start.x, y: start.y, width: Math.abs(dx), height: Math.abs(dy), points: [0, 0, dx, dy] };
+  }
+
+  // Demais formas usam caixa delimitadora normalizada (arrasto em qualquer direcao).
+  const width = Math.abs(dx);
+  const height = Math.abs(dy);
+  if (width < minShapeSize || height < minShapeSize) {
+    return null;
+  }
+  return { x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width, height, points: [] };
+}
+
+type RenderShapeOptions = {
+  key?: string;
+  strokeColor: string;
+  strokeWidth: number;
+  fill: string | null;
+  rotation: number;
+  dashed?: boolean;
+  draggable?: boolean;
+  onMouseDown?: (event: Konva.KonvaEventObject<MouseEvent>) => void;
+  onDragEnd?: (event: Konva.KonvaEventObject<DragEvent>) => void;
+};
+
+// Renderiza qualquer tipo de forma como o node Konva correspondente. Fonte unica
+// de "tipo -> geometria na tela", usada tanto pelas formas persistidas quanto
+// pelo preview tracejado durante o desenho. As coordenadas sao escolhidas para
+// que node.x()/node.y() === geometry.x/geometry.y em todos os tipos, mantendo o
+// mesmo handler de arrasto generico da Fase 2.
+function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, options: RenderShapeOptions): JSX.Element {
+  const { x, y, width, height, points } = geometry;
+
+  const common = {
+    x,
+    y,
+    rotation: options.rotation,
+    stroke: options.strokeColor,
+    strokeWidth: options.strokeWidth,
+    perfectDrawEnabled: false,
+    ...(options.dashed
+      ? { dash: [6, 4], listening: false }
+      : { draggable: options.draggable, onMouseDown: options.onMouseDown, onDragEnd: options.onDragEnd }),
+  };
+
+  const fill = options.fill ?? undefined;
+
+  switch (type) {
+    case "rect":
+      return <Rect key={options.key} {...common} width={width} height={height} fill={fill} />;
+    case "diamond":
+      return <Line key={options.key} {...common} points={diamondPoints(width, height)} closed fill={fill} />;
+    case "ellipse":
+      // offset negativo desloca a origem para o canto superior-esquerdo da caixa,
+      // deixando node.x()/node.y() no mesmo ponto que as demais formas.
+      return (
+        <Ellipse
+          key={options.key}
+          {...common}
+          radiusX={width / 2}
+          radiusY={height / 2}
+          offsetX={-width / 2}
+          offsetY={-height / 2}
+          fill={fill}
+        />
+      );
+    case "arrow":
+      // Ponta preenchida com a cor do traco (o fill persistido continua null).
+      return (
+        <Arrow key={options.key} {...common} points={points} fill={options.strokeColor} hitStrokeWidth={directionalHitStrokeWidth} />
+      );
+    case "line":
+      return <Line key={options.key} {...common} points={points} hitStrokeWidth={directionalHitStrokeWidth} />;
+    default: {
+      // Garante exaustividade: um tipo novo sem case quebra a compilacao aqui.
+      const exhaustive: never = type;
+      return exhaustive;
+    }
+  }
+}
 
 function getMaximizedPanelSize() {
   return {
@@ -78,17 +179,6 @@ function toCanvasPoint(stage: Konva.Stage): { x: number; y: number } | null {
   return {
     x: (pointer.x - stage.x()) / scale,
     y: (pointer.y - stage.y()) / scale,
-  };
-}
-
-// Normaliza um retangulo definido por dois pontos para ter largura/altura
-// positivas (o usuario pode arrastar em qualquer direcao).
-function normalizeDraft(start: { x: number; y: number }, current: { x: number; y: number }): DraftRect {
-  return {
-    x: Math.min(start.x, current.x),
-    y: Math.min(start.y, current.y),
-    width: Math.abs(current.x - start.x),
-    height: Math.abs(current.y - start.y),
   };
 }
 
@@ -206,13 +296,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const spacePressedRef = useRef(false);
   const isPanningRef = useRef(false);
 
-  // INTERACAO TEMPORARIA (Fase 2): dois modos (selecionar/retangulo) com atalhos
-  // V/R e um indicador minimo no canto. Tudo isto sera substituido pela
-  // QuadroToolbar em pilula na Fase 3 (ferramentas completas, cor/traco/fill).
+  // Formas do Quadro e ferramenta ativa. A ferramenta e controlada pela
+  // CanvasToolbar (pilula inferior); "select"/"pan" nao sao persistidos.
   const [shapes, setShapes] = useState<CanvasShape[]>([]);
-  const [mode, setMode] = useState<CanvasMode>("select");
+  const [tool, setTool] = useState<CanvasTool>("select");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draftRect, setDraftRect] = useState<DraftRect | null>(null);
+  const [draft, setDraft] = useState<DraftShape | null>(null);
 
   // Refs espelhando o estado atual para os listeners de window/Konva e o save
   // lerem o valor mais recente sem recriar closures/listeners a cada mudanca.
@@ -220,8 +309,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   shapesRef.current = shapes;
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
+  // Ferramenta anterior ao entrar no modo Mover, para Esc / clicar de novo voltar.
+  const previousToolRef = useRef<CanvasTool>("select");
   // Transform do stage (x/y/escala). Espelhado num ref porque o Konva o altera
   // imperativamente (zoom/pan) fora do estado React; e a fonte do que serializar
   // e do que reaplicar quando o Stage remonta (ex.: recolher e reexpandir).
@@ -276,10 +367,25 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     stage.batchDraw();
   }, []);
 
-  const setCanvasCursor = useCallback((cursor: "default" | "grab" | "grabbing") => {
+  const setCanvasCursor = useCallback((cursor: "default" | "grab" | "grabbing" | "crosshair") => {
     if (canvasContainerRef.current) {
       canvasContainerRef.current.style.cursor = cursor;
     }
+  }, []);
+
+  // Cursor coerente com a ferramenta/estado atuais: grabbing durante o pan, grab
+  // em modo Mover ou Espaco, crosshair ao desenhar uma forma, default no resto.
+  const cursorForCurrentTool = useCallback((): "default" | "grab" | "grabbing" | "crosshair" => {
+    if (isPanningRef.current) {
+      return "grabbing";
+    }
+    if (spacePressedRef.current || toolRef.current === "pan") {
+      return "grab";
+    }
+    if (isShapeTool(toolRef.current)) {
+      return "crosshair";
+    }
+    return "default";
   }, []);
 
   const syncStageSize = useCallback(() => {
@@ -330,14 +436,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     }
     stage?.draggable(false);
     stage?.batchDraw();
-    setCanvasCursor(spacePressedRef.current && pointerInsideRef.current ? "grab" : "default");
+    setCanvasCursor(pointerInsideRef.current ? cursorForCurrentTool() : "default");
 
     // Persiste a nova posicao do stage apos um pan efetivo.
     if (wasPanning && stage) {
       stageTransformRef.current = { x: stage.x(), y: stage.y(), scale: stage.scaleX() || 1 };
       scheduleSave();
     }
-  }, [scheduleSave, setCanvasCursor]);
+  }, [cursorForCurrentTool, scheduleSave, setCanvasCursor]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -347,7 +453,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       event.preventDefault();
       spacePressedRef.current = true;
-      setCanvasCursor(isPanningRef.current ? "grabbing" : "grab");
+      setCanvasCursor(cursorForCurrentTool());
     }
 
     function handleKeyUp(event: KeyboardEvent) {
@@ -357,7 +463,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       event.preventDefault();
       spacePressedRef.current = false;
-      setCanvasCursor(isPanningRef.current ? "grabbing" : "default");
+      setCanvasCursor(cursorForCurrentTool());
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -370,7 +476,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       window.removeEventListener("blur", finishPan);
       finishPan();
     };
-  }, [finishPan, setCanvasCursor]);
+  }, [cursorForCurrentTool, finishPan, setCanvasCursor]);
 
   const handleWheel = useCallback((event: Konva.KonvaEventObject<WheelEvent>) => {
     event.evt.preventDefault();
@@ -408,7 +514,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const handlePanStart = useCallback((event: Konva.KonvaEventObject<MouseEvent>) => {
     const canPanWithMiddleButton = event.evt.button === 1;
     const canPanWithSpace = event.evt.button === 0 && spacePressedRef.current;
-    if (!canPanWithMiddleButton && !canPanWithSpace) {
+    // Ferramenta Mover: arrastar com o botao esquerdo faz pan sem segurar Espaco.
+    const canPanWithTool = event.evt.button === 0 && toolRef.current === "pan";
+    if (!canPanWithMiddleButton && !canPanWithSpace && !canPanWithTool) {
       return;
     }
 
@@ -424,10 +532,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     stage.startDrag(event.evt);
   }, [setCanvasCursor]);
 
-  // Mouse down do Stage: pan tem prioridade; senao inicia o rascunho do
-  // retangulo (modo "rect") ou limpa a selecao ao clicar no vazio (modo
-  // "select"). Cliques sobre um retangulo sao tratados no proprio Rect (abaixo),
-  // que interrompe a propagacao para este handler.
+  // Mouse down do Stage: pan tem prioridade; senao inicia o rascunho de uma forma
+  // (ferramenta de forma ativa) ou limpa a selecao ao clicar no vazio (Selecionar).
+  // Cliques sobre uma forma sao tratados no proprio node (abaixo), que interrompe
+  // a propagacao para este handler.
   const handleStageMouseDown = useCallback(
     (event: Konva.KonvaEventObject<MouseEvent>) => {
       handlePanStart(event);
@@ -444,18 +552,19 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         return;
       }
 
-      if (modeRef.current === "rect") {
+      const activeTool = toolRef.current;
+      if (isShapeTool(activeTool)) {
         const point = toCanvasPoint(stage);
         if (!point) {
           return;
         }
         drawStartRef.current = point;
-        setDraftRect({ x: point.x, y: point.y, width: 0, height: 0 });
+        setDraft({ type: activeTool, start: point, current: point });
         setSelectedId(null);
         return;
       }
 
-      // Modo selecionar: clique no vazio (target === o proprio stage) deseleciona.
+      // Selecionar: clique no vazio (target === o proprio stage) deseleciona.
       if (event.target === stage) {
         setSelectedId(null);
       }
@@ -464,7 +573,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   );
 
   const handleStageMouseMove = useCallback(() => {
-    if (modeRef.current !== "rect" || !drawStartRef.current) {
+    if (!isShapeTool(toolRef.current) || !drawStartRef.current) {
       return;
     }
 
@@ -477,7 +586,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     if (!point) {
       return;
     }
-    setDraftRect(normalizeDraft(drawStartRef.current, point));
+    setDraft((current) => (current ? { ...current, current: point } : current));
   }, []);
 
   const handleStageMouseUp = useCallback(() => {
@@ -487,22 +596,28 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       return;
     }
 
-    const draft = draftRect;
+    const currentDraft = draft;
     drawStartRef.current = null;
-    setDraftRect(null);
+    setDraft(null);
 
-    // Clique sem arrasto real: nao cria retangulo.
-    if (!draft || draft.width < minShapeSize || draft.height < minShapeSize) {
+    if (!currentDraft) {
+      return;
+    }
+
+    const geometry = geometryFromDrag(currentDraft.type, currentDraft.start, currentDraft.current);
+    // Clique sem arrasto real: nao cria forma.
+    if (!geometry) {
       return;
     }
 
     const newShape: CanvasShape = {
       id: createShapeId(),
-      type: "rect",
-      x: draft.x,
-      y: draft.y,
-      width: draft.width,
-      height: draft.height,
+      type: currentDraft.type,
+      x: geometry.x,
+      y: geometry.y,
+      width: geometry.width,
+      height: geometry.height,
+      points: geometry.points,
       rotation: 0,
       stroke: shapeDefaultStroke,
       strokeWidth: shapeDefaultStrokeWidth,
@@ -511,7 +626,18 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     setShapes((current) => [...current, newShape]);
     setSelectedId(newShape.id);
     scheduleSave();
-  }, [draftRect, finishPan, scheduleSave]);
+  }, [draft, finishPan, scheduleSave]);
+
+  // Alterna o modo Mover (pan). Clicar de novo (ou Esc) volta a ferramenta anterior.
+  const togglePan = useCallback(() => {
+    setTool((current) => {
+      if (current === "pan") {
+        return previousToolRef.current;
+      }
+      previousToolRef.current = current;
+      return "pan";
+    });
+  }, []);
 
   // Move um retangulo no modo selecionar: persiste a nova posicao ao soltar.
   const handleShapeDragEnd = useCallback(
@@ -615,23 +741,31 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     }
   }, [applyStageTransform, isCollapsed]);
 
-  // Atalhos temporarios de ferramenta (Fase 2): V = selecionar, R = retangulo,
+  // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Esc sai do modo
+  // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo,
   // Delete/Backspace = remover a selecao. Gated pelo ponteiro dentro do Quadro
-  // para nao sequestrar o teclado de outros paineis. Some junto com a interacao
-  // temporaria quando a QuadroToolbar chegar na Fase 3.
+  // para nao sequestrar o teclado de outros paineis.
   useEffect(() => {
     function handleToolKeys(event: KeyboardEvent) {
+      // Esc sai do Mover mesmo com o ponteiro fora (e so um toggle de modo, seguro).
+      if (event.key === "Escape") {
+        if (toolRef.current === "pan") {
+          setTool(previousToolRef.current);
+        }
+        return;
+      }
+
       if (!pointerInsideRef.current || isEditableTarget(event.target)) {
         return;
       }
 
       if (event.key === "v" || event.key === "V") {
-        setMode("select");
+        setTool("select");
         return;
       }
 
       if (event.key === "r" || event.key === "R") {
-        setMode("rect");
+        setTool("rect");
         return;
       }
 
@@ -650,6 +784,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     window.addEventListener("keydown", handleToolKeys);
     return () => window.removeEventListener("keydown", handleToolKeys);
   }, [scheduleSave]);
+
+  // Mantem o cursor coerente ao trocar de ferramenta enquanto o ponteiro esta
+  // sobre o Quadro (ex.: selecionar uma forma vira crosshair; Mover vira grab).
+  useEffect(() => {
+    if (pointerInsideRef.current) {
+      setCanvasCursor(cursorForCurrentTool());
+    }
+  }, [cursorForCurrentTool, setCanvasCursor, tool]);
 
   // Flush no unmount sem fechamento explicito (ex.: navegacao que desmonta o
   // painel). Roda o mesmo save do fechamento, sem onClose. useLayoutEffect para
@@ -741,7 +883,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           style={{ backgroundColor: canvasBackground }}
           onPointerEnter={() => {
             pointerInsideRef.current = true;
-            setCanvasCursor(spacePressedRef.current ? "grab" : "default");
+            setCanvasCursor(cursorForCurrentTool());
           }}
           onPointerLeave={() => {
             pointerInsideRef.current = false;
@@ -750,45 +892,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             }
           }}
         >
-          {/* INDICADOR/CONTROLE TEMPORARIO (Fase 2): mostra o modo atual e
-              permite troca-lo por clique, alem dos atalhos V/R. Sera substituido
-              pela QuadroToolbar em pilula na Fase 3. */}
-          <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] p-1 shadow-md">
-            <button
-              type="button"
-              aria-label="Modo selecionar (V)"
-              title="Selecionar (V)"
-              aria-pressed={mode === "select"}
-              onClick={() => setMode("select")}
-              className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
-                mode === "select"
-                  ? "bg-[var(--floating-header-hover-bg)] text-[var(--floating-header-text)]"
-                  : "text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
-              }`}
-            >
-              V
-            </button>
-            <button
-              type="button"
-              aria-label="Modo retangulo (R)"
-              title="Retangulo (R)"
-              aria-pressed={mode === "rect"}
-              onClick={() => setMode("rect")}
-              className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
-                mode === "rect"
-                  ? "bg-[var(--floating-header-hover-bg)] text-[var(--floating-header-text)]"
-                  : "text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
-              }`}
-            >
-              R
-            </button>
-          </div>
           <Stage
             ref={stageRef}
             width={stageSize.width}
             height={stageSize.height}
             role="application"
-            title="Quadro: V seleciona, R desenha retangulo; roda do mouse faz zoom e o botao do meio ou Espaco faz pan"
+            title="Quadro: use a barra inferior para escolher a ferramenta; roda do mouse faz zoom e o botao do meio ou Espaco faz pan"
             onWheel={handleWheel}
             onMouseDown={handleStageMouseDown}
             onMouseMove={handleStageMouseMove}
@@ -797,45 +906,48 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           >
             <Layer>
               <CanvasGrid />
-              {shapes.map((shape) => (
-                <Rect
-                  key={shape.id}
-                  x={shape.x}
-                  y={shape.y}
-                  width={shape.width}
-                  height={shape.height}
-                  rotation={shape.rotation}
-                  stroke={shape.id === selectedId ? selectionStroke : shape.stroke}
-                  strokeWidth={shape.strokeWidth}
-                  fill={shape.fill ?? undefined}
-                  draggable={mode === "select"}
-                  perfectDrawEnabled={false}
-                  onMouseDown={(event) => {
-                    if (modeRef.current !== "select") {
-                      return;
-                    }
-                    // Seleciona e impede o handler do stage (pan/deselecao) de rodar.
-                    event.cancelBubble = true;
-                    setSelectedId(shape.id);
-                  }}
-                  onDragEnd={(event) => handleShapeDragEnd(shape.id, event)}
-                />
-              ))}
-              {draftRect ? (
-                <Rect
-                  x={draftRect.x}
-                  y={draftRect.y}
-                  width={draftRect.width}
-                  height={draftRect.height}
-                  stroke={shapeDefaultStroke}
-                  strokeWidth={shapeDefaultStrokeWidth}
-                  dash={[6, 4]}
-                  listening={false}
-                  perfectDrawEnabled={false}
-                />
-              ) : null}
+              {shapes.map((shape) =>
+                renderCanvasShape(
+                  shape.type,
+                  { x: shape.x, y: shape.y, width: shape.width, height: shape.height, points: shape.points },
+                  {
+                    key: shape.id,
+                    strokeColor: shape.id === selectedId ? selectionStroke : shape.stroke,
+                    strokeWidth: shape.strokeWidth,
+                    fill: shape.fill,
+                    rotation: shape.rotation,
+                    draggable: tool === "select",
+                    onMouseDown: (event) => {
+                      if (toolRef.current !== "select") {
+                        return;
+                      }
+                      // Seleciona e impede o handler do stage (pan/deselecao) de rodar.
+                      event.cancelBubble = true;
+                      setSelectedId(shape.id);
+                    },
+                    onDragEnd: (event) => handleShapeDragEnd(shape.id, event),
+                  },
+                ),
+              )}
+              {draft
+                ? (() => {
+                    // Preview tracejado durante o desenho: mesma geometria/tipo da
+                    // forma final, so que sem interacao e com traco pontilhado.
+                    const geometry = geometryFromDrag(draft.type, draft.start, draft.current);
+                    return geometry
+                      ? renderCanvasShape(draft.type, geometry, {
+                          strokeColor: shapeDefaultStroke,
+                          strokeWidth: shapeDefaultStrokeWidth,
+                          fill: null,
+                          rotation: 0,
+                          dashed: true,
+                        })
+                      : null;
+                  })()
+                : null}
             </Layer>
           </Stage>
+          <CanvasToolbar tool={tool} onSelectTool={setTool} onTogglePan={togglePan} />
         </div>
       )}
     </FloatingPanelFrame>

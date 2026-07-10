@@ -9,13 +9,22 @@
 // abaixo trata o conteudo antigo (e qualquer conteudo corrompido) abrindo uma
 // cena vazia, sem lancar erro.
 
+// Tipos de forma suportados. Todos compartilham os mesmos campos (sem campos
+// exclusivos por tipo por enquanto): as formas de caixa (rect, diamond, ellipse)
+// usam x/y/width/height; as direcionais (arrow, line) usam x/y como ancora e
+// points ([x1, y1, x2, y2]) relativos a x/y.
+export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line";
+
 export type CanvasShape = {
   id: string;
-  type: "rect"; // so "rect" nesta fase — os outros tipos entram na Fase 3
+  type: CanvasShapeType;
   x: number;
   y: number;
   width: number;
   height: number;
+  // Pontos relativos a (x, y). Usado por "arrow" e "line" ([x1, y1, x2, y2]);
+  // vazio nas formas de caixa (rect, diamond, ellipse), que usam width/height.
+  points: number[];
   rotation: number;
   stroke: string;
   strokeWidth: number;
@@ -57,6 +66,29 @@ function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+const canvasShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "arrow", "line"];
+
+function isCanvasShapeType(value: unknown): value is CanvasShapeType {
+  return typeof value === "string" && (canvasShapeTypes as readonly string[]).includes(value);
+}
+
+// Lista de pontos [x1, y1, x2, y2, ...]. Qualquer elemento invalido descarta a
+// lista inteira (all-or-nothing) para nao renderizar uma geometria parcial.
+function parsePoints(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const points: number[] = [];
+  for (const item of value) {
+    if (typeof item !== "number" || !Number.isFinite(item)) {
+      return [];
+    }
+    points.push(item);
+  }
+  return points;
+}
+
 function parseStage(value: unknown): CanvasSceneContent["stage"] {
   if (!isRecord(value)) {
     return { x: 0, y: 0, scale: 1 };
@@ -72,13 +104,14 @@ function parseStage(value: unknown): CanvasSceneContent["stage"] {
 }
 
 // Valida uma forma individual. Retorna null quando faltam campos essenciais
-// (id, geometria numerica) para que a cena resultante seja sempre renderizavel.
+// (id, tipo conhecido, geometria numerica) para que a cena resultante seja
+// sempre renderizavel.
 function parseShape(value: unknown): CanvasShape | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  if (value.type !== "rect") {
+  if (!isCanvasShapeType(value.type)) {
     return null;
   }
 
@@ -95,13 +128,22 @@ function parseShape(value: unknown): CanvasShape | null {
     return null;
   }
 
+  const points = parsePoints(value.points);
+
+  // Seta e linha sao direcionais: sem os dois pontos ([x1, y1, x2, y2]) a forma
+  // e degenerada e nao teria o que renderizar.
+  if ((value.type === "arrow" || value.type === "line") && points.length < 4) {
+    return null;
+  }
+
   return {
     id: value.id,
-    type: "rect",
+    type: value.type,
     x,
     y,
     width,
     height,
+    points,
     rotation: finiteNumber(value.rotation, 0),
     stroke: typeof value.stroke === "string" ? value.stroke : defaultStroke,
     strokeWidth: finiteNumber(value.strokeWidth, defaultStrokeWidth),
