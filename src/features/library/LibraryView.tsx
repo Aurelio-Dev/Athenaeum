@@ -810,6 +810,7 @@ export function LibraryView() {
               <EmptyState
                 illustration={{ src: emptyLibraryIllustration, alt: "" }}
                 title="Nenhum documento aqui"
+                titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
@@ -817,6 +818,7 @@ export function LibraryView() {
               <EmptyState
                 illustration={{ src: emptyLibraryIllustration, alt: "" }}
                 title="Nenhum documento aqui"
+                titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
