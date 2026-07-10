@@ -43,6 +43,22 @@ export type CanvasSceneContent = {
 const defaultStroke = "#2C1A10";
 const defaultStrokeWidth = 2;
 
+// Id unico de forma. randomUUID existe no WebView do Tauri e no Node dos
+// testes; fallback defensivo por seguranca.
+export function createShapeId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `shape-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Losango inscrito na caixa width x height, em coordenadas locais (relativas a
+// x/y). Fonte unica da geometria do losango: usada pelo render (CanvasPanel) e
+// pela amostragem da borracha (canvasEraser).
+export function diamondPoints(width: number, height: number): number[] {
+  return [width / 2, 0, width, height / 2, width / 2, height, 0, height / 2];
+}
+
 // Cena vazia valida. Retornada como fallback seguro sempre que o conteudo
 // persistido nao puder ser interpretado no formato Konva atual.
 export function createEmptyScene(): CanvasSceneContent {

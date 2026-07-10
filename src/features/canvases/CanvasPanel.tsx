@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Arrow, Ellipse, Layer, Line, Rect, Shape, Stage } from "react-konva";
+import { Arrow, Circle, Ellipse, Layer, Line, Rect, Shape, Stage } from "react-konva";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
 import { getCanvasContent, saveCanvasContent } from "../../lib/database";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
-import { parseCanvasContent, type CanvasSceneContent, type CanvasShape, type CanvasShapeType } from "./canvasScene";
+import {
+  createShapeId,
+  diamondPoints,
+  parseCanvasContent,
+  type CanvasSceneContent,
+  type CanvasShape,
+  type CanvasShapeType,
+} from "./canvasScene";
+import { eraseAlongSegment } from "./canvasEraser";
 import { CanvasToolbar, isShapeTool, type CanvasTool } from "./CanvasToolbar";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
 
@@ -41,11 +49,9 @@ const directionalHitStrokeWidth = 12;
 // Distancia minima (em coordenadas do stage) entre pontos capturados do lapis:
 // evita arrays enormes e pontos redundantes em movimento lento.
 const freedrawMinDistance = 3;
-
-function diamondPoints(width: number, height: number): number[] {
-  // Losango inscrito na caixa width x height, em coordenadas locais (relativas a x/y).
-  return [width / 2, 0, width, height / 2, width / 2, height, 0, height / 2];
-}
+// Raio de alcance da borracha, em coordenadas do stage (o circulo indicador
+// escala junto com o zoom, coerente com a area real de apagamento).
+const eraserRadius = 12;
 
 // Resolve a geometria de uma forma a partir do arrasto (inicio -> atual). Retorna
 // null quando o arrasto e pequeno demais (clique sem desenho real).
@@ -203,14 +209,6 @@ function isEditableTarget(target: EventTarget | null) {
   return target.isContentEditable || target.matches("input, textarea, select");
 }
 
-function createShapeId(): string {
-  // randomUUID existe no WebView do Tauri; fallback defensivo por seguranca.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `shape-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 // Converte a posicao do ponteiro (coordenadas de tela do stage) para as
 // coordenadas do "mundo" do Quadro, desfazendo pan e zoom do stage.
 function toCanvasPoint(stage: Konva.Stage): { x: number; y: number } | null {
@@ -346,6 +344,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [tool, setTool] = useState<CanvasTool>("select");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftShape | null>(null);
+  // Posicao do cursor com a Borracha ativa (circulo indicador, nao persistido).
+  const [eraserCursor, setEraserCursor] = useState<Point | null>(null);
 
   // Refs espelhando o estado atual para os listeners de window/Konva e o save
   // lerem o valor mais recente sem recriar closures/listeners a cada mudanca.
@@ -362,6 +362,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // e do que reaplicar quando o Stage remonta (ex.: recolher e reexpandir).
   const stageTransformRef = useRef<{ x: number; y: number; scale: number }>({ x: 0, y: 0, scale: 1 });
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Ultima posicao da borracha durante o gesto (mousedown -> mousemove): cada
+  // tick apaga ao longo do segmento anterior -> atual.
+  const eraserLastPointRef = useRef<Point | null>(null);
   const hasLoadedRef = useRef(false);
   const hasClosedExplicitlyRef = useRef(false);
 
@@ -597,6 +600,18 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       }
 
       const activeTool = toolRef.current;
+      if (activeTool === "eraser") {
+        // Borracha: so guarda a posicao inicial do gesto; o apagamento acontece
+        // em tempo real a cada mousemove (segmento anterior -> atual).
+        const point = toCanvasPoint(stage);
+        if (!point) {
+          return;
+        }
+        eraserLastPointRef.current = point;
+        setSelectedId(null);
+        return;
+      }
+
       if (isShapeTool(activeTool)) {
         const point = toCanvasPoint(stage);
         if (!point) {
@@ -621,7 +636,41 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     [handlePanStart],
   );
 
-  const handleStageMouseMove = useCallback(() => {
+  const handleStageMouseMove = useCallback((event: Konva.KonvaEventObject<MouseEvent>) => {
+    const activeStage = stageRef.current;
+    if (!activeStage) {
+      return;
+    }
+
+    if (toolRef.current === "eraser") {
+      const eraserPoint = toCanvasPoint(activeStage);
+      if (!eraserPoint) {
+        return;
+      }
+      // O circulo indicador segue o cursor mesmo sem o botao pressionado.
+      setEraserCursor(eraserPoint);
+
+      // event.evt.buttons confirma que o botao esquerdo segue pressionado: um
+      // mouseup fora do Stage nao chega ate nos e a borracha "grudaria" ligada.
+      const lastPoint = eraserLastPointRef.current;
+      if (!lastPoint || (event.evt.buttons & 1) !== 1) {
+        eraserLastPointRef.current = null;
+        return;
+      }
+
+      const erased = eraseAlongSegment(shapesRef.current, lastPoint, eraserPoint, eraserRadius);
+      eraserLastPointRef.current = eraserPoint;
+      // eraseAlongSegment devolve a MESMA referencia quando nada foi tocado.
+      if (erased !== shapesRef.current) {
+        // Atualiza o ref imediatamente: dois mousemove podem chegar antes do
+        // proximo render, e o segundo precisa operar sobre o resultado do primeiro.
+        shapesRef.current = erased;
+        setShapes(erased);
+        scheduleSave();
+      }
+      return;
+    }
+
     if (!isShapeTool(toolRef.current) || !drawStartRef.current) {
       return;
     }
@@ -653,10 +702,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     }
 
     setDraft((current) => (current && current.type !== "freedraw" ? { ...current, current: point } : current));
-  }, []);
+  }, [scheduleSave]);
 
   const handleStageMouseUp = useCallback(() => {
     finishPan();
+
+    // Borracha: mouseup so encerra o gesto — a remocao ja aconteceu em tempo
+    // real durante o mousemove.
+    eraserLastPointRef.current = null;
 
     if (!drawStartRef.current) {
       return;
@@ -812,8 +865,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
   // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Esc sai do modo
   // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo, P = lapis,
-  // Delete/Backspace = remover a selecao. Gated pelo ponteiro dentro do Quadro
-  // para nao sequestrar o teclado de outros paineis.
+  // E = borracha, Delete/Backspace = remover a selecao. Gated pelo ponteiro
+  // dentro do Quadro para nao sequestrar o teclado de outros paineis.
   useEffect(() => {
     function handleToolKeys(event: KeyboardEvent) {
       // Esc sai do Mover mesmo com o ponteiro fora (e so um toggle de modo, seguro).
@@ -843,6 +896,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         return;
       }
 
+      if (event.key === "e" || event.key === "E") {
+        setTool("eraser");
+        return;
+      }
+
       if (event.key === "Delete" || event.key === "Backspace") {
         const currentSelected = selectedIdRef.current;
         if (!currentSelected) {
@@ -866,6 +924,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       setCanvasCursor(cursorForCurrentTool());
     }
   }, [cursorForCurrentTool, setCanvasCursor, tool]);
+
+  // Saiu da Borracha: some o circulo indicador e encerra qualquer gesto ativo.
+  useEffect(() => {
+    if (tool !== "eraser") {
+      setEraserCursor(null);
+      eraserLastPointRef.current = null;
+    }
+  }, [tool]);
 
   // Flush no unmount sem fechamento explicito (ex.: navegacao que desmonta o
   // painel). Roda o mesmo save do fechamento, sem onClose. useLayoutEffect para
@@ -961,6 +1027,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           }}
           onPointerLeave={() => {
             pointerInsideRef.current = false;
+            // O indicador da borracha nao deve ficar "congelado" fora do canvas.
+            setEraserCursor(null);
             if (!isPanningRef.current) {
               setCanvasCursor("default");
             }
@@ -1022,6 +1090,19 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                       : null;
                   })()
                 : null}
+              {tool === "eraser" && eraserCursor ? (
+                // Indicador do alcance da borracha (runtime, nao persistido).
+                <Circle
+                  x={eraserCursor.x}
+                  y={eraserCursor.y}
+                  radius={eraserRadius}
+                  stroke={shapeDefaultStroke}
+                  strokeWidth={1}
+                  dash={[4, 4]}
+                  listening={false}
+                  perfectDrawEnabled={false}
+                />
+              ) : null}
             </Layer>
           </Stage>
           <CanvasToolbar tool={tool} onSelectTool={setTool} onTogglePan={togglePan} />

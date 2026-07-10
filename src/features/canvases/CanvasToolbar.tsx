@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import type { CanvasShapeType } from "./canvasScene";
 
 // Vocabulario de ferramentas do Quadro. Alem das formas persistidas
-// (CanvasShapeType), existem os modos nao-persistidos "select" e "pan".
-export type CanvasTool = "select" | "pan" | CanvasShapeType;
+// (CanvasShapeType), existem os modos nao-persistidos "select", "pan" e
+// "eraser" (a borracha remove/corta formas, nao cria).
+export type CanvasTool = "select" | "pan" | "eraser" | CanvasShapeType;
 
 // Guarda de tipo: verdadeiro quando a ferramenta desenha uma forma.
 export function isShapeTool(tool: CanvasTool): tool is CanvasShapeType {
-  return tool !== "select" && tool !== "pan";
+  return tool !== "select" && tool !== "pan" && tool !== "eraser";
 }
 
 // As formas que vivem dentro do popup "Formas". A Linha fica fora (botao proprio
@@ -67,6 +68,16 @@ function PencilIcon({ size = 20 }: IconProps) {
   return (
     <svg width={size} height={size} {...iconBase}>
       <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+
+function EraserIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} {...iconBase}>
+      <path d="m7 21-4.3-4.3a1.5 1.5 0 0 1 0-2.1l9.6-9.6a1.5 1.5 0 0 1 2.1 0l5.6 5.6a1.5 1.5 0 0 1 0 2.1L13 19.6" />
+      <path d="M21 21H7" />
+      <path d="m5.5 11.5 7 7" />
     </svg>
   );
 }
@@ -232,6 +243,9 @@ export function CanvasToolbar({ tool, onSelectTool, onTogglePan }: CanvasToolbar
 
       <ToolButton label="Lápis" active={tool === "freedraw"} onClick={() => onSelectTool("freedraw")}>
         <PencilIcon />
+      </ToolButton>
+      <ToolButton label="Borracha" active={tool === "eraser"} onClick={() => onSelectTool("eraser")}>
+        <EraserIcon />
       </ToolButton>
       <ToolButton label="Linha" active={tool === "line"} onClick={() => onSelectTool("line")}>
         <LineIcon />
