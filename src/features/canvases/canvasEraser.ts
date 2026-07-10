@@ -79,6 +79,15 @@ function sampleShapeOutline(shape: CanvasShape, step: number): Point[] {
       ];
       return samplePolyline(vertices, true, step);
     }
+    case "text": {
+      const vertices = [
+        { x: shape.x, y: shape.y },
+        { x: shape.x + shape.width, y: shape.y },
+        { x: shape.x + shape.width, y: shape.y + shape.height },
+        { x: shape.x, y: shape.y + shape.height },
+      ];
+      return samplePolyline(vertices, true, step);
+    }
     case "diamond": {
       const flat = diamondPoints(shape.width, shape.height);
       const vertices: Point[] = [];

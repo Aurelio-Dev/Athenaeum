@@ -21,6 +21,8 @@ describe("parseCanvasContent", () => {
           stroke: "#2C1A10",
           strokeWidth: 2,
           fill: null,
+          text: "",
+          fontSize: 16,
         },
       ],
     };
@@ -34,15 +36,47 @@ describe("parseCanvasContent", () => {
       schemaVersion: 1,
       stage: { x: 0, y: 0, scale: 1 },
       shapes: [
-        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
-        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
-        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
-        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
-        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null },
+        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
+        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
+        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
+        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
+        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16 },
+        { id: "t", type: "text", x: 8, y: 9, width: 72, height: 38, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "Linha 1\nLinha 2", fontSize: 18 },
       ],
     };
 
     expect(parseCanvasContent(JSON.stringify(scene))).toEqual(scene);
+  });
+
+  it("aplica fontSize 16 por padrao e descarta textos vazios", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "texto", type: "text", x: 10, y: 20, width: 42, height: 20, text: "Athenaeum" },
+        { id: "vazio", type: "text", x: 0, y: 0, width: 0, height: 0, text: "" },
+        { id: "espacos", type: "text", x: 0, y: 0, width: 0, height: 0, text: "  \n " },
+      ],
+    });
+
+    expect(parseCanvasContent(raw).shapes).toEqual([
+      {
+        id: "texto",
+        type: "text",
+        x: 10,
+        y: 20,
+        width: 42,
+        height: 20,
+        points: [],
+        rotation: 0,
+        stroke: "#2C1A10",
+        strokeWidth: 2,
+        fill: null,
+        text: "Athenaeum",
+        fontSize: 16,
+      },
+    ]);
   });
 
   it("descarta freedraw com menos de dois pontos", () => {
@@ -88,6 +122,8 @@ describe("parseCanvasContent", () => {
         stroke: "#2C1A10",
         strokeWidth: 2,
         fill: null,
+        text: "",
+        fontSize: 16,
       },
     ]);
   });
@@ -150,6 +186,8 @@ describe("parseCanvasContent", () => {
         stroke: "#2C1A10",
         strokeWidth: 2,
         fill: null,
+        text: "",
+        fontSize: 16,
       },
     ]);
   });

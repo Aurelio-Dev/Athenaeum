@@ -82,6 +82,16 @@ function EraserIcon({ size = 20 }: IconProps) {
   );
 }
 
+function TextIcon({ size = 20 }: IconProps) {
+  return (
+    <svg width={size} height={size} {...iconBase}>
+      <path d="M5 5h14" />
+      <path d="M12 5v14" />
+      <path d="M8.5 19h7" />
+    </svg>
+  );
+}
+
 function RectIcon({ size = 20 }: IconProps) {
   return (
     <svg width={size} height={size} {...iconBase}>
@@ -141,6 +151,7 @@ const shapeIcons: Record<CanvasShapeType, (props: IconProps) => JSX.Element> = {
   arrow: ArrowIcon,
   line: LineIcon,
   freedraw: PencilIcon,
+  text: TextIcon,
 };
 
 const shapeLabels: Record<CanvasShapeType, string> = {
@@ -150,6 +161,7 @@ const shapeLabels: Record<CanvasShapeType, string> = {
   arrow: "Seta",
   line: "Linha",
   freedraw: "Lápis",
+  text: "Texto",
 };
 
 // Botao de ferramenta da barra. Estilo de pilula com destaque quando ativo.
@@ -246,6 +258,9 @@ export function CanvasToolbar({ tool, onSelectTool, onTogglePan }: CanvasToolbar
       </ToolButton>
       <ToolButton label="Borracha" active={tool === "eraser"} onClick={() => onSelectTool("eraser")}>
         <EraserIcon />
+      </ToolButton>
+      <ToolButton label="Texto" active={tool === "text"} onClick={() => onSelectTool("text")}>
+        <TextIcon />
       </ToolButton>
       <ToolButton label="Linha" active={tool === "line"} onClick={() => onSelectTool("line")}>
         <LineIcon />

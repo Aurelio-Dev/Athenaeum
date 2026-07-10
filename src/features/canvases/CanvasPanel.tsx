@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Arrow, Circle, Ellipse, Layer, Line, Rect, Shape, Stage } from "react-konva";
+import { Arrow, Circle, Ellipse, Layer, Line, Rect, Shape, Stage, Text } from "react-konva";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
 import { getCanvasContent, saveCanvasContent } from "../../lib/database";
@@ -32,8 +32,9 @@ type Point = { x: number; y: number };
 // line) guardam inicio/atual; o lapis (freedraw) acumula um caminho de pontos.
 // Uniao discriminada por type para o TypeScript garantir o acesso correto.
 type DraftShape =
-  | { type: Exclude<CanvasShapeType, "freedraw">; start: Point; current: Point }
+  | { type: Exclude<CanvasShapeType, "freedraw" | "text">; start: Point; current: Point }
   | { type: "freedraw"; points: Point[] };
+type EditingText = { id: string; value: string };
 // Geometria resolvida de uma forma — o suficiente para renderiza-la.
 type ShapeGeometry = { x: number; y: number; width: number; height: number; points: number[] };
 
@@ -52,10 +53,34 @@ const freedrawMinDistance = 3;
 // Raio de alcance da borracha, em coordenadas do stage (o circulo indicador
 // escala junto com o zoom, coerente com a area real de apagamento).
 const eraserRadius = 12;
+const textDefaultFontSize = 16;
+const textLineHeight = 1.2;
+
+function getCanvasUiFontFamily(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
+}
+
+function measureTextBox(text: string, fontSize: number, fontFamily: string): { width: number; height: number } {
+  const context = document.createElement("canvas").getContext("2d");
+  const lines = text.split("\n");
+  let width = 0;
+
+  if (context) {
+    context.font = `${fontSize}px ${fontFamily}`;
+    for (const line of lines) {
+      width = Math.max(width, context.measureText(line).width);
+    }
+  }
+
+  return {
+    width: Math.ceil(width),
+    height: Math.ceil(lines.length * fontSize * textLineHeight),
+  };
+}
 
 // Resolve a geometria de uma forma a partir do arrasto (inicio -> atual). Retorna
 // null quando o arrasto e pequeno demais (clique sem desenho real).
-function geometryFromDrag(type: CanvasShapeType, start: Point, current: Point): ShapeGeometry | null {
+function geometryFromDrag(type: Exclude<CanvasShapeType, "freedraw" | "text">, start: Point, current: Point): ShapeGeometry | null {
   const dx = current.x - start.x;
   const dy = current.y - start.y;
 
@@ -110,7 +135,12 @@ type RenderShapeOptions = {
   dashed?: boolean;
   draggable?: boolean;
   onMouseDown?: (event: Konva.KonvaEventObject<MouseEvent>) => void;
+  onDblClick?: (event: Konva.KonvaEventObject<MouseEvent>) => void;
   onDragEnd?: (event: Konva.KonvaEventObject<DragEvent>) => void;
+  text: string;
+  textColor: string;
+  fontSize: number;
+  fontFamily: string;
 };
 
 // Renderiza qualquer tipo de forma como o node Konva correspondente. Fonte unica
@@ -130,7 +160,12 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
     perfectDrawEnabled: false,
     ...(options.dashed
       ? { dash: [6, 4], listening: false }
-      : { draggable: options.draggable, onMouseDown: options.onMouseDown, onDragEnd: options.onDragEnd }),
+      : {
+          draggable: options.draggable,
+          onMouseDown: options.onMouseDown,
+          onDblClick: options.onDblClick,
+          onDragEnd: options.onDragEnd,
+        }),
   };
 
   const fill = options.fill ?? undefined;
@@ -173,6 +208,28 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
           lineCap="round"
           lineJoin="round"
           hitStrokeWidth={directionalHitStrokeWidth}
+        />
+      );
+    case "text":
+      return (
+        <Text
+          key={options.key}
+          x={x}
+          y={y}
+          rotation={options.rotation}
+          text={options.text}
+          width={width}
+          height={height}
+          fontSize={options.fontSize}
+          fontFamily={options.fontFamily}
+          lineHeight={textLineHeight}
+          wrap="none"
+          fill={options.textColor}
+          perfectDrawEnabled={false}
+          draggable={options.draggable}
+          onMouseDown={options.onMouseDown}
+          onDblClick={options.onDblClick}
+          onDragEnd={options.onDragEnd}
         />
       );
     default: {
@@ -344,6 +401,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [tool, setTool] = useState<CanvasTool>("select");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftShape | null>(null);
+  const [editingText, setEditingText] = useState<EditingText | null>(null);
+  const [canvasUiFontFamily] = useState(getCanvasUiFontFamily);
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   // Posicao do cursor com a Borracha ativa (circulo indicador, nao persistido).
   const [eraserCursor, setEraserCursor] = useState<Point | null>(null);
 
@@ -355,6 +415,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   selectedIdRef.current = selectedId;
   const toolRef = useRef(tool);
   toolRef.current = tool;
+  const editingTextRef = useRef(editingText);
+  editingTextRef.current = editingText;
   // Ferramenta anterior ao entrar no modo Mover, para Esc / clicar de novo voltar.
   const previousToolRef = useRef<CanvasTool>("select");
   // Transform do stage (x/y/escala). Espelhado num ref porque o Konva o altera
@@ -399,6 +461,81 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Autosave com o mesmo debounce de 750ms do Leitor. O flush exato fica com o
   // handleClose/flush de unmount abaixo.
   const { schedule: scheduleSave, cancel: cancelSave } = useReaderPersistence(persistScene, 750);
+
+  const finishTextEditing = useCallback(() => {
+    const editing = editingTextRef.current;
+    if (!editing) {
+      return;
+    }
+
+    editingTextRef.current = null;
+    setEditingText(null);
+
+    const currentShape = shapesRef.current.find((shape) => shape.id === editing.id && shape.type === "text");
+    if (!currentShape) {
+      return;
+    }
+
+    let nextShapes: CanvasShape[];
+    if (editing.value.trim().length === 0) {
+      nextShapes = shapesRef.current.filter((shape) => shape.id !== editing.id);
+      setSelectedId(null);
+    } else {
+      const box = measureTextBox(editing.value, currentShape.fontSize, canvasUiFontFamily);
+      nextShapes = shapesRef.current.map((shape) =>
+        shape.id === editing.id ? { ...shape, text: editing.value, width: box.width, height: box.height } : shape,
+      );
+      setSelectedId(editing.id);
+    }
+
+    // Atualiza o ref antes do render: um fechamento imediato precisa serializar
+    // o texto final, nao a versao anterior capturada pelo ultimo render.
+    shapesRef.current = nextShapes;
+    setShapes(nextShapes);
+    scheduleSave();
+  }, [canvasUiFontFamily, scheduleSave]);
+
+  const beginTextEditing = useCallback((shape: CanvasShape) => {
+    if (shape.type !== "text") {
+      return;
+    }
+    const nextEditing = { id: shape.id, value: shape.text };
+    editingTextRef.current = nextEditing;
+    setEditingText(nextEditing);
+    setSelectedId(shape.id);
+  }, []);
+
+  useLayoutEffect(() => {
+    const textarea = textAreaRef.current;
+    if (!textarea || !editingText) {
+      return;
+    }
+
+    const shape = shapesRef.current.find((candidate) => candidate.id === editingText.id && candidate.type === "text");
+    const stage = stageRef.current;
+    if (!shape || !stage) {
+      return;
+    }
+
+    const scale = stage.scaleX() || 1;
+    const box = measureTextBox(editingText.value, shape.fontSize, canvasUiFontFamily);
+    textarea.style.width = `${Math.max(shape.fontSize * scale, box.width * scale + 2)}px`;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+
+    // A edicao nasce dentro do mousedown do Stage. Adiar o foco evita que a
+    // acao padrao desse mesmo gesto devolva o foco ao canvas e dispare blur na
+    // textarea vazia logo depois de ela ser montada.
+    let focusFrame: number | null = null;
+    if (document.activeElement !== textarea) {
+      focusFrame = window.requestAnimationFrame(() => textarea.focus());
+    }
+    return () => {
+      if (focusFrame !== null) {
+        window.cancelAnimationFrame(focusFrame);
+      }
+    };
+  }, [canvasUiFontFamily, editingText]);
 
   // Reaplica o transform persistido no stage. Usado no load e sempre que o Stage
   // remonta (recolher/expandir desmonta e remonta o Stage, zerando o transform).
@@ -494,7 +631,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.code !== "Space" || !pointerInsideRef.current || isEditableTarget(event.target)) {
+      if (editingTextRef.current || event.code !== "Space" || !pointerInsideRef.current || isEditableTarget(event.target)) {
         return;
       }
 
@@ -527,6 +664,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
   const handleWheel = useCallback((event: Konva.KonvaEventObject<WheelEvent>) => {
     event.evt.preventDefault();
+    if (editingTextRef.current) {
+      return;
+    }
     const stage = event.target.getStage();
     const pointer = stage?.getPointerPosition();
     if (!stage || !pointer) {
@@ -559,6 +699,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   }, [scheduleSave]);
 
   const handlePanStart = useCallback((event: Konva.KonvaEventObject<MouseEvent>) => {
+    if (editingTextRef.current) {
+      return;
+    }
     const canPanWithMiddleButton = event.evt.button === 1;
     const canPanWithSpace = event.evt.button === 0 && spacePressedRef.current;
     // Ferramenta Mover: arrastar com o botao esquerdo faz pan sem segurar Espaco.
@@ -585,6 +728,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // a propagacao para este handler.
   const handleStageMouseDown = useCallback(
     (event: Konva.KonvaEventObject<MouseEvent>) => {
+      if (editingTextRef.current) {
+        return;
+      }
       handlePanStart(event);
       if (isPanningRef.current) {
         return;
@@ -617,6 +763,31 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         if (!point) {
           return;
         }
+        if (activeTool === "text") {
+          // Impede a acao padrao do mousedown de competir com o foco do editor
+          // HTML que sera montado por este mesmo gesto.
+          event.evt.preventDefault();
+          const newShape: CanvasShape = {
+            id: createShapeId(),
+            type: "text",
+            x: point.x,
+            y: point.y,
+            width: 0,
+            height: 0,
+            points: [],
+            rotation: 0,
+            stroke: shapeDefaultStroke,
+            strokeWidth: shapeDefaultStrokeWidth,
+            fill: null,
+            text: "",
+            fontSize: textDefaultFontSize,
+          };
+          const nextShapes = [...shapesRef.current, newShape];
+          shapesRef.current = nextShapes;
+          setShapes(nextShapes);
+          beginTextEditing(newShape);
+          return;
+        }
         drawStartRef.current = point;
         if (activeTool === "freedraw") {
           // Lapis: comeca a acumular o caminho a partir do primeiro ponto.
@@ -633,7 +804,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         setSelectedId(null);
       }
     },
-    [handlePanStart],
+    [beginTextEditing, handlePanStart],
   );
 
   const handleStageMouseMove = useCallback((event: Konva.KonvaEventObject<MouseEvent>) => {
@@ -744,6 +915,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       stroke: shapeDefaultStroke,
       strokeWidth: shapeDefaultStrokeWidth,
       fill: null,
+      text: "",
+      fontSize: textDefaultFontSize,
     };
     setShapes((current) => [...current, newShape]);
     setSelectedId(newShape.id);
@@ -865,7 +1038,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
   // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Esc sai do modo
   // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo, P = lapis,
-  // E = borracha, Delete/Backspace = remover a selecao. Gated pelo ponteiro
+  // E = borracha, T = texto, Delete/Backspace = remover a selecao. Gated pelo ponteiro
   // dentro do Quadro para nao sequestrar o teclado de outros paineis.
   useEffect(() => {
     function handleToolKeys(event: KeyboardEvent) {
@@ -898,6 +1071,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       if (event.key === "e" || event.key === "E") {
         setTool("eraser");
+        return;
+      }
+
+      if (event.key === "t" || event.key === "T") {
+        setTool("text");
         return;
       }
 
@@ -941,6 +1119,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     if (hasClosedExplicitlyRef.current) {
       return;
     }
+    finishTextEditing();
     cancelSave();
     void persistScene();
   };
@@ -949,13 +1128,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Flush imediato ao fechar (mesmo padrao do Leitor): cancela o debounce e grava
   // a cena atual; depois invalida a lista para o card refletir o "Editado ha X".
   const handleClose = useCallback(() => {
+    finishTextEditing();
     hasClosedExplicitlyRef.current = true;
     cancelSave();
     void persistScene().finally(() => {
       onCanvasChanged();
     });
     onClose();
-  }, [cancelSave, onCanvasChanged, onClose, persistScene]);
+  }, [cancelSave, finishTextEditing, onCanvasChanged, onClose, persistScene]);
 
   return (
     <FloatingPanelFrame
@@ -1049,7 +1229,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             <Layer>
               <CanvasGrid />
               {shapes.map((shape) =>
-                renderCanvasShape(
+                editingText?.id === shape.id
+                  ? null
+                  : renderCanvasShape(
                   shape.type,
                   { x: shape.x, y: shape.y, width: shape.width, height: shape.height, points: shape.points },
                   {
@@ -1058,6 +1240,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                     strokeWidth: shape.strokeWidth,
                     fill: shape.fill,
                     rotation: shape.rotation,
+                    text: shape.text,
+                    textColor: shape.stroke,
+                    fontSize: shape.fontSize,
+                    fontFamily: canvasUiFontFamily,
                     draggable: tool === "select",
                     onMouseDown: (event) => {
                       if (toolRef.current !== "select") {
@@ -1066,6 +1252,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                       // Seleciona e impede o handler do stage (pan/deselecao) de rodar.
                       event.cancelBubble = true;
                       setSelectedId(shape.id);
+                    },
+                    onDblClick: (event) => {
+                      if (toolRef.current !== "select" || shape.type !== "text") {
+                        return;
+                      }
+                      event.cancelBubble = true;
+                      beginTextEditing(shape);
                     },
                     onDragEnd: (event) => handleShapeDragEnd(shape.id, event),
                   },
@@ -1085,6 +1278,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                           strokeWidth: shapeDefaultStrokeWidth,
                           fill: null,
                           rotation: 0,
+                          text: "",
+                          textColor: shapeDefaultStroke,
+                          fontSize: textDefaultFontSize,
+                          fontFamily: canvasUiFontFamily,
                           dashed: true,
                         })
                       : null;
@@ -1105,6 +1302,61 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
               ) : null}
             </Layer>
           </Stage>
+          {editingText
+            ? (() => {
+                const shape = shapes.find((candidate) => candidate.id === editingText.id && candidate.type === "text");
+                const stage = stageRef.current;
+                if (!shape || !stage) {
+                  return null;
+                }
+                const scale = stage.scaleX() || 1;
+                return (
+                  <textarea
+                    ref={textAreaRef}
+                    aria-label="Editar texto do quadro"
+                    wrap="off"
+                    rows={1}
+                    spellCheck
+                    value={editingText.value}
+                    onChange={(event) => {
+                      const nextEditing = { id: editingText.id, value: event.target.value };
+                      editingTextRef.current = nextEditing;
+                      setEditingText(nextEditing);
+                    }}
+                    onBlur={finishTextEditing}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape") {
+                        return;
+                      }
+                      event.preventDefault();
+                      event.stopPropagation();
+                      finishTextEditing();
+                    }}
+                    style={{
+                      position: "absolute",
+                      left: stage.x() + shape.x * scale,
+                      top: stage.y() + shape.y * scale,
+                      minWidth: shape.fontSize * scale,
+                      margin: 0,
+                      padding: 0,
+                      border: 0,
+                      outline: 0,
+                      resize: "none",
+                      overflow: "hidden",
+                      background: "transparent",
+                      color: shape.stroke,
+                      fontFamily: canvasUiFontFamily,
+                      fontSize: shape.fontSize * scale,
+                      lineHeight: textLineHeight,
+                      whiteSpace: "pre",
+                      transform: shape.rotation === 0 ? undefined : `rotate(${shape.rotation}deg)`,
+                      transformOrigin: "top left",
+                      zIndex: 10,
+                    }}
+                  />
+                );
+              })()
+            : null}
           <CanvasToolbar tool={tool} onSelectTool={setTool} onTogglePan={togglePan} />
         </div>
       )}

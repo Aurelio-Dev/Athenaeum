@@ -15,6 +15,8 @@ function buildShape(overrides: Partial<CanvasShape> & Pick<CanvasShape, "id" | "
     stroke: "#2C1A10",
     strokeWidth: 2,
     fill: null,
+    text: "",
+    fontSize: 16,
     ...overrides,
   };
 }

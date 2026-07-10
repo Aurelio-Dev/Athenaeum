@@ -13,7 +13,7 @@
 // exclusivos por tipo por enquanto): as formas de caixa (rect, diamond, ellipse)
 // usam x/y/width/height; as direcionais (arrow, line) e o traco livre (freedraw)
 // usam x/y como ancora e points ([x1, y1, x2, y2, ...]) relativos a x/y.
-export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line" | "freedraw";
+export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line" | "freedraw" | "text";
 
 export type CanvasShape = {
   id: string;
@@ -30,6 +30,8 @@ export type CanvasShape = {
   stroke: string;
   strokeWidth: number;
   fill: string | null;
+  text: string;
+  fontSize: number;
 };
 
 export type CanvasSceneContent = {
@@ -42,6 +44,7 @@ export type CanvasSceneContent = {
 // Traco padrao das formas novas (marrom da paleta do app).
 const defaultStroke = "#2C1A10";
 const defaultStrokeWidth = 2;
+const defaultFontSize = 16;
 
 // Id unico de forma. randomUUID existe no WebView do Tauri e no Node dos
 // testes; fallback defensivo por seguranca.
@@ -83,7 +86,7 @@ function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-const canvasShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "arrow", "line", "freedraw"];
+const canvasShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "arrow", "line", "freedraw", "text"];
 
 function isCanvasShapeType(value: unknown): value is CanvasShapeType {
   return typeof value === "string" && (canvasShapeTypes as readonly string[]).includes(value);
@@ -156,6 +159,15 @@ function parseShape(value: unknown): CanvasShape | null {
     return null;
   }
 
+  const text = typeof value.text === "string" ? value.text : "";
+  // Texto sem conteudo visivel e uma forma degenerada, assim como um traco sem
+  // pontos. O parser o descarta para nao manter elementos invisiveis na cena.
+  if (value.type === "text" && text.trim().length === 0) {
+    return null;
+  }
+
+  const fontSize = finiteNumber(value.fontSize, defaultFontSize);
+
   return {
     id: value.id,
     type: value.type,
@@ -168,6 +180,8 @@ function parseShape(value: unknown): CanvasShape | null {
     stroke: typeof value.stroke === "string" ? value.stroke : defaultStroke,
     strokeWidth: finiteNumber(value.strokeWidth, defaultStrokeWidth),
     fill: typeof value.fill === "string" ? value.fill : null,
+    text,
+    fontSize: fontSize > 0 ? fontSize : defaultFontSize,
   };
 }
 
