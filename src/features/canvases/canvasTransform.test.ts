@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { finalizeCanvasTransform, finalizeFreedrawTransform, lockSideAnchorAspectRatio } from "./canvasTransform";
+import { finalizeCanvasTransform, finalizeFreedrawTransform, lockSideAnchorAspectRatio, scaleTextFontSize } from "./canvasTransform";
+
+describe("scaleTextFontSize", () => {
+  it("converte a escala uniforme em fontSize inteiro", () => {
+    expect(scaleTextFontSize(16, 1.5)).toBe(24);
+    expect(scaleTextFontSize(16, 1.28)).toBe(20);
+  });
+
+  it("limita o fontSize entre 8 e 200", () => {
+    expect(scaleTextFontSize(16, 0.1)).toBe(8);
+    expect(scaleTextFontSize(160, 2)).toBe(200);
+  });
+});
 
 describe("finalizeFreedrawTransform", () => {
   const points = [0, 0, 10, 5, -5, 15];

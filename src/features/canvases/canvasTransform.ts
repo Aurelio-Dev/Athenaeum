@@ -19,6 +19,17 @@ export type FinalFreedrawTransform = FinalCanvasTransform & {
 };
 
 const minimumTransformedSize = 4;
+export const minimumTextFontSize = 8;
+export const maximumTextFontSize = 200;
+
+// Texto e escalado proporcionalmente pelo Transformer, mas o valor persistido
+// precisa continuar sendo um tamanho de fonte concreto e seguro.
+export function scaleTextFontSize(fontSize: number, scale: number): number {
+  const normalizedScale = Number.isFinite(scale) ? Math.abs(scale) : 1;
+  const scaledFontSize = Math.round(fontSize * normalizedScale);
+
+  return Math.min(maximumTextFontSize, Math.max(minimumTextFontSize, scaledFontSize));
+}
 
 export function getCanvasPointsSize(points: number[]): { width: number; height: number } {
   if (points.length < 2) {

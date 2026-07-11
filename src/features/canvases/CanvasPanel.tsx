@@ -39,6 +39,7 @@ import {
   finalizeFreedrawTransform,
   getCanvasPointsSize,
   lockSideAnchorAspectRatio,
+  scaleTextFontSize,
   type CanvasTransformBox,
 } from "./canvasTransform";
 
@@ -84,7 +85,7 @@ const frameStroke = "#7A6558";
 const maximumImageSide = 400;
 const maximumImageBytes = 4 * 1024 * 1024;
 const allowedImageMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-const transformerShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "image", "frame", "freedraw"];
+const transformerShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "image", "frame", "freedraw", "text"];
 
 function supportsTransformer(type: CanvasShapeType): boolean {
   return transformerShapeTypes.includes(type);
@@ -369,10 +370,14 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
           wrap="none"
           fill={options.textColor}
           perfectDrawEnabled={false}
+          ref={options.nodeRef}
           draggable={options.draggable}
           onMouseDown={options.onMouseDown}
           onDblClick={options.onDblClick}
           onDragEnd={options.onDragEnd}
+          onTransform={options.onTransform}
+          onTransformStart={options.onTransformStart}
+          onTransformEnd={options.onTransformEnd}
         />
       );
     case "image":
@@ -635,6 +640,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const shapeNodesRef = useRef<Map<string, Konva.Node>>(new Map());
   const frameLabelNodesRef = useRef<Map<string, Konva.Text>>(new Map());
   const transformAspectRatioRef = useRef(1);
+  const transformingShapeTypeRef = useRef<CanvasShapeType | null>(null);
   const shiftPressedRef = useRef(false);
   const pointerInsideRef = useRef(false);
   const spacePressedRef = useRef(false);
@@ -750,9 +756,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const handleShapeTransformStart = useCallback((shapeId: string) => {
     const shape = shapesRef.current.find((candidate) => candidate.id === shapeId);
     if (!shape) {
+      transformingShapeTypeRef.current = null;
       transformAspectRatioRef.current = 1;
       return;
     }
+    transformingShapeTypeRef.current = shape.type;
     const size = shape.type === "freedraw" ? getCanvasPointsSize(shape.points) : shape;
     const width = Math.abs(size.width);
     const height = Math.abs(size.height);
@@ -763,12 +771,29 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     (shapeId: string, event: Konva.KonvaEventObject<Event>) => {
       const node = event.target;
       const shape = shapesRef.current.find((candidate) => candidate.id === shapeId);
+      transformingShapeTypeRef.current = null;
       if (!shape || !supportsTransformer(shape.type)) {
         return;
       }
 
       const finalTransform =
-        shape.type === "freedraw"
+        shape.type === "text"
+          ? (() => {
+              // keepRatio mantem ambos os eixos iguais; a media protege contra
+              // pequenas diferencas numericas internas do Konva.
+              const scale = (Math.abs(node.scaleX()) + Math.abs(node.scaleY())) / 2;
+              const fontSize = scaleTextFontSize(shape.fontSize, scale);
+              const box = measureTextBox(shape.text, fontSize, canvasUiFontFamily);
+              return {
+                x: node.x(),
+                y: node.y(),
+                width: box.width,
+                height: box.height,
+                rotation: node.rotation(),
+                fontSize,
+              };
+            })()
+          : shape.type === "freedraw"
           ? finalizeFreedrawTransform({
               x: node.x(),
               y: node.y(),
@@ -805,11 +830,16 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       node.getLayer()?.batchDraw();
       scheduleSave();
     },
-    [scheduleSave, syncFrameLabelNode],
+    [canvasUiFontFamily, scheduleSave, syncFrameLabelNode],
   );
 
   const handleTransformerBoundBox = useCallback(
-    (_oldBox: CanvasTransformBox, newBox: CanvasTransformBox): CanvasTransformBox => {
+    (oldBox: CanvasTransformBox, newBox: CanvasTransformBox): CanvasTransformBox => {
+      // Texto nao admite espelhamento: manter a caixa anterior caso um canto
+      // atravesse o lado oposto durante o arrasto.
+      if (transformingShapeTypeRef.current === "text") {
+        return newBox.width <= 0 || newBox.height <= 0 ? oldBox : newBox;
+      }
       if (!shiftPressedRef.current) {
         return newBox;
       }
@@ -1709,6 +1739,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     tool === "select"
       ? shapes.find((shape) => shape.id === selectedId && (shape.type === "arrow" || shape.type === "line")) ?? null
       : null;
+  const selectedTransformerShape =
+    tool === "select" ? shapes.find((shape) => shape.id === selectedId && supportsTransformer(shape.type)) ?? null : null;
+  const isTextTransformer = selectedTransformerShape?.type === "text";
 
   return (
     <FloatingPanelFrame
@@ -1929,19 +1962,23 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
               ) : null}
               <Transformer
                 ref={transformerRef}
-                enabledAnchors={[
-                  "top-left",
-                  "top-center",
-                  "top-right",
-                  "middle-left",
-                  "middle-right",
-                  "bottom-left",
-                  "bottom-center",
-                  "bottom-right",
-                ]}
-                keepRatio={false}
-                shiftBehavior="default"
-                flipEnabled
+                enabledAnchors={
+                  isTextTransformer
+                    ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+                    : [
+                        "top-left",
+                        "top-center",
+                        "top-right",
+                        "middle-left",
+                        "middle-right",
+                        "bottom-left",
+                        "bottom-center",
+                        "bottom-right",
+                      ]
+                }
+                keepRatio={isTextTransformer}
+                shiftBehavior={isTextTransformer ? "none" : "default"}
+                flipEnabled={!isTextTransformer}
                 rotateEnabled
                 rotationSnaps={[]}
                 ignoreStroke
