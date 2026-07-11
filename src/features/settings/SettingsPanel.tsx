@@ -1,23 +1,25 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { appDataDir } from "@tauri-apps/api/path";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
-import { useDividerLines } from "../../hooks/useDividerLines";
-import { useTheme, type Theme } from "../../hooks/useTheme";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
+import { LocalAiSettings } from "./LocalAiSettings";
 
-export const settingsPanelWidth = 720;
-export const settingsPanelHeight = 560;
-const settingsPanelMinWidth = 560;
-const settingsPanelMinHeight = 360;
+export const settingsPanelWidth = 860;
+export const settingsPanelHeight = 640;
+const settingsPanelMinWidth = 640;
+const settingsPanelMinHeight = 440;
 const collapsedHeight = 48;
 
-type SettingsSectionId = "general" | "appearance" | "library" | "advanced";
+type SettingsSectionId = "general" | "appearance" | "library" | "ai" | "shortcuts" | "advanced";
 
 const settingsSections: { id: SettingsSectionId; label: string }[] = [
   { id: "general", label: "Geral" },
   { id: "appearance", label: "Aparência" },
   { id: "library", label: "Biblioteca" },
+  { id: "ai", label: "Use sua IA" },
+  { id: "shortcuts", label: "Atalhos de teclado" },
   { id: "advanced", label: "Avançado" },
 ];
 
@@ -99,6 +101,25 @@ function SettingsSectionIcon({ sectionId }: { sectionId: SettingsSectionId }) {
     );
   }
 
+  if (sectionId === "ai") {
+    return (
+      <svg {...commonProps}>
+        <rect x="5" y="5" width="14" height="14" rx="3" />
+        <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
+        <path d="m9 13 2-4 2 4 2-2" />
+      </svg>
+    );
+  }
+
+  if (sectionId === "shortcuts") {
+    return (
+      <svg {...commonProps}>
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M7 10h.01M11 10h.01M15 10h.01M18 10h.01M7 14h.01M11 14h6" />
+      </svg>
+    );
+  }
+
   if (sectionId === "advanced") {
     return (
       <svg {...commonProps}>
@@ -126,8 +147,6 @@ type SettingsPanelProps = {
 
 export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
   const { movePanel } = useFloatingPanels();
-  const { theme, setTheme } = useTheme();
-  const { showDividerLines, setShowDividerLines } = useDividerLines();
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -195,11 +214,6 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [isMaximized, movePanel, panel.id]);
 
-  const themeOptions: { value: Theme; label: string }[] = [
-    { value: "light", label: "Claro" },
-    { value: "dark", label: "Escuro" },
-  ];
-
   return (
     <FloatingPanelFrame
       panel={panel}
@@ -256,7 +270,7 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
     >
       {isCollapsed ? null : (
         <div className="flex min-h-0 flex-1 bg-[var(--card)]">
-          <nav className="flex w-40 shrink-0 flex-col gap-1 border-r border-border-subtle p-3" aria-label="Seções de ajustes">
+          <nav className="flex w-52 shrink-0 flex-col gap-1 border-r border-border-subtle p-3" aria-label="Seções de ajustes">
             {settingsSections.map((section) => {
               const isActive = activeSection === section.id;
 
@@ -276,33 +290,19 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
             })}
           </nav>
 
-          <div className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+          <div className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
             {activeSection === "general" ? <EmptySettingsSection title="Geral" /> : null}
 
-            {activeSection === "appearance" ? (
-              <section className="flex max-w-[440px] flex-col gap-5">
-                <h2 className="text-sm font-bold text-text-primary">Aparência</h2>
-
-                <SettingsRow label="Tema">
-                  <SegmentedControl<Theme> ariaLabel="Tema" options={themeOptions} value={theme} onChange={setTheme} />
-                </SettingsRow>
-
-                <SettingsRow label="Linhas divisórias">
-                  <ToggleSwitch
-                    checked={showDividerLines}
-                    onCheckedChange={setShowDividerLines}
-                    ariaLabel={showDividerLines ? "Ocultar linhas divisórias" : "Mostrar linhas divisórias"}
-                  />
-                </SettingsRow>
-
-              </section>
-            ) : null}
+            {activeSection === "appearance" ? <AppearanceSettings /> : null}
 
             {activeSection === "library" ? (
-              <section className="flex max-w-[440px] flex-col gap-5">
-                <h2 className="text-sm font-bold text-text-primary">Biblioteca</h2>
+              <section className="flex max-w-[580px] flex-col gap-5">
+                <header>
+                  <h2 className="font-serif text-xl font-medium text-text-primary">Biblioteca</h2>
+                  <p className="mt-1 text-xs leading-5 text-text-secondary">Informações sobre o armazenamento local da biblioteca.</p>
+                </header>
 
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5 rounded-xl border border-border-subtle bg-surface-card p-4 shadow-card">
                   <span className="text-sm font-medium text-text-primary">Local de armazenamento</span>
                   <span className="truncate text-xs text-text-secondary" title={storagePath}>
                     {storagePath || "Carregando..."}
@@ -310,6 +310,10 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
                 </div>
               </section>
             ) : null}
+
+            {activeSection === "ai" ? <LocalAiSettings /> : null}
+
+            {activeSection === "shortcuts" ? <KeyboardShortcutsSettings /> : null}
 
             {activeSection === "advanced" ? <EmptySettingsSection title="Avançado" /> : null}
           </div>
@@ -321,47 +325,9 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
 
 function EmptySettingsSection({ title }: { title: string }) {
   return (
-    <section className="flex max-w-[440px] flex-col gap-4">
-      <h2 className="text-sm font-bold text-text-primary">{title}</h2>
+    <section className="flex max-w-[580px] flex-col gap-4">
+      <h2 className="font-serif text-xl font-medium text-text-primary">{title}</h2>
       <span className="text-sm text-text-secondary">Sem ajustes por enquanto.</span>
     </section>
-  );
-}
-
-function SettingsRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-10 items-center justify-between gap-4">
-      <span className="text-sm font-semibold text-text-primary">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function ToggleSwitch({
-  checked,
-  onCheckedChange,
-  ariaLabel,
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={() => onCheckedChange(!checked)}
-      className={`relative h-7 w-12 rounded-full border border-border-subtle transition ${
-        checked ? "bg-primary" : "bg-surface-muted"
-      }`}
-    >
-      <span
-        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition ${
-          checked ? "left-[22px]" : "left-1"
-        }`}
-      />
-    </button>
   );
 }

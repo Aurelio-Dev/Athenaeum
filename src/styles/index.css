@@ -326,6 +326,21 @@
   --muted: #2E2018;
 }
 
+/* Contraste visual da interface. Os níveis preservam a paleta e ajustam
+   somente tons secundários e bordas, sem filtros que alterariam imagens ou
+   criariam novos contextos de empilhamento para os painéis flutuantes. */
+html[data-ui-contrast="90"] {
+  --muted-foreground: color-mix(in srgb, var(--foreground) 46%, var(--background));
+  --border: color-mix(in srgb, var(--foreground) 12%, var(--background));
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 44%, var(--sidebar));
+}
+
+html[data-ui-contrast="110"] {
+  --muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--background));
+  --border: color-mix(in srgb, var(--foreground) 30%, var(--background));
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 70%, var(--sidebar));
+}
+
 * {
   box-sizing: border-box;
 }
