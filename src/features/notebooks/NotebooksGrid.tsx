@@ -37,7 +37,7 @@ export function NotebooksGrid({ notebooks, collections, isLoading, hasError, onC
 
   if (notebooks.length === 0) {
     return (
-      <div className="flex h-full min-h-96 flex-col items-center justify-center text-center">
+      <div className="flex h-full min-h-96 -translate-y-7 flex-col items-center justify-center text-center">
         <span className="opacity-50">
           <NotebookIllustration size={64} />
         </span>

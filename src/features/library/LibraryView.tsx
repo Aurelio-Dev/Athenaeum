@@ -6,7 +6,7 @@ import { AppShell } from "../../components/AppShell";
 import { SettingsPanel, settingsPanelHeight, settingsPanelWidth } from "../settings/SettingsPanel";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import emptyLibraryIllustration from "../../assets/images/empty-library.png";
+import emptyLibraryIllustration from "../../assets/icons/empty-library-book.svg";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
@@ -812,6 +812,7 @@ export function LibraryView() {
                 title="Nenhum documento aqui"
                 titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
+                verticalPosition="raised"
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
             ) : allDocuments.length === 0 && !isTrashRoute ? (
@@ -820,6 +821,7 @@ export function LibraryView() {
                 title="Nenhum documento aqui"
                 titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
+                verticalPosition="raised"
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
             ) : (

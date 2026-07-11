@@ -1,7 +1,6 @@
 import { FloatingPanelsProvider } from "../components/floating/FloatingPanelsContext";
 import { ThemeProvider } from "../hooks/useTheme";
 import { LibraryView } from "../features/library/LibraryView";
-import { AppIconProvider } from "../lib/appIcon";
 import { DividerLinesProvider } from "../hooks/useDividerLines";
 
 export function App() {
@@ -11,14 +10,12 @@ export function App() {
     // arvore para aplicar a classe .dark no <html>.
     <ThemeProvider>
       <DividerLinesProvider>
-        <AppIconProvider>
-          {/* Pilha de paineis flutuantes no topo da arvore: anotacoes do leitor e
+        {/* Pilha de paineis flutuantes no topo da arvore: anotacoes do leitor e
           editores de caderno/quadro compartilham a mesma pilha, entao podem
           coexistir e se sobrepor com ordem de foco correta. */}
-          <FloatingPanelsProvider>
-            <LibraryView />
-          </FloatingPanelsProvider>
-        </AppIconProvider>
+        <FloatingPanelsProvider>
+          <LibraryView />
+        </FloatingPanelsProvider>
       </DividerLinesProvider>
     </ThemeProvider>
   );

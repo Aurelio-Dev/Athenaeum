@@ -1,8 +1,8 @@
 import { type MouseEvent, useRef, useState } from "react";
 import { NewCollectionModal } from "./NewCollectionModal";
 import { useTheme } from "../hooks/useTheme";
-import { AppIconGlyph, useAppIcon } from "../lib/appIcon";
 import type { LibraryCollection, LibraryDocument, LibraryRoute } from "../types/library";
+import newLogoSmall from "../assets/icons/new-logo-small.svg";
 
 type SidebarProps = {
   collections: LibraryCollection[];
@@ -249,7 +249,6 @@ export function Sidebar({
   onOpenSettings,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
-  const { variant: appIconVariant } = useAppIcon();
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [editingCollection, setEditingCollection] = useState<LibraryCollection | null>(null);
   const [collectionDialog, setCollectionDialog] = useState<CollectionDialogState>(null);
@@ -365,11 +364,9 @@ export function Sidebar({
       className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar font-sans text-sidebar-text"
       onContextMenu={onEmptyAreaContextMenu}
     >
-      <div className="flex items-center gap-3 px-5 pb-2 pt-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-text-inverse">
-          <AppIconGlyph variant={appIconVariant} className="h-5 w-5" />
-        </div>
-        <span className="text-lg font-bold text-[#2C1810] dark:text-[#F0E8DF]">Athenaeum</span>
+      <div className="flex items-center gap-2 px-5 pb-2 pt-5">
+        <img src={newLogoSmall} alt="" className="h-6 w-6 shrink-0 -translate-y-px" />
+        <span className="font-serif text-lg font-medium text-[#2C1810] dark:text-[#F0E8DF]">Athenaeum</span>
       </div>
 
       <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2 pt-3">

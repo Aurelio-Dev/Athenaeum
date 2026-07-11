@@ -3054,9 +3054,9 @@ END;
             kind: MigrationKind::Up,
         },
         // v14: tabela app_settings (chave-valor) para preferencias globais do app.
-        // Primeira chave: icon_variant (variante do icone). O CRUD e feito em
-        // TypeScript via plugin-sql (mesmo padrao das outras leituras/escritas
-        // simples); nenhum comando Rust novo — este bloco so registra a migration.
+        // O CRUD e feito em TypeScript via plugin-sql (mesmo padrao das outras
+        // leituras/escritas simples); nenhum comando Rust novo — este bloco so
+        // registra a migration.
         Migration {
             version: 14,
             description: "add_app_settings",

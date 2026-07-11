@@ -5,7 +5,6 @@ import { useFloatingPanels, type FloatingPanel } from "../../components/floating
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { useDividerLines } from "../../hooks/useDividerLines";
 import { useTheme, type Theme } from "../../hooks/useTheme";
-import { AppIconPreview, useAppIcon } from "../../lib/appIcon";
 
 export const settingsPanelWidth = 720;
 export const settingsPanelHeight = 560;
@@ -128,7 +127,6 @@ type SettingsPanelProps = {
 export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
   const { movePanel } = useFloatingPanels();
   const { theme, setTheme } = useTheme();
-  const { variant: iconVariant, setVariant: chooseIconVariant } = useAppIcon();
   const { showDividerLines, setShowDividerLines } = useDividerLines();
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
@@ -297,18 +295,6 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
                   />
                 </SettingsRow>
 
-                <div className="flex flex-col gap-3 border-t border-border-subtle pt-5">
-                  <span className="text-sm font-semibold text-text-primary">Ícone do app</span>
-                  <div className="flex gap-4">
-                    <IconVariantCard label="Frontão" selected={iconVariant === "frontao"} onSelect={() => chooseIconVariant("frontao")}>
-                      <AppIconPreview variant="frontao" className="h-16 w-16" />
-                    </IconVariantCard>
-
-                    <IconVariantCard label="Coluna" selected={iconVariant === "coluna"} onSelect={() => chooseIconVariant("coluna")}>
-                      <AppIconPreview variant="coluna" className="h-16 w-16" />
-                    </IconVariantCard>
-                  </div>
-                </div>
               </section>
             ) : null}
 
@@ -376,33 +362,6 @@ function ToggleSwitch({
           checked ? "left-[22px]" : "left-1"
         }`}
       />
-    </button>
-  );
-}
-
-function IconVariantCard({
-  label,
-  selected,
-  onSelect,
-  children,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      aria-label={label}
-      className={`flex h-[120px] w-[120px] flex-col items-center justify-center gap-2 rounded-xl bg-surface-card shadow-card transition ${
-        selected ? "border-2 border-primary" : "border border-[#E8DDD4] hover:border-primary dark:border-border-subtle"
-      }`}
-    >
-      {children}
-      <span className="text-xs font-medium text-text-secondary">{label}</span>
     </button>
   );
 }
