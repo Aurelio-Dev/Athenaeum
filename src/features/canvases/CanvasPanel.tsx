@@ -29,6 +29,11 @@ import {
 import { eraseAlongSegment } from "./canvasEraser";
 import { CanvasToolbar, isShapeTool, type CanvasTool } from "./CanvasToolbar";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
+import {
+  getDirectionalEndpoints,
+  moveDirectionalEndpoint,
+  type DirectionalEndpoint,
+} from "./canvasDirectionalHandles";
 import { finalizeCanvasTransform, lockSideAnchorAspectRatio, type CanvasTransformBox } from "./canvasTransform";
 
 const collapsedHeight = 42;
@@ -81,6 +86,10 @@ function supportsTransformer(type: CanvasShapeType): boolean {
 
 function getCanvasUiFontFamily(): string {
   return getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
+}
+
+function getCanvasCssColor(variableName: string, fallback: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim() || fallback;
 }
 
 function measureTextBox(text: string, fontSize: number, fontFamily: string): { width: number; height: number } {
@@ -633,6 +642,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [editingText, setEditingText] = useState<EditingText | null>(null);
   const [canvasUiFontFamily] = useState(getCanvasUiFontFamily);
+  const [directionalHandleColors] = useState(() => ({
+    fill: getCanvasCssColor("--card", "#FAF5EF"),
+    stroke: getCanvasCssColor("--accent", "#9C5A2E"),
+  }));
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImagePointRef = useRef<Point | null>(null);
@@ -1409,6 +1422,48 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     [scheduleSave],
   );
 
+  const updateDirectionalHandle = useCallback(
+    (shapeId: string, endpoint: DirectionalEndpoint, candidate: Point, persist: boolean): Point | null => {
+      const shape = shapesRef.current.find(
+        (current) => current.id === shapeId && (current.type === "arrow" || current.type === "line"),
+      );
+      if (!shape) {
+        return null;
+      }
+
+      const nextGeometry = moveDirectionalEndpoint(shape, endpoint, candidate);
+      const nextShapes = shapesRef.current.map((current) =>
+        current.id === shapeId ? { ...current, ...nextGeometry } : current,
+      );
+      shapesRef.current = nextShapes;
+      setShapes(nextShapes);
+      if (persist) {
+        scheduleSave();
+      }
+
+      return getDirectionalEndpoints(nextGeometry)[endpoint];
+    },
+    [scheduleSave],
+  );
+
+  const handleDirectionalHandleDrag = useCallback(
+    (
+      shapeId: string,
+      endpoint: DirectionalEndpoint,
+      event: Konva.KonvaEventObject<DragEvent>,
+      persist: boolean,
+    ) => {
+      event.cancelBubble = true;
+      const nextPoint = updateDirectionalHandle(shapeId, endpoint, { x: event.target.x(), y: event.target.y() }, persist);
+      if (nextPoint) {
+        // Aplica a correcao de distancia minima imediatamente, antes do proximo
+        // render React, para o handle nunca parecer sobreposto ao outro.
+        event.target.position(nextPoint);
+      }
+    },
+    [updateDirectionalHandle],
+  );
+
   const toggleCollapsed = useCallback(() => {
     setIsCollapsed((current) => !current);
     refreshStageSoon();
@@ -1633,6 +1688,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     onClose();
   }, [cancelSave, finishTextEditing, onCanvasChanged, onClose, persistScene]);
 
+  const selectedDirectionalShape =
+    tool === "select"
+      ? shapes.find((shape) => shape.id === selectedId && (shape.type === "arrow" || shape.type === "line")) ?? null
+      : null;
+
   return (
     <FloatingPanelFrame
       panel={panel}
@@ -1780,6 +1840,39 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                   },
                 ),
               )}
+              {selectedDirectionalShape
+                ? (() => {
+                    const endpoints = getDirectionalEndpoints(selectedDirectionalShape);
+                    const renderHandle = (endpoint: DirectionalEndpoint, point: Point) => (
+                      <Circle
+                        key={`${selectedDirectionalShape.id}-${endpoint}-handle`}
+                        x={point.x}
+                        y={point.y}
+                        radius={6}
+                        fill={directionalHandleColors.fill}
+                        stroke={directionalHandleColors.stroke}
+                        strokeWidth={2}
+                        strokeScaleEnabled={false}
+                        draggable
+                        onMouseDown={(event) => {
+                          event.cancelBubble = true;
+                        }}
+                        onDragStart={(event) => {
+                          event.cancelBubble = true;
+                        }}
+                        onDragMove={(event) => handleDirectionalHandleDrag(selectedDirectionalShape.id, endpoint, event, false)}
+                        onDragEnd={(event) => handleDirectionalHandleDrag(selectedDirectionalShape.id, endpoint, event, true)}
+                      />
+                    );
+
+                    return (
+                      <>
+                        {renderHandle("start", endpoints.start)}
+                        {renderHandle("end", endpoints.end)}
+                      </>
+                    );
+                  })()
+                : null}
               {draft
                 ? (() => {
                     // Preview tracejado durante o desenho: mesma geometria/tipo da
