@@ -28,7 +28,9 @@ import {
 } from "./canvasScene";
 import { eraseAlongSegment } from "./canvasEraser";
 import { CanvasToolbar, isShapeTool, type CanvasTool } from "./CanvasToolbar";
+import { CanvasPropertiesPanel } from "./CanvasPropertiesPanel";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
+import { getCanvasPropertiesSections } from "./canvasPropertiesSections";
 import {
   getDirectionalEndpoints,
   moveDirectionalEndpoint,
@@ -61,13 +63,14 @@ type DraftShape =
   | { type: Exclude<CanvasShapeType, "freedraw" | "text" | "image">; start: Point; current: Point }
   | { type: "freedraw"; points: Point[] };
 type EditingText = { id: string; value: string };
+type CanvasDefaultStyle = { stroke: string; strokeWidth: number; fill: string | null };
 // Geometria resolvida de uma forma — o suficiente para renderiza-la.
 type ShapeGeometry = { x: number; y: number; width: number; height: number; points: number[] };
 
-const shapeDefaultStroke = "#2C1A10";
-const shapeDefaultStrokeWidth = 2;
-// Realce visual (apenas em runtime) da forma selecionada — nao altera o stroke
-// persistido da forma.
+const initialDefaultStyle: CanvasDefaultStyle = { stroke: "#2C1A10", strokeWidth: 2, fill: null };
+// Quando a selecao continua ativa fora da ferramenta Selecionar, os handles nao
+// aparecem; este realce preserva a indicacao visual sem esconder a cor durante
+// a edicao normal pelo painel de propriedades.
 const selectionStroke = "#B0592B";
 // Abaixo disso trata-se de um clique sem arrasto: nao cria forma degenerada.
 const minShapeSize = 3;
@@ -651,6 +654,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [shapes, setShapes] = useState<CanvasShape[]>([]);
   const [tool, setTool] = useState<CanvasTool>("select");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [defaultStyle, setDefaultStyle] = useState<CanvasDefaultStyle>(() => ({ ...initialDefaultStyle }));
   const [draft, setDraft] = useState<DraftShape | null>(null);
   const [editingText, setEditingText] = useState<EditingText | null>(null);
   const [canvasUiFontFamily] = useState(getCanvasUiFontFamily);
@@ -676,6 +680,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   selectedIdRef.current = selectedId;
   const toolRef = useRef(tool);
   toolRef.current = tool;
+  const defaultStyleRef = useRef(defaultStyle);
+  defaultStyleRef.current = defaultStyle;
   const editingTextRef = useRef(editingText);
   editingTextRef.current = editingText;
   // Ferramenta anterior ao entrar no modo Mover, para Esc / clicar de novo voltar.
@@ -913,8 +919,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           height,
           points: [],
           rotation: 0,
-          stroke: shapeDefaultStroke,
-          strokeWidth: shapeDefaultStrokeWidth,
+          stroke: initialDefaultStyle.stroke,
+          strokeWidth: initialDefaultStyle.strokeWidth,
           fill: null,
           text: "",
           fontSize: textDefaultFontSize,
@@ -1288,6 +1294,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           // Impede a acao padrao do mousedown de competir com o foco do editor
           // HTML que sera montado por este mesmo gesto.
           event.evt.preventDefault();
+          const style = defaultStyleRef.current;
           const newShape: CanvasShape = {
             id: createShapeId(),
             type: "text",
@@ -1297,8 +1304,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             height: 0,
             points: [],
             rotation: 0,
-            stroke: shapeDefaultStroke,
-            strokeWidth: shapeDefaultStrokeWidth,
+            stroke: style.stroke,
+            strokeWidth: style.strokeWidth,
             fill: null,
             text: "",
             fontSize: textDefaultFontSize,
@@ -1425,6 +1432,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       return;
     }
 
+    const style = defaultStyleRef.current;
     const newShape: CanvasShape = {
       id: createShapeId(),
       type: currentDraft.type,
@@ -1434,9 +1442,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       height: geometry.height,
       points: geometry.points,
       rotation: 0,
-      stroke: currentDraft.type === "frame" ? frameStroke : shapeDefaultStroke,
-      strokeWidth: shapeDefaultStrokeWidth,
-      fill: null,
+      stroke: currentDraft.type === "frame" ? frameStroke : style.stroke,
+      strokeWidth: currentDraft.type === "frame" ? initialDefaultStyle.strokeWidth : style.strokeWidth,
+      fill: currentDraft.type === "frame" ? null : style.fill,
       text: "",
       fontSize: textDefaultFontSize,
       fileId: null,
@@ -1735,6 +1743,55 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     onClose();
   }, [cancelSave, finishTextEditing, onCanvasChanged, onClose, persistScene]);
 
+  const handlePropertiesColorChange = useCallback(
+    (stroke: string) => {
+      const currentSelectedId = selectedIdRef.current;
+      const selectedShape = currentSelectedId
+        ? shapesRef.current.find((shape) => shape.id === currentSelectedId) ?? null
+        : null;
+
+      if (selectedShape) {
+        // Texto tambem persiste a cor em stroke; o renderer a aplica como fill
+        // do Konva.Text, preservando a convencao da cena existente.
+        const nextShapes = shapesRef.current.map((shape) =>
+          shape.id === selectedShape.id ? { ...shape, stroke } : shape,
+        );
+        shapesRef.current = nextShapes;
+        setShapes(nextShapes);
+        scheduleSave();
+        return;
+      }
+
+      setDefaultStyle((current) => ({ ...current, stroke }));
+    },
+    [scheduleSave],
+  );
+
+  const handlePropertiesStrokeWidthChange = useCallback(
+    (strokeWidth: number) => {
+      const currentSelectedId = selectedIdRef.current;
+      const selectedShape = currentSelectedId
+        ? shapesRef.current.find((shape) => shape.id === currentSelectedId) ?? null
+        : null;
+
+      if (selectedShape) {
+        const nextShapes = shapesRef.current.map((shape) =>
+          shape.id === selectedShape.id ? { ...shape, strokeWidth } : shape,
+        );
+        shapesRef.current = nextShapes;
+        setShapes(nextShapes);
+        scheduleSave();
+        return;
+      }
+
+      setDefaultStyle((current) => ({ ...current, strokeWidth }));
+    },
+    [scheduleSave],
+  );
+
+  const selectedPropertiesShape = shapes.find((shape) => shape.id === selectedId) ?? null;
+  const propertiesSections = getCanvasPropertiesSections(selectedPropertiesShape?.type ?? tool);
+  const propertiesStyle = selectedPropertiesShape ?? defaultStyle;
   const selectedDirectionalShape =
     tool === "select"
       ? shapes.find((shape) => shape.id === selectedId && (shape.type === "arrow" || shape.type === "line")) ?? null
@@ -1850,7 +1907,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                   {
                     key: shape.id,
                     strokeColor:
-                      shape.id === selectedId ? selectionStroke : shape.type === "image" ? "transparent" : shape.stroke,
+                      shape.type === "image"
+                        ? "transparent"
+                        : shape.id === selectedId && tool !== "select"
+                          ? selectionStroke
+                          : shape.stroke,
                     strokeWidth: shape.strokeWidth,
                     fill: shape.fill,
                     rotation: shape.rotation,
@@ -1933,12 +1994,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                         : geometryFromDrag(draft.type, draft.start, draft.current);
                     return geometry
                       ? renderCanvasShape(draft.type, geometry, {
-                          strokeColor: draft.type === "frame" ? frameStroke : shapeDefaultStroke,
-                          strokeWidth: shapeDefaultStrokeWidth,
-                          fill: null,
+                          strokeColor: draft.type === "frame" ? frameStroke : defaultStyle.stroke,
+                          strokeWidth:
+                            draft.type === "frame" ? initialDefaultStyle.strokeWidth : defaultStyle.strokeWidth,
+                          fill: draft.type === "frame" ? null : defaultStyle.fill,
                           rotation: 0,
                           text: "",
-                          textColor: shapeDefaultStroke,
+                          textColor: defaultStyle.stroke,
                           fontSize: textDefaultFontSize,
                           fontFamily: canvasUiFontFamily,
                           image: null,
@@ -1953,7 +2015,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                   x={eraserCursor.x}
                   y={eraserCursor.y}
                   radius={eraserRadius}
-                  stroke={shapeDefaultStroke}
+                  stroke={initialDefaultStyle.stroke}
                   strokeWidth={1}
                   dash={[4, 4]}
                   listening={false}
@@ -2049,6 +2111,15 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                 );
               })()
             : null}
+          {propertiesSections ? (
+            <CanvasPropertiesPanel
+              sections={propertiesSections}
+              color={propertiesStyle.stroke}
+              strokeWidth={propertiesStyle.strokeWidth}
+              onColorChange={handlePropertiesColorChange}
+              onStrokeWidthChange={handlePropertiesStrokeWidthChange}
+            />
+          ) : null}
           <CanvasToolbar tool={tool} onSelectTool={setTool} onTogglePan={togglePan} />
         </div>
       )}
