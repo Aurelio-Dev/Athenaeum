@@ -1,5 +1,21 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog técnico 10/07/2026 — Migração do Quadro de Excalidraw para
+> Konva.js:** o Quadro (`src/features/canvases/`) deixou de depender de
+> `@excalidraw/excalidraw` e passou a usar [Konva.js](https://konvajs.org/) +
+> `react-konva` (MIT), com UI 100% própria: toolbar flutuante em pílula,
+> painel de propriedades customizado (`CanvasPropertiesPanel`) e handles de
+> resize/rotate próprios (`Konva.Transformer` para a maioria das formas;
+> handles customizados de início/fim para Seta e Linha, que são
+> direcionais). A migração cobriu 9 ferramentas de forma (Retângulo,
+> Losango, Elipse, Seta, Linha, Lápis, Texto, Imagem, Frame) além de
+> Selecionar, Mover e Borracha por segmento. Não houve alteração nos tokens
+> de cor em si — a paleta de 9 cores de tag (`TAG_COLOR_TOKENS`) continua a
+> mesma e passou a ser reaproveitada também como paleta de preenchimento das
+> formas do Quadro no painel de propriedades, sem criar uma paleta paralela.
+> Não houve alteração de tipografia, tema claro/escuro ou schema de
+> persistência de outras features.
+>
 > **Changelog técnico 07/07/2026 — QA final dos diagramas do Notebook:**
 > a Fase 7.2 encerrou funcionalmente `Diagram`, `Graph`, `Cycle Graph` e
 > `Flowchart` para o escopo atual. A revisão corrigiu o estado ativo dos

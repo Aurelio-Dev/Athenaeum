@@ -1,23 +1,54 @@
 # Validacao manual dos Quadros
 
-> **Update 06/07/2026 — sem nova rodada de QA:** este ciclo ficou restrito à
-> Home da biblioteca, sidebar e painel `Detalhes`. Nenhuma nova validação de
-> Quadros foi executada nesta etapa; a tabela abaixo continua sendo o último
-> registro manual conhecido para esse fluxo.
+> **Update 10/07/2026 — revisão de documentação pós-migração Konva:** o
+> Quadro deixou de usar `@excalidraw/excalidraw` e passou a usar
+> [Konva.js](https://konvajs.org/) + `react-konva`, com toolbar flutuante em
+> pílula, painel de propriedades próprio e handles de resize/rotate próprios
+> (`Konva.Transformer` para a maioria das formas; handles customizados de
+> início/fim para Seta e Linha, que são direcionais). Esta atualização troca
+> o checklist abaixo para refletir as ferramentas atuais — é uma revisão de
+> **documentação**, não uma nova rodada de QA executada: a coluna "OK?" foi
+> reiniciada como "Pendente" e precisa ser preenchida na próxima validação
+> manual real.
 
-| #   | Passo                                                      | Resultado esperado                                                                           | OK?                         |
-| --- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------- |
-| 1   | Abrir o app                                                | Boot normal, sem erro de migration                                                           | OK                          |
-| 2   | Abrir um Quadro criado antes da v12                        | Cena vazia, editavel, sem erro de load                                                       | OK                          |
-| 3   | Desenhar algo, fechar no x, reabrir                        | Desenho e viewport preservados                                                               | Desenho não aparece na tela |
-| 4   | Colar uma imagem pequena no Quadro e fechar/reabrir        | Imagem reaparece; arquivo existe em `canvas-assets/<canvasId>/` no diretorio de dados do app | OK                          |
-| 5   | Tentar colar/salvar imagem maior que 10MB                  | Arquivo e rejeitado; app nao quebra e nao cria arquivo parcial em disco                      | Aceitou a imagem            |
-| 6   | Pressionar Esc durante desenho/uso de ferramenta no Quadro | Esc fica com o Excalidraw; painel do Quadro nao fecha                                        | OK                          |
-| 7   | Abrir Quadro + Caderno + Leitor juntos e editar um Quadro  | Paineis coexistem na pilha; ao salvar, o card do Quadro atualiza "Editado ha X"              | OK                          |
+## Ferramentas atuais do Quadro
 
-Outras observações que notei nos testes:
-1 - Quando clico para abrir um Quadro ele bem colado do lado direito, ele precisa abrir no centro
-2- Dentro do Quadro por algum motivo as coisas não ficam aonde estou "vendo", por exemplo, colei uma imagem no centro, eu tive que ficar
-caçando aonde ela foi colada pelo programa, provavelmente acontece com os desenhos/texto. Vale uma checagem!
-3 - Sei que estamos cuidando do Quadro, mas precisamos urgente tratar de quando clicar em uma outra janela o programa mudar o foco para essa
-janela clicada, pois tive que ficar movendo as janelas da frente para conseguir clicar nos botões, pois fica uma janela em cima da outra.
+Selecionar, Mover, Retângulo, Losango, Elipse, Seta, Linha, Lápis
+(`freedraw`), Borracha por segmento, Texto, Imagem e Frame — acessíveis pela
+toolbar em pílula (Retângulo/Losango/Elipse/Seta agrupados no popup
+"Formas▾") e pelos atalhos de teclado V/R/P/E/T/I/F.
+
+| #   | Passo                                                                                              | Resultado esperado                                                                                                                        | OK?     |
+| --- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | Abrir o app                                                                                          | Boot normal, sem erro de migration                                                                                                             | Pendente |
+| 2   | Abrir um Quadro criado antes da migração para Konva (formato antigo do Excalidraw)                  | Abre com cena vazia editável, sem erro no console                                                                                              | Pendente |
+| 3   | Criar um retângulo, um losango, uma elipse, uma seta e uma linha; fechar no x; reabrir               | Todas as formas e a posição/zoom do stage são preservados                                                                                      | Pendente |
+| 4   | Desenhar um traço curvo com o Lápis; fechar e reabrir                                                | Traço persiste com a mesma curvatura (sem serrilhado)                                                                                          | Pendente |
+| 5   | Usar a Borracha cortando o meio de um traço de Lápis                                                | O traço se divide em dois traços independentes e móveis separadamente                                                                          | Pendente |
+| 6   | Usar a Borracha passando rápido sobre uma forma rígida pequena (retângulo/losango/elipse/seta/linha) | A forma é removida inteira mesmo com o cursor se movendo rápido entre eventos de mousemove                                                     | Pendente |
+| 7   | Criar um texto com a ferramenta Texto, digitar conteúdo e clicar fora para confirmar                 | Texto aparece renderizado no canvas e persiste após fechar/reabrir                                                                             | Pendente |
+| 8   | Inserir uma imagem com a ferramenta Imagem (arquivo menor que o limite atual)                        | Imagem aparece no Quadro; arquivo é salvo em disco (mesmo mecanismo `canvas_files`/Rust já usado) e reaparece após reabrir                     | Pendente |
+| 9   | Tentar inserir uma imagem acima do limite de tamanho aceito pela ferramenta Imagem                   | Inserção é rejeitada com mensagem de erro; app não quebra e não fica arquivo parcial em disco                                                  | Pendente |
+| 10  | Criar um Frame                                                                                       | Retângulo tracejado com rótulo aparece e pode ser redimensionado                                                                                | Pendente |
+| 11  | Selecionar uma forma com resize/rotate suportado (retângulo, losango, elipse, imagem, frame, lápis ou texto) e usar as alças do Transformer | Alças de redimensionar e girar aparecem e funcionam; dimensões e rotação persistem após reabrir                                                | Pendente |
+| 12  | Selecionar uma Seta ou Linha e arrastar as alças customizadas de início/fim                          | Os dois pontos se movem independentemente (não é uma caixa delimitadora); persiste após reabrir                                                | Pendente |
+| 13  | Selecionar formas de tipos diferentes e abrir o painel de propriedades (Cor/Traço/Preenchimento)     | As seções exibidas variam conforme o tipo da forma selecionada; alterações de cor/traço/preenchimento persistem                                | Pendente |
+| 14  | Pressionar Esc durante o modo Mover                                                                  | Volta para a ferramenta ativa anterior; painel do Quadro não fecha                                                                              | Pendente |
+| 15  | Selecionar uma forma e apertar Delete/Backspace                                                      | Forma é removida                                                                                                                                 | Pendente |
+| 16  | Trocar de ferramenta pelos atalhos de teclado (V/R/P/E/T/I/F) com o cursor sobre o Quadro             | A ferramenta correspondente ativa e destaca na toolbar                                                                                          | Pendente |
+| 17  | Abrir Quadro + Caderno + Leitor juntos e editar um Quadro                                            | Painéis coexistem na pilha; ao salvar, o card do Quadro atualiza "Editado há X"                                                                | Pendente |
+
+## Observações anteriores (pré-migração Konva, não reverificadas)
+
+As notas abaixo foram registradas manualmente antes da migração para Konva.
+Não sabemos se ainda se aplicam ao Quadro atual — ficam registradas por não
+serem específicas do Excalidraw (parecem tratar de comportamento geral de
+painel flutuante) e merecem reverificação na próxima rodada de QA real:
+
+1. Ao abrir um Quadro colado do lado direito, ele precisa abrir no centro.
+2. Dentro do Quadro, elementos inseridos (ex.: uma imagem colada no centro)
+   podem não aparecer onde o usuário está vendo a tela — vale checagem de
+   coordenadas de viewport vs. stage.
+3. Clicar em outra janela pode mudar o foco do sistema operacional para essa
+   janela, exigindo reorganizar as janelas para conseguir clicar nos botões
+   do app quando painéis se sobrepõem.
