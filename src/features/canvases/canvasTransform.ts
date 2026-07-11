@@ -14,7 +14,69 @@ export type FinalCanvasTransform = {
   rotation: number;
 };
 
+export type FinalFreedrawTransform = FinalCanvasTransform & {
+  points: number[];
+};
+
 const minimumTransformedSize = 4;
+
+export function getCanvasPointsSize(points: number[]): { width: number; height: number } {
+  if (points.length < 2) {
+    return { width: minimumTransformedSize, height: minimumTransformedSize };
+  }
+
+  let minX = points[0];
+  let maxX = points[0];
+  let minY = points[1];
+  let maxY = points[1];
+  for (let index = 2; index + 1 < points.length; index += 2) {
+    minX = Math.min(minX, points[index]);
+    maxX = Math.max(maxX, points[index]);
+    minY = Math.min(minY, points[index + 1]);
+    maxY = Math.max(maxY, points[index + 1]);
+  }
+
+  return {
+    width: Math.max(minimumTransformedSize, maxX - minX),
+    height: Math.max(minimumTransformedSize, maxY - minY),
+  };
+}
+
+// Em tracos livres, os pontos relativos sao a fonte da verdade. Incorporar a
+// escala em cada par preserva a nuvem inteira, inclusive espelhamentos, e deixa
+// o node pronto para voltar a scaleX/scaleY = 1 sem double scaling.
+export function finalizeFreedrawTransform({
+  x,
+  y,
+  points,
+  scaleX,
+  scaleY,
+  rotation,
+}: {
+  x: number;
+  y: number;
+  points: number[];
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+}): FinalFreedrawTransform {
+  const scaledPoints: number[] = [];
+  for (let index = 0; index + 1 < points.length; index += 2) {
+    const scaledX = points[index] * scaleX;
+    const scaledY = points[index + 1] * scaleY;
+    scaledPoints.push(scaledX === 0 ? 0 : scaledX, scaledY === 0 ? 0 : scaledY);
+  }
+  const size = getCanvasPointsSize(scaledPoints);
+
+  return {
+    x,
+    y,
+    width: size.width,
+    height: size.height,
+    points: scaledPoints,
+    rotation,
+  };
+}
 
 // Converte a escala temporaria do Konva em dimensoes persistiveis. Quando um
 // eixo foi invertido, desloca a origem ao longo dos eixos ja rotacionados para

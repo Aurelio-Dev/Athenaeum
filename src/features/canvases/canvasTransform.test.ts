@@ -1,6 +1,53 @@
 import { describe, expect, it } from "vitest";
 
-import { finalizeCanvasTransform, lockSideAnchorAspectRatio } from "./canvasTransform";
+import { finalizeCanvasTransform, finalizeFreedrawTransform, lockSideAnchorAspectRatio } from "./canvasTransform";
+
+describe("finalizeFreedrawTransform", () => {
+  const points = [0, 0, 10, 5, -5, 15];
+
+  it("incorpora escala uniforme 2x em cada ponto", () => {
+    expect(finalizeFreedrawTransform({ x: 20, y: 30, points, scaleX: 2, scaleY: 2, rotation: 0 })).toEqual({
+      x: 20,
+      y: 30,
+      width: 30,
+      height: 30,
+      points: [0, 0, 20, 10, -10, 30],
+      rotation: 0,
+    });
+  });
+
+  it("espelha horizontalmente cada ponto", () => {
+    expect(finalizeFreedrawTransform({ x: 20, y: 30, points, scaleX: -1, scaleY: 1, rotation: 0 })).toMatchObject({
+      width: 15,
+      height: 15,
+      points: [0, 0, -10, 5, 5, 15],
+    });
+  });
+
+  it("espelha verticalmente cada ponto", () => {
+    expect(finalizeFreedrawTransform({ x: 20, y: 30, points, scaleX: 1, scaleY: -1, rotation: 0 })).toMatchObject({
+      width: 15,
+      height: 15,
+      points: [0, 0, 10, -5, -5, -15],
+    });
+  });
+
+  it("combina flip horizontal com escala nao uniforme", () => {
+    expect(finalizeFreedrawTransform({ x: 20, y: 30, points, scaleX: -2, scaleY: 0.5, rotation: 0 })).toMatchObject({
+      width: 30,
+      height: 7.5,
+      points: [0, 0, -20, 2.5, 10, 7.5],
+    });
+  });
+
+  it("preserva a rotacao depois de consolidar o resize", () => {
+    expect(finalizeFreedrawTransform({ x: 4, y: 8, points, scaleX: 1.5, scaleY: 0.75, rotation: 37 })).toMatchObject({
+      x: 4,
+      y: 8,
+      rotation: 37,
+    });
+  });
+});
 
 describe("finalizeCanvasTransform", () => {
   it("converte escala em dimensoes reais e preserva rotacao", () => {

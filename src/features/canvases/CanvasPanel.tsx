@@ -34,7 +34,13 @@ import {
   moveDirectionalEndpoint,
   type DirectionalEndpoint,
 } from "./canvasDirectionalHandles";
-import { finalizeCanvasTransform, lockSideAnchorAspectRatio, type CanvasTransformBox } from "./canvasTransform";
+import {
+  finalizeCanvasTransform,
+  finalizeFreedrawTransform,
+  getCanvasPointsSize,
+  lockSideAnchorAspectRatio,
+  type CanvasTransformBox,
+} from "./canvasTransform";
 
 const collapsedHeight = 42;
 const headerHeight = 40;
@@ -78,7 +84,7 @@ const frameStroke = "#7A6558";
 const maximumImageSide = 400;
 const maximumImageBytes = 4 * 1024 * 1024;
 const allowedImageMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-const transformerShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "image", "frame"];
+const transformerShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "image", "frame", "freedraw"];
 
 function supportsTransformer(type: CanvasShapeType): boolean {
   return transformerShapeTypes.includes(type);
@@ -747,8 +753,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       transformAspectRatioRef.current = 1;
       return;
     }
-    const width = Math.abs(shape.width);
-    const height = Math.abs(shape.height);
+    const size = shape.type === "freedraw" ? getCanvasPointsSize(shape.points) : shape;
+    const width = Math.abs(size.width);
+    const height = Math.abs(size.height);
     transformAspectRatioRef.current = width > 0 && height > 0 ? width / height : 1;
   }, []);
 
@@ -760,15 +767,25 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         return;
       }
 
-      const finalTransform = finalizeCanvasTransform({
-        x: node.x(),
-        y: node.y(),
-        width: shape.width,
-        height: shape.height,
-        scaleX: node.scaleX(),
-        scaleY: node.scaleY(),
-        rotation: node.rotation(),
-      });
+      const finalTransform =
+        shape.type === "freedraw"
+          ? finalizeFreedrawTransform({
+              x: node.x(),
+              y: node.y(),
+              points: shape.points,
+              scaleX: node.scaleX(),
+              scaleY: node.scaleY(),
+              rotation: node.rotation(),
+            })
+          : finalizeCanvasTransform({
+              x: node.x(),
+              y: node.y(),
+              width: shape.width,
+              height: shape.height,
+              scaleX: node.scaleX(),
+              scaleY: node.scaleY(),
+              rotation: node.rotation(),
+            });
 
       // O Transformer altera scale temporariamente. Consolidar em dimensoes
       // reais evita persistir escala e impede que o stroke continue deformado.
