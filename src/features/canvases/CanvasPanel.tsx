@@ -1,6 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Arrow, Circle, Ellipse, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text } from "react-konva";
+import {
+  Arrow,
+  Circle,
+  Ellipse,
+  Group,
+  Image as KonvaImage,
+  Layer,
+  Line,
+  Rect,
+  Shape,
+  Stage,
+  Text,
+  Transformer,
+} from "react-konva";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
 import { getCanvasContent, loadCanvasFiles, saveCanvasContent, saveCanvasFile } from "../../lib/database";
@@ -16,6 +29,7 @@ import {
 import { eraseAlongSegment } from "./canvasEraser";
 import { CanvasToolbar, isShapeTool, type CanvasTool } from "./CanvasToolbar";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
+import { finalizeCanvasTransform, lockSideAnchorAspectRatio, type CanvasTransformBox } from "./canvasTransform";
 
 const collapsedHeight = 42;
 const headerHeight = 40;
@@ -59,6 +73,11 @@ const frameStroke = "#7A6558";
 const maximumImageSide = 400;
 const maximumImageBytes = 4 * 1024 * 1024;
 const allowedImageMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const transformerShapeTypes: readonly CanvasShapeType[] = ["rect", "diamond", "ellipse", "image", "frame"];
+
+function supportsTransformer(type: CanvasShapeType): boolean {
+  return transformerShapeTypes.includes(type);
+}
 
 function getCanvasUiFontFamily(): string {
   return getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
@@ -186,7 +205,13 @@ type RenderShapeOptions = {
   draggable?: boolean;
   onMouseDown?: (event: Konva.KonvaEventObject<MouseEvent>) => void;
   onDblClick?: (event: Konva.KonvaEventObject<MouseEvent>) => void;
+  onDragMove?: (event: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd?: (event: Konva.KonvaEventObject<DragEvent>) => void;
+  onTransform?: (event: Konva.KonvaEventObject<Event>) => void;
+  onTransformStart?: (event: Konva.KonvaEventObject<Event>) => void;
+  onTransformEnd?: (event: Konva.KonvaEventObject<Event>) => void;
+  nodeRef?: (node: Konva.Node | null) => void;
+  frameLabelRef?: (node: Konva.Text | null) => void;
   text: string;
   textColor: string;
   fontSize: number;
@@ -208,14 +233,20 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
     rotation: options.rotation,
     stroke: options.strokeColor,
     strokeWidth: options.strokeWidth,
+    strokeScaleEnabled: false,
     perfectDrawEnabled: false,
+    ref: options.nodeRef,
     ...(options.dashed
       ? { dash: [6, 4], listening: false }
       : {
           draggable: options.draggable,
           onMouseDown: options.onMouseDown,
           onDblClick: options.onDblClick,
+          onDragMove: options.onDragMove,
           onDragEnd: options.onDragEnd,
+          onTransform: options.onTransform,
+          onTransformStart: options.onTransformStart,
+          onTransformEnd: options.onTransformEnd,
         }),
   };
 
@@ -225,20 +256,66 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
     case "rect":
       return <Rect key={options.key} {...common} width={width} height={height} fill={fill} />;
     case "diamond":
-      return <Line key={options.key} {...common} points={diamondPoints(width, height)} closed fill={fill} />;
-    case "ellipse":
-      // offset negativo desloca a origem para o canto superior-esquerdo da caixa,
-      // deixando node.x()/node.y() no mesmo ponto que as demais formas.
       return (
-        <Ellipse
+        <Group
           key={options.key}
-          {...common}
-          radiusX={width / 2}
-          radiusY={height / 2}
-          offsetX={-width / 2}
-          offsetY={-height / 2}
-          fill={fill}
-        />
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          rotation={options.rotation}
+          listening={!options.dashed}
+          draggable={options.draggable}
+          ref={options.nodeRef}
+          onMouseDown={options.onMouseDown}
+          onDblClick={options.onDblClick}
+          onDragEnd={options.onDragEnd}
+          onTransformStart={options.onTransformStart}
+          onTransformEnd={options.onTransformEnd}
+        >
+          <Line
+            points={diamondPoints(width, height)}
+            closed
+            fill={fill}
+            stroke={options.strokeColor}
+            strokeWidth={options.strokeWidth}
+            strokeScaleEnabled={false}
+            perfectDrawEnabled={false}
+            dash={options.dashed ? [6, 4] : undefined}
+          />
+        </Group>
+      );
+    case "ellipse":
+      return (
+        <Group
+          key={options.key}
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          rotation={options.rotation}
+          listening={!options.dashed}
+          draggable={options.draggable}
+          ref={options.nodeRef}
+          onMouseDown={options.onMouseDown}
+          onDblClick={options.onDblClick}
+          onDragEnd={options.onDragEnd}
+          onTransformStart={options.onTransformStart}
+          onTransformEnd={options.onTransformEnd}
+        >
+          <Ellipse
+            x={width / 2}
+            y={height / 2}
+            radiusX={width / 2}
+            radiusY={height / 2}
+            fill={fill}
+            stroke={options.strokeColor}
+            strokeWidth={options.strokeWidth}
+            strokeScaleEnabled={false}
+            perfectDrawEnabled={false}
+            dash={options.dashed ? [6, 4] : undefined}
+          />
+        </Group>
       );
     case "arrow":
       // Ponta preenchida com a cor do traco (o fill persistido continua null).
@@ -292,10 +369,15 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
           key={options.key}
           x={x}
           y={y}
+          width={width}
+          height={height}
           rotation={options.rotation}
           draggable={options.draggable}
+          ref={options.nodeRef}
           onMouseDown={options.onMouseDown}
           onDragEnd={options.onDragEnd}
+          onTransformStart={options.onTransformStart}
+          onTransformEnd={options.onTransformEnd}
         >
           <Rect
             width={width}
@@ -303,6 +385,7 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
             fill="#D8D2CC"
             stroke={options.strokeColor === "transparent" ? frameStroke : options.strokeColor}
             strokeWidth={options.strokeWidth}
+            strokeScaleEnabled={false}
           />
           <Rect
             x={Math.max(6, width * 0.25)}
@@ -311,6 +394,7 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
             height={Math.max(14, height * 0.5)}
             stroke="#7A6558"
             strokeWidth={1.5}
+            strokeScaleEnabled={false}
           />
           <Line
             points={[
@@ -325,39 +409,54 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
             ]}
             stroke="#7A6558"
             strokeWidth={1.5}
+            strokeScaleEnabled={false}
           />
         </Group>
       );
-    case "frame":
+    case "frame": {
+      const angle = (options.rotation * Math.PI) / 180;
       return (
-        <Group
-          key={options.key}
-          x={x}
-          y={y}
-          rotation={options.rotation}
-          listening={!options.dashed}
-          draggable={options.draggable}
-          onMouseDown={options.onMouseDown}
-          onDragEnd={options.onDragEnd}
-        >
-          <Rect
+        <Fragment key={options.key}>
+          <Group
+            x={x}
+            y={y}
             width={width}
             height={height}
-            stroke={options.strokeColor}
-            strokeWidth={options.strokeWidth}
-            dash={[6, 4]}
-            perfectDrawEnabled={false}
-          />
+            rotation={options.rotation}
+            listening={!options.dashed}
+            draggable={options.draggable}
+            ref={options.nodeRef}
+            onMouseDown={options.onMouseDown}
+            onDragMove={options.onDragMove}
+            onDragEnd={options.onDragEnd}
+            onTransform={options.onTransform}
+            onTransformStart={options.onTransformStart}
+            onTransformEnd={options.onTransformEnd}
+          >
+            <Rect
+              width={width}
+              height={height}
+              stroke={options.strokeColor}
+              strokeWidth={options.strokeWidth}
+              dash={[6, 4]}
+              strokeScaleEnabled={false}
+              perfectDrawEnabled={false}
+            />
+          </Group>
           <Text
-            y={-16}
+            ref={options.frameLabelRef}
+            x={x + Math.sin(angle) * 16}
+            y={y - Math.cos(angle) * 16}
+            rotation={options.rotation}
             text="Frame"
             fontSize={12}
             fontFamily={options.fontFamily}
             fill={options.strokeColor}
             listening={false}
           />
-        </Group>
+        </Fragment>
       );
+    }
     default: {
       // Garante exaustividade: um tipo novo sem case quebra a compilacao aqui.
       const exhaustive: never = type;
@@ -517,6 +616,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   } | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
+  const transformerRef = useRef<Konva.Transformer | null>(null);
+  const shapeNodesRef = useRef<Map<string, Konva.Node>>(new Map());
+  const frameLabelNodesRef = useRef<Map<string, Konva.Text>>(new Map());
+  const transformAspectRatioRef = useRef(1);
+  const shiftPressedRef = useRef(false);
   const pointerInsideRef = useRef(false);
   const spacePressedRef = useRef(false);
   const isPanningRef = useRef(false);
@@ -593,6 +697,100 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Autosave com o mesmo debounce de 750ms do Leitor. O flush exato fica com o
   // handleClose/flush de unmount abaixo.
   const { schedule: scheduleSave, cancel: cancelSave } = useReaderPersistence(persistScene, 750);
+
+  const registerShapeNode = useCallback((shapeId: string, node: Konva.Node | null) => {
+    if (node) {
+      shapeNodesRef.current.set(shapeId, node);
+    } else {
+      shapeNodesRef.current.delete(shapeId);
+    }
+  }, []);
+
+  const registerFrameLabelNode = useCallback((shapeId: string, node: Konva.Text | null) => {
+    if (node) {
+      frameLabelNodesRef.current.set(shapeId, node);
+    } else {
+      frameLabelNodesRef.current.delete(shapeId);
+    }
+  }, []);
+
+  const syncFrameLabelNode = useCallback((shapeId: string, node: Konva.Node) => {
+    const label = frameLabelNodesRef.current.get(shapeId);
+    if (!label) {
+      return;
+    }
+    const angle = (node.rotation() * Math.PI) / 180;
+    label.position({
+      x: node.x() + Math.sin(angle) * 16,
+      y: node.y() - Math.cos(angle) * 16,
+    });
+    label.rotation(node.rotation());
+    label.getLayer()?.batchDraw();
+  }, []);
+
+  const handleShapeTransformStart = useCallback((shapeId: string) => {
+    const shape = shapesRef.current.find((candidate) => candidate.id === shapeId);
+    if (!shape) {
+      transformAspectRatioRef.current = 1;
+      return;
+    }
+    const width = Math.abs(shape.width);
+    const height = Math.abs(shape.height);
+    transformAspectRatioRef.current = width > 0 && height > 0 ? width / height : 1;
+  }, []);
+
+  const handleShapeTransformEnd = useCallback(
+    (shapeId: string, event: Konva.KonvaEventObject<Event>) => {
+      const node = event.target;
+      const shape = shapesRef.current.find((candidate) => candidate.id === shapeId);
+      if (!shape || !supportsTransformer(shape.type)) {
+        return;
+      }
+
+      const finalTransform = finalizeCanvasTransform({
+        x: node.x(),
+        y: node.y(),
+        width: shape.width,
+        height: shape.height,
+        scaleX: node.scaleX(),
+        scaleY: node.scaleY(),
+        rotation: node.rotation(),
+      });
+
+      // O Transformer altera scale temporariamente. Consolidar em dimensoes
+      // reais evita persistir escala e impede que o stroke continue deformado.
+      node.scale({ x: 1, y: 1 });
+      node.position({ x: finalTransform.x, y: finalTransform.y });
+      node.rotation(finalTransform.rotation);
+      if (shape.type === "frame") {
+        syncFrameLabelNode(shapeId, node);
+      }
+
+      const nextShapes = shapesRef.current.map((candidate) =>
+        candidate.id === shapeId ? { ...candidate, ...finalTransform } : candidate,
+      );
+      shapesRef.current = nextShapes;
+      setShapes(nextShapes);
+      transformerRef.current?.forceUpdate();
+      node.getLayer()?.batchDraw();
+      scheduleSave();
+    },
+    [scheduleSave, syncFrameLabelNode],
+  );
+
+  const handleTransformerBoundBox = useCallback(
+    (_oldBox: CanvasTransformBox, newBox: CanvasTransformBox): CanvasTransformBox => {
+      if (!shiftPressedRef.current) {
+        return newBox;
+      }
+      return lockSideAnchorAspectRatio(
+        newBox,
+        transformerRef.current?.getActiveAnchor() ?? null,
+        transformAspectRatioRef.current,
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -752,6 +950,49 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       }
     };
   }, [canvasUiFontFamily, editingText]);
+
+  useEffect(() => {
+    function handleShiftKeyDown(event: KeyboardEvent) {
+      if (event.key === "Shift") {
+        shiftPressedRef.current = true;
+      }
+    }
+
+    function handleShiftKeyUp(event: KeyboardEvent) {
+      if (event.key === "Shift") {
+        shiftPressedRef.current = false;
+      }
+    }
+
+    function resetShift() {
+      shiftPressedRef.current = false;
+    }
+
+    window.addEventListener("keydown", handleShiftKeyDown);
+    window.addEventListener("keyup", handleShiftKeyUp);
+    window.addEventListener("blur", resetShift);
+    return () => {
+      window.removeEventListener("keydown", handleShiftKeyDown);
+      window.removeEventListener("keyup", handleShiftKeyUp);
+      window.removeEventListener("blur", resetShift);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const transformer = transformerRef.current;
+    if (!transformer) {
+      return;
+    }
+
+    const selectedShape = shapes.find((shape) => shape.id === selectedId);
+    const selectedNode = selectedShape ? shapeNodesRef.current.get(selectedShape.id) : null;
+    if (tool === "select" && selectedShape && supportsTransformer(selectedShape.type) && selectedNode) {
+      transformer.nodes([selectedNode]);
+    } else {
+      transformer.nodes([]);
+    }
+    transformer.getLayer()?.batchDraw();
+  }, [imageCache, selectedId, shapes, tool]);
 
   // Reaplica o transform persistido no stage. Usado no load e sempre que o Stage
   // remonta (recolher/expandir desmonta e remonta o Stage, zerando o transform).
@@ -1509,6 +1750,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                     fontFamily: canvasUiFontFamily,
                     image: shape.fileId ? imageCache.get(shape.fileId) ?? null : null,
                     draggable: tool === "select",
+                    nodeRef: supportsTransformer(shape.type)
+                      ? (node) => registerShapeNode(shape.id, node)
+                      : undefined,
+                    frameLabelRef:
+                      shape.type === "frame" ? (node) => registerFrameLabelNode(shape.id, node) : undefined,
                     onMouseDown: (event) => {
                       if (toolRef.current !== "select") {
                         return;
@@ -1524,7 +1770,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                       event.cancelBubble = true;
                       beginTextEditing(shape);
                     },
+                    onDragMove:
+                      shape.type === "frame" ? (event) => syncFrameLabelNode(shape.id, event.target) : undefined,
                     onDragEnd: (event) => handleShapeDragEnd(shape.id, event),
+                    onTransform:
+                      shape.type === "frame" ? (event) => syncFrameLabelNode(shape.id, event.target) : undefined,
+                    onTransformStart: () => handleShapeTransformStart(shape.id),
+                    onTransformEnd: (event) => handleShapeTransformEnd(shape.id, event),
                   },
                 ),
               )}
@@ -1565,6 +1817,26 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                   perfectDrawEnabled={false}
                 />
               ) : null}
+              <Transformer
+                ref={transformerRef}
+                enabledAnchors={[
+                  "top-left",
+                  "top-center",
+                  "top-right",
+                  "middle-left",
+                  "middle-right",
+                  "bottom-left",
+                  "bottom-center",
+                  "bottom-right",
+                ]}
+                keepRatio={false}
+                shiftBehavior="default"
+                flipEnabled
+                rotateEnabled
+                rotationSnaps={[]}
+                ignoreStroke
+                boundBoxFunc={handleTransformerBoundBox}
+              />
             </Layer>
           </Stage>
           {imageError ? (
