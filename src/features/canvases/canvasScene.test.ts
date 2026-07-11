@@ -21,6 +21,7 @@ describe("parseCanvasContent", () => {
           stroke: "#2C1A10",
           strokeWidth: 2,
           fill: null,
+          fillStyle: "none",
           text: "",
           fontSize: 16,
           fileId: null,
@@ -37,14 +38,14 @@ describe("parseCanvasContent", () => {
       schemaVersion: 1,
       stage: { x: 0, y: 0, scale: 1 },
       shapes: [
-        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
-        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
-        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
-        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
-        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
-        { id: "t", type: "text", x: 8, y: 9, width: 72, height: 38, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "Linha 1\nLinha 2", fontSize: 18, fileId: null },
-        { id: "i", type: "image", x: 12, y: 14, width: 320, height: 180, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: "file-1" },
-        { id: "fr", type: "frame", x: 20, y: 25, width: 400, height: 240, points: [], rotation: 0, stroke: "#7A6558", strokeWidth: 2, fill: null, text: "", fontSize: 16, fileId: null },
+        { id: "d", type: "diamond", x: 0, y: 0, width: 40, height: 40, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "solid", text: "", fontSize: 16, fileId: null },
+        { id: "e", type: "ellipse", x: 5, y: 5, width: 30, height: 20, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "hachure", text: "", fontSize: 16, fileId: null },
+        { id: "a", type: "arrow", x: 0, y: 0, width: 50, height: 10, points: [0, 0, 50, 10], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "none", text: "", fontSize: 16, fileId: null },
+        { id: "l", type: "line", x: 1, y: 2, width: 30, height: 0, points: [0, 0, 30, 0], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "none", text: "", fontSize: 16, fileId: null },
+        { id: "f", type: "freedraw", x: 3, y: 4, width: 20, height: 12, points: [0, 0, 5, 6, 12, 3, 20, 12], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "none", text: "", fontSize: 16, fileId: null },
+        { id: "t", type: "text", x: 8, y: 9, width: 72, height: 38, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "none", text: "Linha 1\nLinha 2", fontSize: 18, fileId: null },
+        { id: "i", type: "image", x: 12, y: 14, width: 320, height: 180, points: [], rotation: 0, stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "none", text: "", fontSize: 16, fileId: "file-1" },
+        { id: "fr", type: "frame", x: 20, y: 25, width: 400, height: 240, points: [], rotation: 0, stroke: "#7A6558", strokeWidth: 2, fill: null, fillStyle: "cross-hatch", text: "", fontSize: 16, fileId: null },
       ],
     };
 
@@ -76,10 +77,34 @@ describe("parseCanvasContent", () => {
         stroke: "#2C1A10",
         strokeWidth: 2,
         fill: null,
+        fillStyle: "none",
         text: "Athenaeum",
         fontSize: 16,
         fileId: null,
       },
+    ]);
+  });
+
+  it("preserva fillStyle valido e usa none quando ausente ou invalido", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "antiga", type: "rect", x: 0, y: 0, width: 20, height: 10 },
+        { id: "solida", type: "rect", x: 0, y: 0, width: 20, height: 10, fillStyle: "solid" },
+        { id: "hachurada", type: "rect", x: 0, y: 0, width: 20, height: 10, fillStyle: "hachure" },
+        { id: "cruzada", type: "rect", x: 0, y: 0, width: 20, height: 10, fillStyle: "cross-hatch" },
+        { id: "invalida", type: "rect", x: 0, y: 0, width: 20, height: 10, fillStyle: "gradiente" },
+      ],
+    });
+
+    expect(parseCanvasContent(raw).shapes.map((shape) => shape.fillStyle)).toEqual([
+      "none",
+      "solid",
+      "hachure",
+      "cross-hatch",
+      "none",
     ]);
   });
 
@@ -114,6 +139,7 @@ describe("parseCanvasContent", () => {
       stroke: "#7A6558",
       strokeWidth: 2,
       fill: null,
+      fillStyle: "none",
       text: "",
       fontSize: 16,
       fileId: null,
@@ -180,6 +206,7 @@ describe("parseCanvasContent", () => {
         stroke: "#2C1A10",
         strokeWidth: 2,
         fill: null,
+        fillStyle: "none",
         text: "",
         fontSize: 16,
         fileId: null,
@@ -245,6 +272,7 @@ describe("parseCanvasContent", () => {
         stroke: "#2C1A10",
         strokeWidth: 2,
         fill: null,
+        fillStyle: "none",
         text: "",
         fontSize: 16,
         fileId: null,

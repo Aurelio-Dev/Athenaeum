@@ -22,6 +22,7 @@ import {
   createShapeId,
   diamondPoints,
   parseCanvasContent,
+  type CanvasFillStyle,
   type CanvasSceneContent,
   type CanvasShape,
   type CanvasShapeType,
@@ -44,6 +45,7 @@ import {
   scaleTextFontSize,
   type CanvasTransformBox,
 } from "./canvasTransform";
+import { getFillPatternImage } from "./canvasFillPattern";
 
 const collapsedHeight = 42;
 const headerHeight = 40;
@@ -63,11 +65,11 @@ type DraftShape =
   | { type: Exclude<CanvasShapeType, "freedraw" | "text" | "image">; start: Point; current: Point }
   | { type: "freedraw"; points: Point[] };
 type EditingText = { id: string; value: string };
-type CanvasDefaultStyle = { stroke: string; strokeWidth: number; fill: string | null };
+type CanvasDefaultStyle = { stroke: string; strokeWidth: number; fill: string | null; fillStyle: CanvasFillStyle };
 // Geometria resolvida de uma forma — o suficiente para renderiza-la.
 type ShapeGeometry = { x: number; y: number; width: number; height: number; points: number[] };
 
-const initialDefaultStyle: CanvasDefaultStyle = { stroke: "#2C1A10", strokeWidth: 2, fill: null };
+const initialDefaultStyle: CanvasDefaultStyle = { stroke: "#2C1A10", strokeWidth: 2, fill: null, fillStyle: "none" };
 // Quando a selecao continua ativa fora da ferramenta Selecionar, os handles nao
 // aparecem; este realce preserva a indicacao visual sem esconder a cor durante
 // a edicao normal pelo painel de propriedades.
@@ -218,7 +220,8 @@ type RenderShapeOptions = {
   key?: string;
   strokeColor: string;
   strokeWidth: number;
-  fill: string | null;
+  fillColor: string;
+  fillStyle: CanvasFillStyle;
   rotation: number;
   dashed?: boolean;
   draggable?: boolean;
@@ -237,6 +240,29 @@ type RenderShapeOptions = {
   fontFamily: string;
   image: HTMLImageElement | null;
 };
+
+type ShapeFillProps = {
+  fill?: string;
+  fillPatternImage?: HTMLImageElement;
+  fillPatternRepeat?: "repeat";
+  fillPriority?: "pattern";
+};
+
+function getShapeFillProps(fillStyle: CanvasFillStyle, color: string): ShapeFillProps {
+  if (fillStyle === "solid") {
+    return { fill: color };
+  }
+  if (fillStyle === "hachure" || fillStyle === "cross-hatch") {
+    return {
+      // O Konva aceita CanvasImageSource em runtime, mas a tipagem exposta por
+      // react-konva restringe esta prop a HTMLImageElement.
+      fillPatternImage: getFillPatternImage(fillStyle, color) as unknown as HTMLImageElement,
+      fillPatternRepeat: "repeat",
+      fillPriority: "pattern",
+    };
+  }
+  return {};
+}
 
 // Renderiza qualquer tipo de forma como o node Konva correspondente. Fonte unica
 // de "tipo -> geometria na tela", usada tanto pelas formas persistidas quanto
@@ -269,11 +295,14 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
         }),
   };
 
-  const fill = options.fill ?? undefined;
+  const fillProps =
+    type === "rect" || type === "diamond" || type === "ellipse"
+      ? getShapeFillProps(options.fillStyle, options.fillColor)
+      : {};
 
   switch (type) {
     case "rect":
-      return <Rect key={options.key} {...common} width={width} height={height} fill={fill} />;
+      return <Rect key={options.key} {...common} {...fillProps} width={width} height={height} />;
     case "diamond":
       return (
         <Group
@@ -295,7 +324,7 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
           <Line
             points={diamondPoints(width, height)}
             closed
-            fill={fill}
+            {...fillProps}
             stroke={options.strokeColor}
             strokeWidth={options.strokeWidth}
             strokeScaleEnabled={false}
@@ -327,7 +356,7 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
             y={height / 2}
             radiusX={width / 2}
             radiusY={height / 2}
-            fill={fill}
+            {...fillProps}
             stroke={options.strokeColor}
             strokeWidth={options.strokeWidth}
             strokeScaleEnabled={false}
@@ -922,6 +951,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           stroke: initialDefaultStyle.stroke,
           strokeWidth: initialDefaultStyle.strokeWidth,
           fill: null,
+          fillStyle: "none",
           text: "",
           fontSize: textDefaultFontSize,
           fileId,
@@ -1307,6 +1337,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             stroke: style.stroke,
             strokeWidth: style.strokeWidth,
             fill: null,
+            fillStyle: "none",
             text: "",
             fontSize: textDefaultFontSize,
             fileId: null,
@@ -1445,6 +1476,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       stroke: currentDraft.type === "frame" ? frameStroke : style.stroke,
       strokeWidth: currentDraft.type === "frame" ? initialDefaultStyle.strokeWidth : style.strokeWidth,
       fill: currentDraft.type === "frame" ? null : style.fill,
+      fillStyle: getCanvasPropertiesSections(currentDraft.type)?.preenchimento ? style.fillStyle : "none",
       text: "",
       fontSize: textDefaultFontSize,
       fileId: null,
@@ -1789,6 +1821,28 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     [scheduleSave],
   );
 
+  const handlePropertiesFillStyleChange = useCallback(
+    (fillStyle: CanvasFillStyle) => {
+      const currentSelectedId = selectedIdRef.current;
+      const selectedShape = currentSelectedId
+        ? shapesRef.current.find((shape) => shape.id === currentSelectedId) ?? null
+        : null;
+
+      if (selectedShape) {
+        const nextShapes = shapesRef.current.map((shape) =>
+          shape.id === selectedShape.id ? { ...shape, fillStyle } : shape,
+        );
+        shapesRef.current = nextShapes;
+        setShapes(nextShapes);
+        scheduleSave();
+        return;
+      }
+
+      setDefaultStyle((current) => ({ ...current, fillStyle }));
+    },
+    [scheduleSave],
+  );
+
   const selectedPropertiesShape = shapes.find((shape) => shape.id === selectedId) ?? null;
   const propertiesSections = getCanvasPropertiesSections(selectedPropertiesShape?.type ?? tool);
   const propertiesStyle = selectedPropertiesShape ?? defaultStyle;
@@ -1913,7 +1967,8 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                           ? selectionStroke
                           : shape.stroke,
                     strokeWidth: shape.strokeWidth,
-                    fill: shape.fill,
+                    fillColor: shape.stroke,
+                    fillStyle: shape.fillStyle,
                     rotation: shape.rotation,
                     text: shape.text,
                     textColor: shape.stroke,
@@ -1997,7 +2052,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                           strokeColor: draft.type === "frame" ? frameStroke : defaultStyle.stroke,
                           strokeWidth:
                             draft.type === "frame" ? initialDefaultStyle.strokeWidth : defaultStyle.strokeWidth,
-                          fill: draft.type === "frame" ? null : defaultStyle.fill,
+                          fillColor: defaultStyle.stroke,
+                          fillStyle: getCanvasPropertiesSections(draft.type)?.preenchimento
+                            ? defaultStyle.fillStyle
+                            : "none",
                           rotation: 0,
                           text: "",
                           textColor: defaultStyle.stroke,
@@ -2116,8 +2174,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
               sections={propertiesSections}
               color={propertiesStyle.stroke}
               strokeWidth={propertiesStyle.strokeWidth}
+              fillStyle={propertiesStyle.fillStyle}
               onColorChange={handlePropertiesColorChange}
               onStrokeWidthChange={handlePropertiesStrokeWidthChange}
+              onFillStyleChange={handlePropertiesFillStyleChange}
             />
           ) : null}
           <CanvasToolbar tool={tool} onSelectTool={setTool} onTogglePan={togglePan} />

@@ -14,6 +14,7 @@
 // usam x/y/width/height; as direcionais (arrow, line) e o traco livre (freedraw)
 // usam x/y como ancora e points ([x1, y1, x2, y2, ...]) relativos a x/y.
 export type CanvasShapeType = "rect" | "diamond" | "ellipse" | "arrow" | "line" | "freedraw" | "text" | "image" | "frame";
+export type CanvasFillStyle = "none" | "solid" | "hachure" | "cross-hatch";
 
 export type CanvasShape = {
   id: string;
@@ -30,6 +31,7 @@ export type CanvasShape = {
   stroke: string;
   strokeWidth: number;
   fill: string | null;
+  fillStyle: CanvasFillStyle;
   text: string;
   fontSize: number;
   fileId: string | null;
@@ -101,6 +103,14 @@ const canvasShapeTypes: readonly CanvasShapeType[] = [
 
 function isCanvasShapeType(value: unknown): value is CanvasShapeType {
   return typeof value === "string" && (canvasShapeTypes as readonly string[]).includes(value);
+}
+
+const canvasFillStyles: readonly CanvasFillStyle[] = ["none", "solid", "hachure", "cross-hatch"];
+
+function parseFillStyle(value: unknown): CanvasFillStyle {
+  return typeof value === "string" && (canvasFillStyles as readonly string[]).includes(value)
+    ? (value as CanvasFillStyle)
+    : "none";
 }
 
 // Lista de pontos [x1, y1, x2, y2, ...]. Qualquer elemento invalido descarta a
@@ -196,6 +206,7 @@ function parseShape(value: unknown): CanvasShape | null {
     stroke: typeof value.stroke === "string" ? value.stroke : defaultStroke,
     strokeWidth: finiteNumber(value.strokeWidth, defaultStrokeWidth),
     fill: typeof value.fill === "string" ? value.fill : null,
+    fillStyle: parseFillStyle(value.fillStyle),
     text,
     fontSize: fontSize > 0 ? fontSize : defaultFontSize,
     fileId,
