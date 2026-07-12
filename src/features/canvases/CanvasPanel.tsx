@@ -28,6 +28,7 @@ import {
   type CanvasShapeType,
 } from "./canvasScene";
 import { eraseAlongSegment } from "./canvasEraser";
+import { areCanvasShapesEqual, createCanvasHistory } from "./canvasHistory";
 import { CanvasToolbar, isShapeTool, type CanvasTool } from "./CanvasToolbar";
 import { CanvasPropertiesPanel } from "./CanvasPropertiesPanel";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
@@ -802,6 +803,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Ultima posicao da borracha durante o gesto (mousedown -> mousemove): cada
   // tick apaga ao longo do segmento anterior -> atual.
   const eraserLastPointRef = useRef<Point | null>(null);
+  const eraserGestureSnapshotRef = useRef<CanvasShape[] | null>(null);
+  const directionalHandleSnapshotRef = useRef<{ shapeId: string; shapes: CanvasShape[] } | null>(null);
+  const pendingTextCreationRef = useRef<{ id: string; shapes: CanvasShape[] } | null>(null);
+  const historyRef = useRef(createCanvasHistory());
   const hasLoadedRef = useRef(false);
   const hasClosedExplicitlyRef = useRef(false);
 
@@ -843,6 +848,20 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Autosave com o mesmo debounce de 750ms do Leitor. O flush exato fica com o
   // handleClose/flush de unmount abaixo.
   const { schedule: scheduleSave, cancel: cancelSave } = useReaderPersistence(persistScene, 750);
+
+  const pushHistorySnapshot = useCallback((snapshot: CanvasShape[] = shapesRef.current) => {
+    historyRef.current.pushSnapshot(snapshot);
+  }, []);
+
+  const applyHistorySnapshot = useCallback(
+    (snapshot: CanvasShape[]) => {
+      shapesRef.current = snapshot;
+      setShapes(snapshot);
+      setSelectedId(null);
+      scheduleSave();
+    },
+    [scheduleSave],
+  );
 
   const registerShapeNode = useCallback((shapeId: string, node: Konva.Node | null) => {
     if (node) {
@@ -945,13 +964,19 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       const nextShapes = shapesRef.current.map((candidate) =>
         candidate.id === shapeId ? { ...candidate, ...finalTransform } : candidate,
       );
-      shapesRef.current = nextShapes;
-      setShapes(nextShapes);
+      const didChange = !areCanvasShapesEqual(shapesRef.current, nextShapes);
+      if (didChange) {
+        pushHistorySnapshot();
+        shapesRef.current = nextShapes;
+        setShapes(nextShapes);
+      }
       transformerRef.current?.forceUpdate();
       node.getLayer()?.batchDraw();
-      scheduleSave();
+      if (didChange) {
+        scheduleSave();
+      }
     },
-    [canvasUiFontFamily, scheduleSave, syncFrameLabelNode],
+    [canvasUiFontFamily, pushHistorySnapshot, scheduleSave, syncFrameLabelNode],
   );
 
   const handleTransformerBoundBox = useCallback(
@@ -1043,6 +1068,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           fileId,
         };
         const nextShapes = [...shapesRef.current, newShape];
+        pushHistorySnapshot();
         shapesRef.current = nextShapes;
         setShapes(nextShapes);
         selectCreatedShape(newShape.id);
@@ -1055,7 +1081,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         imageImportInProgressRef.current = false;
       }
     },
-    [canvasId, scheduleSave],
+    [canvasId, pushHistorySnapshot, scheduleSave],
   );
 
   const finishTextEditing = useCallback(() => {
@@ -1067,6 +1093,12 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     editingTextRef.current = null;
     setEditingText(null);
 
+    const pendingCreation =
+      pendingTextCreationRef.current?.id === editing.id ? pendingTextCreationRef.current : null;
+    if (pendingCreation) {
+      pendingTextCreationRef.current = null;
+    }
+
     const currentShape = shapesRef.current.find((shape) => shape.id === editing.id && shape.type === "text");
     if (!currentShape) {
       return;
@@ -1075,12 +1107,29 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     let nextShapes: CanvasShape[];
     if (editing.value.trim().length === 0) {
       nextShapes = shapesRef.current.filter((shape) => shape.id !== editing.id);
+      // Um texto novo vazio nunca foi confirmado, portanto nao cria entrada de
+      // historico. Apagar o conteudo de um texto existente, por outro lado, e
+      // uma remocao real que precisa poder ser desfeita.
+      if (!pendingCreation && !areCanvasShapesEqual(shapesRef.current, nextShapes)) {
+        pushHistorySnapshot();
+      }
       setSelectedId(null);
     } else {
+      if (!pendingCreation && editing.value === currentShape.text) {
+        return;
+      }
+
       const box = measureTextBox(editing.value, currentShape.fontSize, canvasUiFontFamily);
       nextShapes = shapesRef.current.map((shape) =>
         shape.id === editing.id ? { ...shape, text: editing.value, width: box.width, height: box.height } : shape,
       );
+      if (pendingCreation) {
+        // A forma provisoria ja esta no estado React durante a digitacao. Para
+        // desfazer a criacao, o snapshot precisa ser anterior a essa forma.
+        pushHistorySnapshot(pendingCreation.shapes);
+      } else {
+        pushHistorySnapshot();
+      }
       selectCreatedShape(editing.id);
     }
 
@@ -1089,7 +1138,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     shapesRef.current = nextShapes;
     setShapes(nextShapes);
     scheduleSave();
-  }, [canvasUiFontFamily, scheduleSave, selectCreatedShape]);
+  }, [canvasUiFontFamily, pushHistorySnapshot, scheduleSave, selectCreatedShape]);
 
   const beginTextEditing = useCallback((shape: CanvasShape) => {
     if (shape.type !== "text") {
@@ -1391,6 +1440,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
           return;
         }
         eraserLastPointRef.current = point;
+        eraserGestureSnapshotRef.current = shapesRef.current;
         setSelectedId(null);
         return;
       }
@@ -1428,6 +1478,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
             fontSize: textDefaultFontSize,
             fileId: null,
           };
+          pendingTextCreationRef.current = { id: newShape.id, shapes: shapesRef.current };
           const nextShapes = [...shapesRef.current, newShape];
           shapesRef.current = nextShapes;
           setShapes(nextShapes);
@@ -1527,6 +1578,11 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     // Borracha: mouseup so encerra o gesto — a remocao ja aconteceu em tempo
     // real durante o mousemove.
     eraserLastPointRef.current = null;
+    const eraserGestureSnapshot = eraserGestureSnapshotRef.current;
+    eraserGestureSnapshotRef.current = null;
+    if (eraserGestureSnapshot && !areCanvasShapesEqual(eraserGestureSnapshot, shapesRef.current)) {
+      pushHistorySnapshot(eraserGestureSnapshot);
+    }
 
     if (!drawStartRef.current) {
       return;
@@ -1567,10 +1623,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       fontSize: textDefaultFontSize,
       fileId: null,
     };
-    setShapes((current) => [...current, newShape]);
+    const nextShapes = [...shapesRef.current, newShape];
+    pushHistorySnapshot();
+    shapesRef.current = nextShapes;
+    setShapes(nextShapes);
     selectCreatedShape(newShape.id);
     scheduleSave();
-  }, [draft, finishPan, scheduleSave, selectCreatedShape]);
+  }, [draft, finishPan, pushHistorySnapshot, scheduleSave, selectCreatedShape]);
 
   // Alterna o modo Mover (pan). Clicar de novo (ou Esc) volta a ferramenta anterior.
   const togglePan = useCallback(() => {
@@ -1583,16 +1642,39 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     });
   }, []);
 
-  // Move um retangulo no modo selecionar: persiste a nova posicao ao soltar.
+  // Move uma forma no modo selecionar: persiste a nova posicao ao soltar.
   const handleShapeDragEnd = useCallback(
     (id: string, event: Konva.KonvaEventObject<DragEvent>) => {
       const node = event.target;
       const nextX = node.x();
       const nextY = node.y();
-      setShapes((current) => current.map((shape) => (shape.id === id ? { ...shape, x: nextX, y: nextY } : shape)));
+      const currentShape = shapesRef.current.find((shape) => shape.id === id);
+      if (!currentShape || (currentShape.x === nextX && currentShape.y === nextY)) {
+        return;
+      }
+
+      const nextShapes = shapesRef.current.map((shape) => (shape.id === id ? { ...shape, x: nextX, y: nextY } : shape));
+      pushHistorySnapshot();
+      shapesRef.current = nextShapes;
+      setShapes(nextShapes);
       scheduleSave();
     },
-    [scheduleSave],
+    [pushHistorySnapshot, scheduleSave],
+  );
+
+  const beginDirectionalHandleGesture = useCallback((shapeId: string) => {
+    directionalHandleSnapshotRef.current = { shapeId, shapes: shapesRef.current };
+  }, []);
+
+  const commitDirectionalHandleGesture = useCallback(
+    (shapeId: string) => {
+      const gesture = directionalHandleSnapshotRef.current;
+      directionalHandleSnapshotRef.current = null;
+      if (gesture?.shapeId === shapeId && !areCanvasShapesEqual(gesture.shapes, shapesRef.current)) {
+        pushHistorySnapshot(gesture.shapes);
+      }
+    },
+    [pushHistorySnapshot],
   );
 
   const updateDirectionalHandle = useCallback(
@@ -1608,6 +1690,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       const nextShapes = shapesRef.current.map((current) =>
         current.id === shapeId ? { ...current, ...nextGeometry } : current,
       );
+      const didChange = !areCanvasShapesEqual(shapesRef.current, nextShapes);
+      if (!didChange) {
+        return getDirectionalEndpoints(nextGeometry)[endpoint];
+      }
       shapesRef.current = nextShapes;
       setShapes(nextShapes);
       if (persist) {
@@ -1628,13 +1714,16 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     ) => {
       event.cancelBubble = true;
       const nextPoint = updateDirectionalHandle(shapeId, endpoint, { x: event.target.x(), y: event.target.y() }, persist);
+      if (persist) {
+        commitDirectionalHandleGesture(shapeId);
+      }
       if (nextPoint) {
         // Aplica a correcao de distancia minima imediatamente, antes do proximo
         // render React, para o handle nunca parecer sobreposto ao outro.
         event.target.position(nextPoint);
       }
     },
-    [updateDirectionalHandle],
+    [commitDirectionalHandleGesture, updateDirectionalHandle],
   );
 
   const updateDirectionalControlHandle = useCallback(
@@ -1650,6 +1739,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       const nextShapes = shapesRef.current.map((current) =>
         current.id === shapeId ? { ...current, ...nextGeometry } : current,
       );
+      const didChange = !areCanvasShapesEqual(shapesRef.current, nextShapes);
+      if (!didChange) {
+        return getDirectionalControlPoint(nextGeometry);
+      }
       shapesRef.current = nextShapes;
       setShapes(nextShapes);
       if (persist) {
@@ -1669,11 +1762,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         { x: event.target.x(), y: event.target.y() },
         persist,
       );
+      if (persist) {
+        commitDirectionalHandleGesture(shapeId);
+      }
       if (nextPoint) {
         event.target.position(nextPoint);
       }
     },
-    [updateDirectionalControlHandle],
+    [commitDirectionalHandleGesture, updateDirectionalControlHandle],
   );
 
   const toggleCollapsed = useCallback(() => {
@@ -1789,16 +1885,38 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     }
   }, [applyStageTransform, isCollapsed]);
 
-  // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Esc sai do modo
-  // Mover (volta a ferramenta anterior); V = selecionar, R = retangulo, P = lapis,
-  // E = borracha, T = texto, I = imagem, F = frame, Delete/Backspace = remover a selecao. Gated pelo ponteiro
-  // dentro do Quadro para nao sequestrar o teclado de outros paineis.
+  // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Ctrl+Z/Y para
+  // historico, Esc sai do modo Mover, V = selecionar, R = retangulo, P = lapis,
+  // E = borracha, T = texto, I = imagem, F = frame, Delete/Backspace = remover
+  // a selecao. Sao gated pelo ponteiro para nao sequestrar outros paineis.
   useEffect(() => {
     function handleToolKeys(event: KeyboardEvent) {
       // Esc sai do Mover mesmo com o ponteiro fora (e so um toggle de modo, seguro).
       if (event.key === "Escape") {
         if (toolRef.current === "pan") {
           setTool(previousToolRef.current);
+        }
+        return;
+      }
+
+      const historyKey = event.key.toLowerCase();
+      if (event.ctrlKey && (historyKey === "z" || historyKey === "y")) {
+        // Durante a digitacao, Ctrl+Z/Ctrl+Y pertencem ao textarea nativo, nao
+        // ao historico do Quadro.
+        if (document.activeElement === textAreaRef.current || isEditableTarget(event.target)) {
+          return;
+        }
+        if (!pointerInsideRef.current) {
+          return;
+        }
+
+        event.preventDefault();
+        const snapshot =
+          historyKey === "z"
+            ? historyRef.current.undo(shapesRef.current)
+            : historyRef.current.redo(shapesRef.current);
+        if (snapshot) {
+          applyHistorySnapshot(snapshot);
         }
         return;
       }
@@ -1847,8 +1965,14 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         if (!currentSelected) {
           return;
         }
+        const nextShapes = shapesRef.current.filter((shape) => shape.id !== currentSelected);
+        if (areCanvasShapesEqual(shapesRef.current, nextShapes)) {
+          return;
+        }
         event.preventDefault();
-        setShapes((current) => current.filter((shape) => shape.id !== currentSelected));
+        pushHistorySnapshot();
+        shapesRef.current = nextShapes;
+        setShapes(nextShapes);
         setSelectedId(null);
         scheduleSave();
       }
@@ -1856,7 +1980,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
     window.addEventListener("keydown", handleToolKeys);
     return () => window.removeEventListener("keydown", handleToolKeys);
-  }, [scheduleSave]);
+  }, [applyHistorySnapshot, pushHistorySnapshot, scheduleSave]);
 
   // Mantem o cursor coerente ao trocar de ferramenta enquanto o ponteiro esta
   // sobre o Quadro (ex.: selecionar uma forma vira crosshair; Mover vira grab).
@@ -1871,6 +1995,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     if (tool !== "eraser") {
       setEraserCursor(null);
       eraserLastPointRef.current = null;
+      eraserGestureSnapshotRef.current = null;
     }
   }, [tool]);
 
@@ -1913,6 +2038,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         const nextShapes = shapesRef.current.map((shape) =>
           shape.id === selectedShape.id ? { ...shape, stroke } : shape,
         );
+        if (areCanvasShapesEqual(shapesRef.current, nextShapes)) {
+          return;
+        }
+        pushHistorySnapshot();
         shapesRef.current = nextShapes;
         setShapes(nextShapes);
         scheduleSave();
@@ -1921,7 +2050,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       setDefaultStyle((current) => ({ ...current, stroke }));
     },
-    [scheduleSave],
+    [pushHistorySnapshot, scheduleSave],
   );
 
   const handlePropertiesStrokeWidthChange = useCallback(
@@ -1935,6 +2064,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         const nextShapes = shapesRef.current.map((shape) =>
           shape.id === selectedShape.id ? { ...shape, strokeWidth } : shape,
         );
+        if (areCanvasShapesEqual(shapesRef.current, nextShapes)) {
+          return;
+        }
+        pushHistorySnapshot();
         shapesRef.current = nextShapes;
         setShapes(nextShapes);
         scheduleSave();
@@ -1943,7 +2076,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       setDefaultStyle((current) => ({ ...current, strokeWidth }));
     },
-    [scheduleSave],
+    [pushHistorySnapshot, scheduleSave],
   );
 
   const handlePropertiesFillStyleChange = useCallback(
@@ -1957,6 +2090,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         const nextShapes = shapesRef.current.map((shape) =>
           shape.id === selectedShape.id ? { ...shape, fillStyle } : shape,
         );
+        if (areCanvasShapesEqual(shapesRef.current, nextShapes)) {
+          return;
+        }
+        pushHistorySnapshot();
         shapesRef.current = nextShapes;
         setShapes(nextShapes);
         scheduleSave();
@@ -1965,7 +2102,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
       setDefaultStyle((current) => ({ ...current, fillStyle }));
     },
-    [scheduleSave],
+    [pushHistorySnapshot, scheduleSave],
   );
 
   const selectedPropertiesShape = shapes.find((shape) => shape.id === selectedId) ?? null;
@@ -2151,6 +2288,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                         }}
                         onDragStart={(event) => {
                           event.cancelBubble = true;
+                          beginDirectionalHandleGesture(selectedDirectionalShape.id);
                         }}
                         onDragMove={(event) => handleDirectionalHandleDrag(selectedDirectionalShape.id, endpoint, event, false)}
                         onDragEnd={(event) => handleDirectionalHandleDrag(selectedDirectionalShape.id, endpoint, event, true)}
@@ -2175,6 +2313,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                           }}
                           onDragStart={(event) => {
                             event.cancelBubble = true;
+                            beginDirectionalHandleGesture(selectedDirectionalShape.id);
                           }}
                           onDragMove={(event) =>
                             handleDirectionalControlDrag(selectedDirectionalShape.id, event, false)
