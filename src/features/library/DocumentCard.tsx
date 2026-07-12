@@ -75,6 +75,13 @@ function getExpirationDays(deletedAt: string) {
   return Math.max(0, Math.ceil((expiresAt - Date.now()) / dayInMilliseconds));
 }
 
+// Data compacta alinhada a direita na linha da lista. Usa updatedAt (mesmo
+// campo que o painel de detalhes rotula como "Adicionado em") — o grid nao
+// exibe data alguma, entao nao ha campo do grid para espelhar.
+function formatListDate(isoDate: string) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(isoDate));
+}
+
 export function DocumentCard(props: DocumentCardProps) {
   if (props.viewMode === "list") {
     return <DocumentListRow {...props} />;
@@ -155,21 +162,26 @@ function DocumentCardContextMenu({
   );
 }
 
-// Linha horizontal (lista): thumb pequena + metadados + tags + favorito.
+// Linha horizontal (lista): miniatura + titulo/tags + data. A borda arredondada
+// e os divisores hairline ficam no container compartilhado (LibraryView), nao na
+// linha — por isso a linha nao tem borda/shadow propria. Selecao e hover usam o
+// fundo surface-muted (token de hover canonico do projeto), ja que o grid usa um
+// lift via translate, nao um fundo destacado.
 function DocumentListRow({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const coverStyle = getCoverStyle(document.id);
-  const publisherLine = `${document.year} · ${document.source}`;
   const visibleTags = document.tags.slice(0, MAX_VISIBLE_TAGS);
   const extraTagCount = document.tags.length - visibleTags.length;
+  const hasTags = visibleTags.length > 0;
+  const clampedProgress = Math.min(100, Math.max(0, document.progress));
   const expirationDays = document.deletedAt ? getExpirationDays(document.deletedAt) : 0;
 
   return (
     <>
       <article
-        className={`group flex cursor-pointer items-center gap-4 rounded-xl border bg-surface-card p-3 shadow-card transition hover:-translate-y-1 ${
-          isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
+        className={`group relative flex cursor-pointer items-center gap-4 px-5 py-3.5 transition ${
+          isSelected ? "bg-surface-muted shadow-[inset_3px_0_0_0_var(--color-primary)]" : "hover:bg-surface-muted"
         }`}
         role="button"
         tabIndex={0}
@@ -183,12 +195,29 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
           }
         }}
       >
-        <div className="document-cover-swatch relative h-16 w-12 shrink-0 overflow-hidden rounded-md" style={coverStyle} />
+        {/* Miniatura mini 36x46: mesmo hue deterministico do grid (getCoverStyle)
+            com duas linhas decorativas em escala reduzida. */}
+        <div className="document-cover-swatch relative h-[46px] w-9 shrink-0 overflow-hidden rounded-md" style={coverStyle} aria-hidden="true">
+          <div className="absolute inset-0 flex flex-col gap-1 p-1.5">
+            <div className="document-cover-line document-cover-line-strong h-0.5 w-3/4 rounded-full" />
+            <div className="document-cover-line h-0.5 w-1/2 rounded-full" />
+          </div>
+        </div>
 
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate font-sans text-[15px] font-semibold leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
-          <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{formatAuthors(document.authors)}</p>
-          <p className="truncate font-sans text-[11px] font-normal leading-[16.5px] text-text-secondary">{publisherLine}</p>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <h2 className="truncate font-serif text-[15px] font-medium leading-[21px] text-[#2C1810] dark:text-text-primary">{document.title}</h2>
+          {isTrashMode || !hasTags ? null : (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {visibleTags.map((tag) => (
+                <TagPill key={tag} label={tag} />
+              ))}
+              {extraTagCount > 0 ? (
+                <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-text-secondary">
+                  +{extraTagCount}
+                </span>
+              ) : null}
+            </div>
+          )}
         </div>
 
         {isTrashMode ? (
@@ -200,27 +229,29 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
             Expira em {expirationDays} {expirationDays === 1 ? "dia" : "dias"}
           </span>
         ) : (
-          <>
-            <div className="hidden shrink-0 items-center gap-1.5 md:flex">
-              {visibleTags.map((tag) => (
-                <TagPill key={tag} label={tag} />
-              ))}
-              {extraTagCount > 0 ? (
-                <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-text-secondary">
-                  +{extraTagCount}
-                </span>
-              ) : null}
+          <div className="flex shrink-0 items-center gap-3">
+            {/* Progresso de leitura: mesmo dado do grid (document.progress) e
+                mesmo padrao de cor da barra do painel de detalhes/leitura
+                (fill bg-primary sobre track bg-surface-subtle). Barra fina em
+                vez do anel — cabe melhor na altura reduzida da linha. */}
+            <div
+              className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-subtle"
+              role="progressbar"
+              aria-label={`Progresso de leitura: ${clampedProgress}%`}
+              aria-valuenow={clampedProgress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className="h-full rounded-full bg-primary" style={{ width: `${clampedProgress}%` }} />
             </div>
 
-            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-text-primary dark:text-primary">
-              <CircularProgress value={document.progress} />
-            </span>
+            <span className="text-[12px] leading-[18px] text-text-secondary">{formatListDate(document.updatedAt)}</span>
 
             <button
               type="button"
               aria-label={document.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
               title={document.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-              className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition ${
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-full transition ${
                 document.favorite ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
               }`}
               style={{ color: "#EF4444" }}
@@ -231,7 +262,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
             >
               <HeartIcon filled={document.favorite} />
             </button>
-          </>
+          </div>
         )}
       </article>
       <DocumentCardContextMenu
