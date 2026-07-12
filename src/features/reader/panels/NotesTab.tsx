@@ -6,6 +6,7 @@ type NotesTabProps = {
   notesText: string;
   onNotesChange: (notes: string) => void;
   onBlur: () => void;
+  readOnly?: boolean;
 };
 
 type FormatAction = "bold" | "italic" | "underline" | "strike" | "sub" | "sup" | "code";
@@ -37,7 +38,7 @@ function isNotesEmpty(notesText: string) {
   return notesText.replace(/<[^>]*>/g, "").replace(/ /g, " ").trim().length === 0;
 }
 
-export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
+export function NotesTab({ notesText, onNotesChange, onBlur, readOnly = false }: NotesTabProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastEmittedRef = useRef<string>(notesText);
   const [hasSelection, setHasSelection] = useState(false);
@@ -178,7 +179,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
 
   function applyFormat(action: FormatAction) {
     const editor = editorRef.current;
-    if (!editor) {
+    if (!editor || readOnly) {
       return;
     }
 
@@ -282,7 +283,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
 
   return (
     <div className="relative h-full">
-      {hasSelection ? (
+      {hasSelection && !readOnly ? (
         <div
           className="absolute right-5 top-20 z-10 flex items-center gap-1 rounded-xl bg-[var(--surface-elevated)] px-3 py-2 text-sm font-bold shadow-2xl ring-1 ring-white/10"
           onMouseDownCapture={(event) => {
@@ -324,17 +325,20 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
         ref={editorRef}
         role="textbox"
         aria-multiline="true"
+        aria-readonly={readOnly}
         aria-label="Anotações do documento"
-        contentEditable
+        contentEditable={!readOnly}
         suppressContentEditableWarning
-        onInput={emitChange}
-        onBlur={onBlur}
-        onPaste={handlePaste}
-        onDrop={handleDrop}
-        onMouseUp={syncSelectionState}
-        onKeyDown={handleKeyDown}
-        onKeyUp={syncSelectionState}
-        className="h-full w-full overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent px-5 py-6 text-sm leading-7 text-[var(--foreground)] outline-none"
+        onInput={readOnly ? undefined : emitChange}
+        onBlur={readOnly ? undefined : onBlur}
+        onPaste={readOnly ? undefined : handlePaste}
+        onDrop={readOnly ? undefined : handleDrop}
+        onMouseUp={readOnly ? undefined : syncSelectionState}
+        onKeyDown={readOnly ? undefined : handleKeyDown}
+        onKeyUp={readOnly ? undefined : syncSelectionState}
+        className={`h-full w-full overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent px-5 py-6 text-sm leading-7 text-[var(--foreground)] outline-none ${
+          readOnly ? "cursor-default opacity-80" : ""
+        }`}
       />
     </div>
   );

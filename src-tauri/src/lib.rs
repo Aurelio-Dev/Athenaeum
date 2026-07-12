@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
 #[derive(Serialize)]
@@ -93,6 +93,13 @@ struct NotebookExportDestinations(std::sync::Mutex<HashSet<PathBuf>>);
 const MAX_AUTHORIZED_EXPORT_DESTINATIONS: usize = 32;
 
 const READER_PANEL_WINDOW_LABEL: &str = "reader-annotations-panel";
+const READER_SET_DOCUMENT_EVENT: &str = "reader:set-document";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReaderDocumentPayload {
+    document_id: String,
+}
 
 fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
     let bytes = value.as_bytes();
@@ -120,9 +127,17 @@ fn open_reader_panel_window<R: tauri::Runtime>(
     validate_uuid(&document_id, "Identificador do documento")?;
 
     if let Some(window) = app.get_webview_window(READER_PANEL_WINDOW_LABEL) {
-        // Fase 3: a Decisao C-1 vai trocar o documento de uma popout ja aberta.
-        // Nesta fase, a janela existente apenas recebe foco e mantem seu conteudo.
-        return window.set_focus().map_err(|error| error.to_string());
+        window
+            .set_title(&format!("Anotações — {document_title}"))
+            .map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        app.emit_to(
+            READER_PANEL_WINDOW_LABEL,
+            READER_SET_DOCUMENT_EVENT,
+            ReaderDocumentPayload { document_id },
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(());
     }
 
     let url = format!("index.html?readerPanel=1&documentId={document_id}");
@@ -132,6 +147,18 @@ fn open_reader_panel_window<R: tauri::Runtime>(
         .min_inner_size(360.0, 440.0)
         .build()
         .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn close_reader_panel_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(READER_PANEL_WINDOW_LABEL) {
+        // A popout intercepta CloseRequested para fazer flush. Quando este
+        // comando e chamado, o flush ja terminou; destroy evita reemitir o
+        // mesmo evento e entrar em recursao.
+        window.destroy().map_err(|error| error.to_string())?;
+    }
 
     Ok(())
 }
@@ -3166,7 +3193,30 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if window.label() != "main"
+                || !matches!(
+                    event,
+                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+                )
+            {
+                return;
+            }
+
+            // O runtime so encerra quando nao resta nenhuma janela. Solicitar
+            // o fechamento da popout permite que o handler JS dela faca o
+            // flush antes de a ultima janela ser destruida.
+            if let Some(panel) = window
+                .app_handle()
+                .get_webview_window(READER_PANEL_WINDOW_LABEL)
+            {
+                if let Err(error) = panel.close() {
+                    log::warn!("Nao foi possivel fechar a popout do Reader: {error}");
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            close_reader_panel_window,
             import_document,
             delete_notebook_file_attachment,
             load_canvas_files,

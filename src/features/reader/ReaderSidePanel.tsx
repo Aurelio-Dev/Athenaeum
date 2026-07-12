@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
@@ -15,6 +14,7 @@ type ReaderSidePanelProps = {
   notesText: string;
   onNotesChange: (notes: string) => void;
   onNotesBlur: () => void;
+  notesReadOnly: boolean;
   availableTags: SubjectTag[];
   onAddTag: (tag: SubjectTag) => void;
   onRemoveTag: (tag: SubjectTag) => void;
@@ -24,6 +24,7 @@ type ReaderSidePanelProps = {
   isFloating: boolean;
   initialTab?: ReaderTab;
   onFloat: () => void;
+  onOpenSystemWindow: () => Promise<void>;
   onDock: () => void;
   onJumpToPage: (page: number) => void;
   onDeleteAnnotation: (annotationId: string) => void;
@@ -74,10 +75,12 @@ export function ReaderSidePanel({
   notesText,
   onNotesChange,
   onNotesBlur,
+  notesReadOnly,
   annotations,
   isFloating,
   initialTab,
   onFloat,
+  onOpenSystemWindow,
   onDock,
   onJumpToPage,
   onDeleteAnnotation,
@@ -88,13 +91,12 @@ export function ReaderSidePanel({
   const { panels, minimizePanel, restorePanel } = useFloatingPanels();
   const annotationsPanelId = floatingPanelId("annotations", document.id);
 
-  function openSystemWindow() {
-    void invoke("open_reader_panel_window", {
-      documentId: document.id,
-      documentTitle: document.title,
-    }).catch((error) => {
+  async function openSystemWindow() {
+    try {
+      await onOpenSystemWindow();
+    } catch (error) {
       console.warn("Nao foi possivel abrir o painel em uma janela do sistema.", error);
-    });
+    }
   }
 
   // Esc fecha o painel flutuante quando ele e o topo da pilha — mesma regra
@@ -155,7 +157,16 @@ export function ReaderSidePanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {activeTab === "notes" ? (
-          <NotesTab notesText={notesText} onNotesChange={onNotesChange} onBlur={onNotesBlur} />
+          <div className="flex h-full min-h-0 flex-col">
+            {notesReadOnly ? (
+              <p className="shrink-0 border-b border-border-subtle bg-[var(--muted)] px-4 py-2 text-xs font-semibold text-[var(--muted-foreground)]">
+                Sendo editado na janela separada
+              </p>
+            ) : null}
+            <div className="min-h-0 flex-1">
+              <NotesTab notesText={notesText} onNotesChange={onNotesChange} onBlur={onNotesBlur} readOnly={notesReadOnly} />
+            </div>
+          </div>
         ) : activeTab === "annotations" ? (
           <AnnotationsTab annotations={annotations} onJumpToPage={onJumpToPage} onDelete={onDeleteAnnotation} onUpdateNote={onUpdateAnnotationNote} />
         ) : (

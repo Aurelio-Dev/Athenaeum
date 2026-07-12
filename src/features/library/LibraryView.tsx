@@ -942,7 +942,7 @@ export function LibraryView() {
             onAvailableTagsChange={updateAvailableTags}
             onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}
             onClose={(readingLocation) => void closeReader(readingLocation)}
-            onSaveNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)}
+            onSaveNotes={saveDocumentNote}
             onNotesReloaded={updateDocumentNotesInCache}
           />
         </Suspense>

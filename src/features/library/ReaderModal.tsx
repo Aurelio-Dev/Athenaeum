@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useQueryClient } from "@tanstack/react-query";
 import * as pdfjsLib from "pdfjs-dist";
@@ -12,16 +12,22 @@ import {
   createAnnotation,
   deleteAnnotation,
   getDocumentNotes,
+  isReaderDocumentPayload,
   isReaderInvalidationPayload,
   isReaderJumpToPagePayload,
+  isReaderPopoutCloseRequestPayload,
   listAnnotations,
   READER_ANNOTATIONS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
   READER_NOTES_CHANGED_EVENT,
+  READER_PANEL_WINDOW_LABEL,
+  READER_POPOUT_CLOSED_EVENT,
+  READER_POPOUT_FLUSHED_EVENT,
+  READER_REQUEST_POPOUT_CLOSE_EVENT,
   setDocumentReadingLocation,
   updateAnnotationNote,
 } from "../../lib/database";
-import type { NewAnnotation } from "../../lib/database";
+import type { NewAnnotation, ReaderPopoutCloseRequestPayload } from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
 import type { LibraryDocument, ReadingLocation, SubjectTag } from "../../types/library";
 import { captureSelection, type CapturedSelection, type PageElement } from "../reader/anchor";
@@ -48,7 +54,7 @@ type ReaderModalProps = {
   onAvailableTagsChange: (tags: SubjectTag[]) => void;
   onUpdateDocumentTags: (documentId: string, tags: SubjectTag[]) => void;
   onClose: (readingLocation: ReadingLocation) => void;
-  onSaveNotes: (documentId: string, notes: string) => void;
+  onSaveNotes: (documentId: string, notes: string) => Promise<void>;
   onNotesReloaded: (documentId: string, notes: string) => void;
 };
 
@@ -56,6 +62,7 @@ const fallbackPageCount = 15;
 const minZoom = 70;
 const maxZoom = 140;
 const zoomStep = 10;
+const popoutFlushTimeoutMs = 5000;
 
 // Posicao inicial do painel de anotacoes flutuante: encostado a direita, logo
 // abaixo do header do leitor — mesmo comportamento de antes do refactor para
@@ -632,10 +639,18 @@ export function ReaderModal({
   const saveStatesRef = useRef<Map<string, AnnotationSaveState>>(new Map());
   const notesReloadSequenceRef = useRef(0);
   const annotationsReloadSequenceRef = useRef(0);
+  const [popoutDocumentId, setPopoutDocumentId] = useState<string | null>(null);
+  const popoutDocumentIdRef = useRef<string | null>(null);
+  const closePopoutPromiseRef = useRef<Promise<boolean> | null>(null);
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
   const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
+
+  const updatePopoutDocumentId = useCallback((nextDocumentId: string | null) => {
+    popoutDocumentIdRef.current = nextDocumentId;
+    setPopoutDocumentId(nextDocumentId);
+  }, []);
 
   const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
   const readerDocument = useMemo(
@@ -685,13 +700,13 @@ export function ReaderModal({
   }, []);
   const { timeSpentSeconds, flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds);
 
-  const flushNotes = useCallback(() => {
+  const flushNotes = useCallback(async () => {
     if (notesSaveTimerRef.current !== null) {
       window.clearTimeout(notesSaveTimerRef.current);
       notesSaveTimerRef.current = null;
     }
 
-    onSaveNotes(document.id, latestNotesRef.current);
+    await onSaveNotes(document.id, latestNotesRef.current);
   }, [document.id, onSaveNotes]);
 
   useEffect(() => {
@@ -699,7 +714,7 @@ export function ReaderModal({
       if (notesSaveTimerRef.current !== null) {
         window.clearTimeout(notesSaveTimerRef.current);
         notesSaveTimerRef.current = null;
-        onSaveNotes(document.id, latestNotesRef.current);
+        void onSaveNotes(document.id, latestNotesRef.current);
       }
     };
   }, [document.id, onSaveNotes]);
@@ -951,7 +966,7 @@ export function ReaderModal({
 
       notesSaveTimerRef.current = window.setTimeout(() => {
         notesSaveTimerRef.current = null;
-        onSaveNotes(document.id, latestNotesRef.current);
+        void onSaveNotes(document.id, latestNotesRef.current);
       }, 500);
     },
     [document.id, onSaveNotes],
@@ -1112,11 +1127,88 @@ export function ReaderModal({
       scrollToPage(payload.page);
     });
 
+    registerListener<unknown>(READER_POPOUT_CLOSED_EVENT, (payload) => {
+      if (!isReaderDocumentPayload(payload) || payload.documentId !== document.id) {
+        return;
+      }
+
+      updatePopoutDocumentId(null);
+    });
+
     return () => {
       isDisposed = true;
       unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
     };
-  }, [document.id, loadDocumentAnnotations, onNotesReloaded, scrollToPage]);
+  }, [document.id, loadDocumentAnnotations, onNotesReloaded, scrollToPage, updatePopoutDocumentId]);
+
+  const closePopoutAfterFlush = useCallback(async (): Promise<boolean> => {
+    if (popoutDocumentIdRef.current !== document.id) {
+      return true;
+    }
+
+    if (closePopoutPromiseRef.current) {
+      return closePopoutPromiseRef.current;
+    }
+
+    const closePromise = (async () => {
+      const requestId = crypto.randomUUID();
+      const payload: ReaderPopoutCloseRequestPayload = { documentId: document.id, requestId };
+      let timeoutId: number | null = null;
+      const listenerRegistration: { unlisten: (() => void) | null } = { unlisten: null };
+      let isFinished = false;
+
+      try {
+        const flushed = new Promise<void>((resolve, reject) => {
+          timeoutId = window.setTimeout(() => {
+            reject(new Error("A popout nao confirmou o flush dentro do prazo."));
+          }, popoutFlushTimeoutMs);
+
+          void listen<unknown>(READER_POPOUT_FLUSHED_EVENT, (event) => {
+            if (
+              isReaderPopoutCloseRequestPayload(event.payload) &&
+              event.payload.documentId === document.id &&
+              event.payload.requestId === requestId
+            ) {
+              resolve();
+            }
+            })
+            .then((removeListener) => {
+              if (isFinished) {
+                removeListener();
+                return;
+              }
+
+              listenerRegistration.unlisten = removeListener;
+              return emitTo(READER_PANEL_WINDOW_LABEL, READER_REQUEST_POPOUT_CLOSE_EVENT, payload);
+            })
+            .catch(reject);
+        });
+
+        await flushed;
+        await invoke("close_reader_panel_window");
+        updatePopoutDocumentId(null);
+        return true;
+      } catch (error) {
+        console.warn("Nao foi possivel fechar a popout depois do flush.", error);
+        return false;
+      } finally {
+        isFinished = true;
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId);
+        }
+        listenerRegistration.unlisten?.();
+      }
+    })();
+
+    closePopoutPromiseRef.current = closePromise;
+    try {
+      return await closePromise;
+    } finally {
+      if (closePopoutPromiseRef.current === closePromise) {
+        closePopoutPromiseRef.current = null;
+      }
+    }
+  }, [document.id, updatePopoutDocumentId]);
 
   const getCurrentReadingLocation = useCallback((): ReadingLocation => {
     const readerSurface = readerSurfaceRef.current;
@@ -1155,12 +1247,29 @@ export function ReaderModal({
   // em duplicidade depois do closeAndSave.
   const hasClosedExplicitlyRef = useRef(false);
 
-  const closeAndSave = useCallback(() => {
+  const closeAndSave = useCallback(async () => {
     hasClosedExplicitlyRef.current = true;
     const readingLocation = getCurrentReadingLocation();
-    flushNotes();
-    void flushReadingTime().finally(() => onClose(readingLocation));
-  }, [flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
+
+    try {
+      await flushNotes();
+    } catch (error) {
+      hasClosedExplicitlyRef.current = false;
+      console.warn("Nao foi possivel salvar as notas antes de fechar o leitor.", error);
+      return;
+    }
+
+    await flushReadingTime().catch((error) => {
+      console.warn("Nao foi possivel salvar o tempo de leitura antes de fechar.", error);
+    });
+
+    if (!(await closePopoutAfterFlush())) {
+      hasClosedExplicitlyRef.current = false;
+      return;
+    }
+
+    onClose(readingLocation);
+  }, [closePopoutAfterFlush, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
 
   // Autosave da posicao de leitura DURANTE a leitura. Escrita imediata de 1
   // statement (reading_location_json/progress), agendada com debounce para nao
@@ -1189,7 +1298,14 @@ export function ReaderModal({
     }
 
     const readingLocation = getCurrentReadingLocation();
-    flushNotes();
+    void (async () => {
+      try {
+        await flushNotes();
+        await closePopoutAfterFlush();
+      } catch (error) {
+        console.warn("Nao foi possivel concluir o fechamento coordenado da popout.", error);
+      }
+    })();
     void flushReadingTime();
     void setDocumentReadingLocation(document, readingLocation)
       .then(() => queryClient.invalidateQueries({ queryKey: ["library"] }))
@@ -1250,7 +1366,7 @@ export function ReaderModal({
         return;
       }
 
-      closeAndSave();
+      void closeAndSave();
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1509,6 +1625,7 @@ export function ReaderModal({
             notesText={notesText}
             onNotesChange={handleNotesChange}
             onNotesBlur={flushNotes}
+            notesReadOnly={popoutDocumentId === document.id}
             availableTags={availableTags}
             onAddTag={addDocumentTag}
             onRemoveTag={removeDocumentTag}
@@ -1518,6 +1635,14 @@ export function ReaderModal({
             isFloating={sidePanelFloating}
             initialTab={sidePanelInitialTab}
             onFloat={() => openPanel("annotations", document.id, getAnnotationsPanelInitialPosition())}
+            onOpenSystemWindow={async () => {
+              await flushNotes();
+              await invoke("open_reader_panel_window", {
+                documentId: document.id,
+                documentTitle: document.title,
+              });
+              updatePopoutDocumentId(document.id);
+            }}
             onDock={() => closePanel(annotationsPanelId)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}

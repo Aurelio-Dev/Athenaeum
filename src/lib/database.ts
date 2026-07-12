@@ -25,6 +25,11 @@ const defaultCollectionName = "Sem título";
 export const READER_NOTES_CHANGED_EVENT = "reader:notes-changed";
 export const READER_ANNOTATIONS_CHANGED_EVENT = "reader:annotations-changed";
 export const READER_JUMP_TO_PAGE_EVENT = "reader:jump-to-page";
+export const READER_POPOUT_CLOSED_EVENT = "reader:popout-closed";
+export const READER_SET_DOCUMENT_EVENT = "reader:set-document";
+export const READER_REQUEST_POPOUT_CLOSE_EVENT = "reader:request-popout-close";
+export const READER_POPOUT_FLUSHED_EVENT = "reader:popout-flushed";
+export const READER_PANEL_WINDOW_LABEL = "reader-annotations-panel";
 
 export type ReaderInvalidationPayload = {
   documentId: string;
@@ -34,6 +39,14 @@ export type ReaderInvalidationPayload = {
 export type ReaderJumpToPagePayload = {
   documentId: string;
   page: number;
+};
+
+export type ReaderDocumentPayload = {
+  documentId: string;
+};
+
+export type ReaderPopoutCloseRequestPayload = ReaderDocumentPayload & {
+  requestId: string;
 };
 
 export function isReaderInvalidationPayload(payload: unknown): payload is ReaderInvalidationPayload {
@@ -57,6 +70,22 @@ export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJu
     Number.isInteger(candidate.page) &&
     candidate.page > 0
   );
+}
+
+export function isReaderDocumentPayload(payload: unknown): payload is ReaderDocumentPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  return typeof (payload as Record<string, unknown>).documentId === "string";
+}
+
+export function isReaderPopoutCloseRequestPayload(payload: unknown): payload is ReaderPopoutCloseRequestPayload {
+  if (!isReaderDocumentPayload(payload)) {
+    return false;
+  }
+
+  return typeof (payload as unknown as Record<string, unknown>).requestId === "string";
 }
 
 let databasePromise: Promise<Database> | null = null;
