@@ -6,7 +6,6 @@ import { AppShell } from "../../components/AppShell";
 import { SettingsPanel, settingsPanelHeight, settingsPanelWidth } from "../settings/SettingsPanel";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import emptyLibraryIllustration from "../../assets/icons/empty-library-book.svg";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
@@ -171,43 +170,35 @@ function isLibraryAreaContextTarget(target: EventTarget | null) {
   );
 }
 
-// Icones de estado vazio (equivalentes inline a LibraryBig/FolderOpen/SearchX).
-// Aceitam props de SVG (className, size) para o EmptyState controlar cor/tamanho.
-const emptyStateIconProps = {
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  "aria-hidden": true,
-};
-
-function LibraryBigIcon(props: SVGProps<SVGSVGElement>) {
+function EmptyLibraryIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg {...emptyStateIconProps} {...props}>
-      <rect width="8" height="18" x="3" y="3" rx="1" />
-      <path d="M7 3v18" />
-      <path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z" />
+    <svg viewBox="0 0 60 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M30 2 C16 6 4 12 2 16 L2 44 C11 38 22 34 30 32 Z"
+        stroke="var(--color-sidebar-muted)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M30 2 C44 6 56 12 58 16 L58 44 C49 38 38 34 30 32 Z"
+        stroke="var(--color-sidebar-muted)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-function FolderOpenIcon(props: SVGProps<SVGSVGElement>) {
+function EmptySearchIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg {...emptyStateIconProps} {...props}>
-      <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
-
-function SearchXIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...emptyStateIconProps} {...props}>
-      <path d="m13.5 8.5-5 5" />
-      <path d="m8.5 8.5 5 5" />
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <circle cx="20" cy="20" r="14" stroke="var(--color-sidebar-muted)" strokeWidth="2" />
+      <line x1="30" y1="30" x2="43" y2="43" stroke="var(--color-sidebar-muted)" strokeWidth="2" strokeLinecap="round" />
+      <line x1="12" y1="16" x2="28" y2="16" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="12" y1="20" x2="24" y2="20" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="12" y1="24" x2="20" y2="24" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -802,23 +793,25 @@ export function LibraryView() {
               </div>
             ) : hasActiveSearch ? (
               <EmptyState
-                icon={SearchXIcon}
-                title="Nenhum resultado"
-                description="Tente outros termos ou remova os filtros ativos."
+                icon={EmptySearchIcon}
+                title="Nenhum resultado encontrado"
+                description="Tente outro termo, autor ou palavra-chave."
               />
             ) : activeRoute.type === "collection" ? (
               <EmptyState
-                illustration={{ src: emptyLibraryIllustration, alt: "" }}
+                icon={EmptyLibraryIcon}
+                iconClassName="h-12 w-[60px]"
                 title="Nenhum documento aqui"
                 titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
                 verticalPosition="raised"
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
-            ) : allDocuments.length === 0 && !isTrashRoute ? (
+            ) : activeRoute.type === "all" && allDocuments.length === 0 ? (
               <EmptyState
-                illustration={{ src: emptyLibraryIllustration, alt: "" }}
-                title="Nenhum documento aqui"
+                icon={EmptyLibraryIcon}
+                iconClassName="h-12 w-[60px]"
+                title="Sua biblioteca está vazia"
                 titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
                 verticalPosition="raised"

@@ -138,6 +138,8 @@
      #9E8878 via classe propria. No escuro fica #9E8878 (override no .dark),
      onde escurecer sobre o fundo escuro pioraria a legibilidade. */
   --color-sidebar-muted: #7A6558;
+  /* Linhas internas secundarias do icone de busca sem resultados. */
+  --color-empty-state-detail: #D9C5B4;
 
   --reader-header-bg: var(--card);
   --reader-header-border: var(--border);
