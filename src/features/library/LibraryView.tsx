@@ -309,6 +309,13 @@ export function LibraryView() {
     [queryClient],
   );
 
+  const updateDocumentNotesInCache = useCallback(
+    (documentId: string, notes: string) => {
+      updateDocumentInCache(documentId, (document) => ({ ...document, notes }));
+    },
+    [updateDocumentInCache],
+  );
+
   const listClassName =
     viewMode === "list"
       ? "divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface-card"
@@ -437,7 +444,7 @@ export function LibraryView() {
   }
 
   async function saveDocumentNote(documentId: string, note: string) {
-    updateDocumentInCache(documentId, (document) => ({ ...document, notes: note }));
+    updateDocumentNotesInCache(documentId, note);
     await setDocumentNote(documentId, note);
   }
 
@@ -936,6 +943,7 @@ export function LibraryView() {
             onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}
             onClose={(readingLocation) => void closeReader(readingLocation)}
             onSaveNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)}
+            onNotesReloaded={updateDocumentNotesInCache}
           />
         </Suspense>
       ) : null}

@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useQueryClient } from "@tanstack/react-query";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
-import { createAnnotation, deleteAnnotation, listAnnotations, setDocumentReadingLocation, updateAnnotationNote } from "../../lib/database";
+import {
+  createAnnotation,
+  deleteAnnotation,
+  getDocumentNotes,
+  isReaderInvalidationPayload,
+  isReaderJumpToPagePayload,
+  listAnnotations,
+  READER_ANNOTATIONS_CHANGED_EVENT,
+  READER_JUMP_TO_PAGE_EVENT,
+  READER_NOTES_CHANGED_EVENT,
+  setDocumentReadingLocation,
+  updateAnnotationNote,
+} from "../../lib/database";
 import type { NewAnnotation } from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
 import type { LibraryDocument, ReadingLocation, SubjectTag } from "../../types/library";
@@ -35,6 +49,7 @@ type ReaderModalProps = {
   onUpdateDocumentTags: (documentId: string, tags: SubjectTag[]) => void;
   onClose: (readingLocation: ReadingLocation) => void;
   onSaveNotes: (documentId: string, notes: string) => void;
+  onNotesReloaded: (documentId: string, notes: string) => void;
 };
 
 const fallbackPageCount = 15;
@@ -52,6 +67,22 @@ function getAnnotationsPanelInitialPosition() {
     x: Math.max(8, window.innerWidth - panelWidth - 24),
     y: Math.max(76, Math.min(94, window.innerHeight - panelHeight)),
   };
+}
+
+function mergeAnnotationsPreservingPending(
+  persistedAnnotations: Annotation[],
+  currentAnnotations: Annotation[],
+  currentSaveStates: ReadonlyMap<string, AnnotationSaveState>,
+) {
+  const pendingAnnotations = currentAnnotations.filter(
+    (annotation) => (currentSaveStates.get(annotation.id) ?? "saved") !== "saved",
+  );
+  const pendingIds = new Set(pendingAnnotations.map((annotation) => annotation.id));
+
+  return [
+    ...persistedAnnotations.filter((annotation) => !pendingIds.has(annotation.id)),
+    ...pendingAnnotations,
+  ];
 }
 // Escala base do PDF: o canvas e a camada de texto usam a MESMA escala para o
 // texto transparente cair exatamente sobre as letras.
@@ -534,7 +565,15 @@ function FallbackThumbnail({ page, active, onClick }: { page: number; active: bo
   );
 }
 
-export function ReaderModal({ document, availableTags, onAvailableTagsChange, onUpdateDocumentTags, onClose, onSaveNotes }: ReaderModalProps) {
+export function ReaderModal({
+  document,
+  availableTags,
+  onAvailableTagsChange,
+  onUpdateDocumentTags,
+  onClose,
+  onSaveNotes,
+  onNotesReloaded,
+}: ReaderModalProps) {
   const fallbackPageNumbers = useMemo(buildFallbackPageNumbers, []);
   const readerSurfaceRef = useRef<HTMLElement | null>(null);
   const pageRefs = useRef<Array<HTMLElement | null>>([]);
@@ -590,6 +629,9 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
   const [documentTags, setDocumentTags] = useState<SubjectTag[]>(document.tags);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [saveStates, setSaveStates] = useState<Map<string, AnnotationSaveState>>(new Map());
+  const saveStatesRef = useRef<Map<string, AnnotationSaveState>>(new Map());
+  const notesReloadSequenceRef = useRef(0);
+  const annotationsReloadSequenceRef = useRef(0);
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
@@ -734,16 +776,21 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
     setDocumentTags(document.tags);
   }, [document.id, document.tags]);
 
+  const loadDocumentAnnotations = useCallback(() => listAnnotations(document.id), [document.id]);
+
   // Carrega as anotacoes salvas ao abrir/trocar de documento.
   useEffect(() => {
     let isCancelled = false;
+    const requestSequence = ++annotationsReloadSequenceRef.current;
+    const emptySaveStates = new Map<string, AnnotationSaveState>();
     setAnnotations([]);
-    setSaveStates(new Map());
+    saveStatesRef.current = emptySaveStates;
+    setSaveStates(emptySaveStates);
     failedCreatesRef.current = new Map();
 
-    listAnnotations(document.id)
+    loadDocumentAnnotations()
       .then((loaded) => {
-        if (!isCancelled) {
+        if (!isCancelled && requestSequence === annotationsReloadSequenceRef.current) {
           setAnnotations(loaded);
         }
       })
@@ -754,25 +801,24 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
     return () => {
       isCancelled = true;
     };
-  }, [document.id]);
+  }, [document.id, loadDocumentAnnotations]);
 
   const setSaveState = useCallback((annotationId: string, state: AnnotationSaveState) => {
-    setSaveStates((current) => {
-      const next = new Map(current);
-      next.set(annotationId, state);
-      return next;
-    });
+    const next = new Map(saveStatesRef.current);
+    next.set(annotationId, state);
+    saveStatesRef.current = next;
+    setSaveStates(next);
   }, []);
 
   const clearSaveState = useCallback((annotationId: string) => {
-    setSaveStates((current) => {
-      if (!current.has(annotationId)) {
-        return current;
-      }
-      const next = new Map(current);
-      next.delete(annotationId);
-      return next;
-    });
+    if (!saveStatesRef.current.has(annotationId)) {
+      return;
+    }
+
+    const next = new Map(saveStatesRef.current);
+    next.delete(annotationId);
+    saveStatesRef.current = next;
+    setSaveStates(next);
   }, []);
 
   // Criacao otimista: a anotacao ja aparece na tela com estado "saving" e so
@@ -785,7 +831,10 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
       try {
         const saved = await createAnnotation(payload);
         failedCreatesRef.current.delete(optimisticId);
-        setAnnotations((current) => current.map((item) => (item.id === optimisticId ? saved : item)));
+        setAnnotations((current) => [
+          ...current.filter((item) => item.id !== optimisticId && item.id !== saved.id),
+          saved,
+        ]);
         clearSaveState(optimisticId);
         return saved;
       } catch (error) {
@@ -984,6 +1033,90 @@ export function ReaderModal({ document, availableTags, onAvailableTagsChange, on
       behavior: "smooth",
     });
   }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+    const unlistenCallbacks: Array<() => void> = [];
+    const currentWindowLabel = getCurrentWebviewWindow().label;
+
+    function registerListener<T>(eventName: string, handler: (payload: T) => void) {
+      void listen<T>(eventName, (event) => handler(event.payload))
+        .then((unlisten) => {
+          if (isDisposed) {
+            unlisten();
+            return;
+          }
+
+          unlistenCallbacks.push(unlisten);
+        })
+        .catch((error) => {
+          console.warn(`Nao foi possivel escutar o evento ${eventName}.`, error);
+        });
+    }
+
+    registerListener<unknown>(READER_NOTES_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderInvalidationPayload(payload) ||
+        payload.documentId !== document.id ||
+        payload.origin === currentWindowLabel
+      ) {
+        return;
+      }
+
+      const requestSequence = ++notesReloadSequenceRef.current;
+      void getDocumentNotes(document.id)
+        .then((loadedNotes) => {
+          if (isDisposed || requestSequence !== notesReloadSequenceRef.current) {
+            return;
+          }
+
+          setNotesText(loadedNotes);
+          latestNotesRef.current = loadedNotes;
+          onNotesReloaded(document.id, loadedNotes);
+        })
+        .catch((error) => {
+          console.warn("Nao foi possivel recarregar as notas do Reader.", error);
+        });
+    });
+
+    registerListener<unknown>(READER_ANNOTATIONS_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderInvalidationPayload(payload) ||
+        payload.documentId !== document.id ||
+        payload.origin === currentWindowLabel
+      ) {
+        return;
+      }
+
+      const requestSequence = ++annotationsReloadSequenceRef.current;
+      void loadDocumentAnnotations()
+        .then((loadedAnnotations) => {
+          if (isDisposed || requestSequence !== annotationsReloadSequenceRef.current) {
+            return;
+          }
+
+          setAnnotations((current) =>
+            mergeAnnotationsPreservingPending(loadedAnnotations, current, saveStatesRef.current),
+          );
+        })
+        .catch((error) => {
+          console.warn("Nao foi possivel recarregar as anotacoes do Reader.", error);
+        });
+    });
+
+    registerListener<unknown>(READER_JUMP_TO_PAGE_EVENT, (payload) => {
+      if (!isReaderJumpToPagePayload(payload) || payload.documentId !== document.id) {
+        return;
+      }
+
+      scrollToPage(payload.page);
+    });
+
+    return () => {
+      isDisposed = true;
+      unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
+    };
+  }, [document.id, loadDocumentAnnotations, onNotesReloaded, scrollToPage]);
 
   const getCurrentReadingLocation = useCallback((): ReadingLocation => {
     const readerSurface = readerSurfaceRef.current;

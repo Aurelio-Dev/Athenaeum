@@ -1,6 +1,19 @@
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteAnnotation, getDocumentNotes, listAnnotations, setDocumentNote, updateAnnotationNote } from "../../lib/database";
+import {
+  deleteAnnotation,
+  getDocumentNotes,
+  isReaderInvalidationPayload,
+  listAnnotations,
+  READER_ANNOTATIONS_CHANGED_EVENT,
+  READER_JUMP_TO_PAGE_EVENT,
+  READER_NOTES_CHANGED_EVENT,
+  setDocumentNote,
+  updateAnnotationNote,
+} from "../../lib/database";
+import type { ReaderJumpToPagePayload } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import { AiTab } from "./panels/AiTab";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
@@ -37,9 +50,22 @@ export function ReaderPanelPopout({ documentId }: ReaderPanelPopoutProps) {
   const latestNotesRef = useRef("");
   const lastPersistedNotesRef = useRef("");
   const notesSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
+  const notesReloadSequenceRef = useRef(0);
+  const annotationsReloadSequenceRef = useRef(0);
+
+  const loadDocumentNotes = useCallback(() => getDocumentNotes(documentId, "preloaded"), [documentId]);
+  const loadDocumentAnnotations = useCallback(() => listAnnotations(documentId, "preloaded"), [documentId]);
+
+  const applyLoadedNotes = useCallback((notes: string) => {
+    setNotesText(notes);
+    latestNotesRef.current = notes;
+    lastPersistedNotesRef.current = notes;
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
+    const notesRequestSequence = ++notesReloadSequenceRef.current;
+    const annotationsRequestSequence = ++annotationsReloadSequenceRef.current;
     setIsLoading(true);
     setErrorMessage("");
 
@@ -50,16 +76,18 @@ export function ReaderPanelPopout({ documentId }: ReaderPanelPopoutProps) {
       };
     }
 
-    Promise.all([getDocumentNotes(documentId, "preloaded"), listAnnotations(documentId, "preloaded")])
+    Promise.all([loadDocumentNotes(), loadDocumentAnnotations()])
       .then(([notes, loadedAnnotations]) => {
         if (isCancelled) {
           return;
         }
 
-        setNotesText(notes);
-        latestNotesRef.current = notes;
-        lastPersistedNotesRef.current = notes;
-        setAnnotations(loadedAnnotations);
+        if (notesRequestSequence === notesReloadSequenceRef.current) {
+          applyLoadedNotes(notes);
+        }
+        if (annotationsRequestSequence === annotationsReloadSequenceRef.current) {
+          setAnnotations(loadedAnnotations);
+        }
       })
       .catch((error) => {
         console.warn("Nao foi possivel carregar as notas e anotacoes.", error);
@@ -76,7 +104,79 @@ export function ReaderPanelPopout({ documentId }: ReaderPanelPopoutProps) {
     return () => {
       isCancelled = true;
     };
-  }, [documentId]);
+  }, [applyLoadedNotes, documentId, loadDocumentAnnotations, loadDocumentNotes]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    const unlistenCallbacks: Array<() => void> = [];
+    const currentWindowLabel = getCurrentWebviewWindow().label;
+
+    function registerListener<T>(eventName: string, handler: (payload: T) => void) {
+      void listen<T>(eventName, (event) => handler(event.payload))
+        .then((unlisten) => {
+          if (isDisposed) {
+            unlisten();
+            return;
+          }
+
+          unlistenCallbacks.push(unlisten);
+        })
+        .catch((error) => {
+          console.warn(`Nao foi possivel escutar o evento ${eventName}.`, error);
+        });
+    }
+
+    registerListener<unknown>(READER_NOTES_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderInvalidationPayload(payload) ||
+        payload.documentId !== documentId ||
+        payload.origin === currentWindowLabel
+      ) {
+        return;
+      }
+
+      const requestSequence = ++notesReloadSequenceRef.current;
+      void loadDocumentNotes()
+        .then((loadedNotes) => {
+          if (isDisposed || requestSequence !== notesReloadSequenceRef.current) {
+            return;
+          }
+
+          applyLoadedNotes(loadedNotes);
+        })
+        .catch((error) => {
+          console.warn("Nao foi possivel recarregar as notas da popout.", error);
+        });
+    });
+
+    registerListener<unknown>(READER_ANNOTATIONS_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderInvalidationPayload(payload) ||
+        payload.documentId !== documentId ||
+        payload.origin === currentWindowLabel
+      ) {
+        return;
+      }
+
+      const requestSequence = ++annotationsReloadSequenceRef.current;
+      void loadDocumentAnnotations()
+        .then((loadedAnnotations) => {
+          if (isDisposed || requestSequence !== annotationsReloadSequenceRef.current) {
+            return;
+          }
+
+          setAnnotations(loadedAnnotations);
+        })
+        .catch((error) => {
+          console.warn("Nao foi possivel recarregar as anotacoes da popout.", error);
+        });
+    });
+
+    return () => {
+      isDisposed = true;
+      unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
+    };
+  }, [applyLoadedNotes, documentId, loadDocumentAnnotations, loadDocumentNotes]);
 
   const persistNotes = useCallback(
     (notes: string) => {
@@ -159,6 +259,12 @@ export function ReaderPanelPopout({ documentId }: ReaderPanelPopoutProps) {
       });
   }
 
+  function handleJumpToPage(page: number) {
+    void emitTo<ReaderJumpToPagePayload>("main", READER_JUMP_TO_PAGE_EVENT, { documentId, page }).catch((error) => {
+      console.warn("Nao foi possivel solicitar a navegacao para a pagina.", error);
+    });
+  }
+
   async function closeWindow() {
     try {
       await flushNotes();
@@ -219,7 +325,7 @@ export function ReaderPanelPopout({ documentId }: ReaderPanelPopoutProps) {
         ) : activeTab === "annotations" ? (
           <AnnotationsTab
             annotations={annotations}
-            onJumpToPage={() => undefined}
+            onJumpToPage={handleJumpToPage}
             onDelete={handleDeleteAnnotation}
             onUpdateNote={handleUpdateAnnotationNote}
           />

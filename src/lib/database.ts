@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import Database from "@tauri-apps/plugin-sql";
 import { availableSubjectTags } from "../data/subjectTags";
 import { TAG_COLOR_TOKENS } from "./tagColors";
@@ -19,6 +21,43 @@ const trashItemCountSql = `
 `;
 const defaultCollectionColor = TAG_COLOR_TOKENS.slate.bg;
 const defaultCollectionName = "Sem título";
+
+export const READER_NOTES_CHANGED_EVENT = "reader:notes-changed";
+export const READER_ANNOTATIONS_CHANGED_EVENT = "reader:annotations-changed";
+export const READER_JUMP_TO_PAGE_EVENT = "reader:jump-to-page";
+
+export type ReaderInvalidationPayload = {
+  documentId: string;
+  origin: string;
+};
+
+export type ReaderJumpToPagePayload = {
+  documentId: string;
+  page: number;
+};
+
+export function isReaderInvalidationPayload(payload: unknown): payload is ReaderInvalidationPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  return typeof candidate.documentId === "string" && typeof candidate.origin === "string";
+}
+
+export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJumpToPagePayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  return (
+    typeof candidate.documentId === "string" &&
+    typeof candidate.page === "number" &&
+    Number.isInteger(candidate.page) &&
+    candidate.page > 0
+  );
+}
 
 let databasePromise: Promise<Database> | null = null;
 let preloadedDatabase: Database | null = null;
@@ -80,6 +119,10 @@ type AnnotationRow = {
   rectsJson: string;
   createdAt: string;
   updatedAt: string;
+};
+
+type AnnotationDocumentRow = {
+  documentId: string;
 };
 
 // Dados necessarios para criar uma anotacao. id e timestamps sao gerados aqui
@@ -206,6 +249,22 @@ async function getDatabase(source: DatabaseHandleSource = "loaded") {
   });
 
   return databasePromise;
+}
+
+async function emitReaderInvalidation(
+  eventName: typeof READER_NOTES_CHANGED_EVENT | typeof READER_ANNOTATIONS_CHANGED_EVENT,
+  documentId: string,
+) {
+  try {
+    await emit<ReaderInvalidationPayload>(eventName, {
+      documentId,
+      origin: getCurrentWebviewWindow().label,
+    });
+  } catch (error) {
+    // O SQLite ja confirmou a escrita. Falhar apenas a notificacao nao pode
+    // fazer o chamador repetir uma operacao que ja foi persistida.
+    console.warn("Nao foi possivel emitir a invalidacao do Reader.", error);
+  }
 }
 
 async function seedInitialData(database: Database) {
@@ -1454,6 +1513,7 @@ export async function getDocumentNotes(documentId: string, source: DatabaseHandl
 export async function setDocumentNote(documentId: string, note: string, source: DatabaseHandleSource = "loaded") {
   const database = await getDatabase(source);
   await database.execute("UPDATE documents SET notes = $1 WHERE id = $2", [note, documentId]);
+  await emitReaderInvalidation(READER_NOTES_CHANGED_EVENT, documentId);
 }
 
 export async function incrementDocumentReadingTime(documentId: string, seconds: number) {
@@ -1602,6 +1662,14 @@ function mapAnnotationRow(row: AnnotationRow): Annotation {
   };
 }
 
+async function getAnnotationDocumentId(database: Database, annotationId: string): Promise<string | null> {
+  const [row] = await database.select<AnnotationDocumentRow[]>(
+    "SELECT document_id AS documentId FROM annotations WHERE id = $1",
+    [annotationId],
+  );
+  return row?.documentId ?? null;
+}
+
 export async function listAnnotations(documentId: string, source: DatabaseHandleSource = "loaded"): Promise<Annotation[]> {
   const database = await getDatabase(source);
   const rows = await database.select<AnnotationRow[]>(
@@ -1666,17 +1734,29 @@ export async function createAnnotation(input: NewAnnotation, source: DatabaseHan
     ],
   );
 
+  await emitReaderInvalidation(READER_ANNOTATIONS_CHANGED_EVENT, annotation.documentId);
+
   return annotation;
 }
 
 export async function updateAnnotationNote(annotationId: string, note: string, source: DatabaseHandleSource = "loaded"): Promise<void> {
   const database = await getDatabase(source);
-  await database.execute("UPDATE annotations SET note = $1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $2", [note, annotationId]);
+  const documentId = await getAnnotationDocumentId(database, annotationId);
+  const result = await database.execute("UPDATE annotations SET note = $1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $2", [note, annotationId]);
+
+  if (documentId && result.rowsAffected > 0) {
+    await emitReaderInvalidation(READER_ANNOTATIONS_CHANGED_EVENT, documentId);
+  }
 }
 
 export async function deleteAnnotation(annotationId: string, source: DatabaseHandleSource = "loaded"): Promise<void> {
   const database = await getDatabase(source);
-  await database.execute("DELETE FROM annotations WHERE id = $1", [annotationId]);
+  const documentId = await getAnnotationDocumentId(database, annotationId);
+  const result = await database.execute("DELETE FROM annotations WHERE id = $1", [annotationId]);
+
+  if (documentId && result.rowsAffected > 0) {
+    await emitReaderInvalidation(READER_ANNOTATIONS_CHANGED_EVENT, documentId);
+  }
 }
 
 async function purgeExpiredTrash(database: Database) {
