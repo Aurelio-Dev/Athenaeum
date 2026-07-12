@@ -33,10 +33,16 @@ import { CanvasPropertiesPanel } from "./CanvasPropertiesPanel";
 import { canvasPanelHeight, canvasPanelMinHeight, canvasPanelMinWidth, canvasPanelWidth } from "./canvasPanelDimensions";
 import { getCanvasPropertiesSections } from "./canvasPropertiesSections";
 import {
+  getDirectionalControlPoint,
   getDirectionalEndpoints,
+  moveDirectionalControlPoint,
   moveDirectionalEndpoint,
   type DirectionalEndpoint,
 } from "./canvasDirectionalHandles";
+import {
+  getCurveEndTangent,
+  getDirectionalTension,
+} from "./canvasArrowCurve";
 import {
   finalizeCanvasTransform,
   finalizeFreedrawTransform,
@@ -78,6 +84,8 @@ const selectionStroke = "#B0592B";
 const minShapeSize = 3;
 // Aumenta a area clicavel das formas de traco fino (seta/linha/freedraw).
 const directionalHitStrokeWidth = 12;
+const arrowPointerLength = 10;
+const arrowPointerWidth = 10;
 // Distancia minima (em coordenadas do stage) entre pontos capturados do lapis:
 // evita arrays enormes e pontos redundantes em movimento lento.
 const freedrawMinDistance = 3;
@@ -365,13 +373,83 @@ function renderCanvasShape(type: CanvasShapeType, geometry: ShapeGeometry, optio
           />
         </Group>
       );
-    case "arrow":
-      // Ponta preenchida com a cor do traco (o fill persistido continua null).
+    case "arrow": {
+      const tension = getDirectionalTension(points);
+      if (tension === 0) {
+        // Ponta preenchida com a cor do traco (o fill persistido continua null).
+        return (
+          <Arrow
+            key={options.key}
+            {...common}
+            points={points}
+            fill={options.strokeColor}
+            pointerLength={arrowPointerLength}
+            pointerWidth={arrowPointerWidth}
+            hitStrokeWidth={directionalHitStrokeWidth}
+          />
+        );
+      }
+
+      const tangent = getCurveEndTangent(points, tension);
+      const endX = points[points.length - 2];
+      const endY = points[points.length - 1];
+      const baseX = endX - tangent.x * arrowPointerLength;
+      const baseY = endY - tangent.y * arrowPointerLength;
+      const normalX = -tangent.y * (arrowPointerWidth / 2);
+      const normalY = tangent.x * (arrowPointerWidth / 2);
       return (
-        <Arrow key={options.key} {...common} points={points} fill={options.strokeColor} hitStrokeWidth={directionalHitStrokeWidth} />
+        <Group
+          key={options.key}
+          x={x}
+          y={y}
+          rotation={options.rotation}
+          listening={!options.dashed}
+          draggable={options.draggable}
+          onMouseDown={options.onMouseDown}
+          onDblClick={options.onDblClick}
+          onDragMove={options.onDragMove}
+          onDragEnd={options.onDragEnd}
+        >
+          <Line
+            points={points}
+            tension={tension}
+            stroke={options.strokeColor}
+            strokeWidth={options.strokeWidth}
+            strokeScaleEnabled={false}
+            perfectDrawEnabled={false}
+            dash={options.dashed ? [6, 4] : undefined}
+            hitStrokeWidth={directionalHitStrokeWidth}
+          />
+          <Line
+            points={[
+              endX,
+              endY,
+              baseX + normalX,
+              baseY + normalY,
+              baseX - normalX,
+              baseY - normalY,
+            ]}
+            closed
+            fill={options.strokeColor}
+            stroke={options.strokeColor}
+            strokeWidth={options.strokeWidth}
+            strokeScaleEnabled={false}
+            perfectDrawEnabled={false}
+            listening={false}
+          />
+        </Group>
       );
+    }
     case "line":
-      return <Line key={options.key} {...common} points={points} hitStrokeWidth={directionalHitStrokeWidth} />;
+      return (
+        <Line
+          key={options.key}
+          {...common}
+          points={points}
+          tension={getDirectionalTension(points)}
+          hitStrokeWidth={directionalHitStrokeWidth}
+        />
+      );
     case "freedraw":
       // tension 0.5 suaviza o traco sem bezier completo; caps/joins arredondados
       // evitam o serrilhado nas curvas.
@@ -689,6 +767,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [canvasUiFontFamily] = useState(getCanvasUiFontFamily);
   const [directionalHandleColors] = useState(() => ({
     fill: getCanvasCssColor("--card", "#FAF5EF"),
+    controlFill: getCanvasCssColor("--color-accent-tint-bg", "#EFE2D8"),
     stroke: getCanvasCssColor("--accent", "#9C5A2E"),
   }));
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1551,6 +1630,45 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     [updateDirectionalHandle],
   );
 
+  const updateDirectionalControlHandle = useCallback(
+    (shapeId: string, candidate: Point, persist: boolean): Point | null => {
+      const shape = shapesRef.current.find(
+        (current) => current.id === shapeId && (current.type === "arrow" || current.type === "line"),
+      );
+      if (!shape) {
+        return null;
+      }
+
+      const nextGeometry = moveDirectionalControlPoint(shape, candidate);
+      const nextShapes = shapesRef.current.map((current) =>
+        current.id === shapeId ? { ...current, ...nextGeometry } : current,
+      );
+      shapesRef.current = nextShapes;
+      setShapes(nextShapes);
+      if (persist) {
+        scheduleSave();
+      }
+
+      return getDirectionalControlPoint(nextGeometry);
+    },
+    [scheduleSave],
+  );
+
+  const handleDirectionalControlDrag = useCallback(
+    (shapeId: string, event: Konva.KonvaEventObject<DragEvent>, persist: boolean) => {
+      event.cancelBubble = true;
+      const nextPoint = updateDirectionalControlHandle(
+        shapeId,
+        { x: event.target.x(), y: event.target.y() },
+        persist,
+      );
+      if (nextPoint) {
+        event.target.position(nextPoint);
+      }
+    },
+    [updateDirectionalControlHandle],
+  );
+
   const toggleCollapsed = useCallback(() => {
     setIsCollapsed((current) => !current);
     refreshStageSoon();
@@ -2009,6 +2127,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
               {selectedDirectionalShape
                 ? (() => {
                     const endpoints = getDirectionalEndpoints(selectedDirectionalShape);
+                    const controlPoint = getDirectionalControlPoint(selectedDirectionalShape);
                     const renderHandle = (endpoint: DirectionalEndpoint, point: Point) => (
                       <Circle
                         key={`${selectedDirectionalShape.id}-${endpoint}-handle`}
@@ -2034,6 +2153,29 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
                     return (
                       <>
                         {renderHandle("start", endpoints.start)}
+                        <Circle
+                          key={`${selectedDirectionalShape.id}-control-handle`}
+                          x={controlPoint.x}
+                          y={controlPoint.y}
+                          radius={6}
+                          fill={directionalHandleColors.controlFill}
+                          stroke={directionalHandleColors.stroke}
+                          strokeWidth={2}
+                          strokeScaleEnabled={false}
+                          draggable
+                          onMouseDown={(event) => {
+                            event.cancelBubble = true;
+                          }}
+                          onDragStart={(event) => {
+                            event.cancelBubble = true;
+                          }}
+                          onDragMove={(event) =>
+                            handleDirectionalControlDrag(selectedDirectionalShape.id, event, false)
+                          }
+                          onDragEnd={(event) =>
+                            handleDirectionalControlDrag(selectedDirectionalShape.id, event, true)
+                          }
+                        />
                         {renderHandle("end", endpoints.end)}
                       </>
                     );

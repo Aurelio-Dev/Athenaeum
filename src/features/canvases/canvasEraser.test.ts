@@ -116,6 +116,20 @@ describe("eraseAlongSegment", () => {
     expect(eraseAlongSegment([arrow], { x: 30, y: 20 }, { x: 20, y: 30 }, 5)).toEqual([]);
   });
 
+  it("percorre os dois segmentos armazenados de uma seta curva", () => {
+    const arrow = buildShape({
+      id: "arrow-curva",
+      type: "arrow",
+      x: 10,
+      y: 20,
+      width: 60,
+      height: 40,
+      points: [0, 0, 25, 40, 60, 10],
+    });
+
+    expect(eraseAlongSegment([arrow], { x: 34, y: 58 }, { x: 38, y: 62 }, 4)).toEqual([]);
+  });
+
   it("mantem retangulo longe do segmento (mesma referencia)", () => {
     const rect = buildShape({ id: "intacto", type: "rect", x: 0, y: 0, width: 40, height: 30 });
     const shapes = [rect];

@@ -23,9 +23,9 @@ export type CanvasShape = {
   y: number;
   width: number;
   height: number;
-  // Pontos relativos a (x, y). Usado por "arrow"/"line" ([x1, y1, x2, y2]) e por
-  // "freedraw" (caminho flat [x1, y1, x2, y2, ...]); vazio nas formas de caixa
-  // (rect, diamond, ellipse), que usam width/height.
+  // Pontos relativos a (x, y). "arrow"/"line" usam dois pontos (reta) ou tres
+  // (curva); "freedraw" usa um caminho flat [x1, y1, x2, y2, ...]. Vazio nas
+  // formas de caixa (rect, diamond, ellipse), que usam width/height.
   points: number[];
   rotation: number;
   stroke: string;
@@ -171,12 +171,14 @@ function parseShape(value: unknown): CanvasShape | null {
 
   const points = parsePoints(value.points);
 
-  // Formas baseadas em points (arrow, line, freedraw): sem ao menos dois pontos
-  // (4 numeros) a forma e degenerada e nao teria o que renderizar.
-  if (
-    (value.type === "arrow" || value.type === "line" || value.type === "freedraw") &&
-    points.length < 4
-  ) {
+  // Direcionais admitem somente dois pontos (reta) ou tres (curva). Nao aceitar
+  // uma polilinha arbitraria mantem o formato persistido coerente com os handles.
+  if ((value.type === "arrow" || value.type === "line") && points.length !== 4 && points.length !== 6) {
+    return null;
+  }
+
+  // O lapis continua aceitando qualquer caminho com quantidade par >= 4.
+  if (value.type === "freedraw" && (points.length < 4 || points.length % 2 !== 0)) {
     return null;
   }
 

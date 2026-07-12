@@ -214,6 +214,38 @@ describe("parseCanvasContent", () => {
     ]);
   });
 
+  it("preserva seta e linha curvas com tres pontos", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "arrow-curva", type: "arrow", x: 10, y: 20, width: 80, height: 50, points: [0, 0, 30, -20, 80, 30] },
+        { id: "line-curva", type: "line", x: -5, y: 4, width: 60, height: 45, points: [0, 0, 25, 45, 60, 10] },
+      ],
+    });
+
+    const result = parseCanvasContent(raw);
+    expect(result.shapes.map((shape) => ({ id: shape.id, points: shape.points }))).toEqual([
+      { id: "arrow-curva", points: [0, 0, 30, -20, 80, 30] },
+      { id: "line-curva", points: [0, 0, 25, 45, 60, 10] },
+    ]);
+  });
+
+  it("descarta seta e linha com cinco numeros", () => {
+    const raw = JSON.stringify({
+      engine: "konva",
+      schemaVersion: 1,
+      stage: { x: 0, y: 0, scale: 1 },
+      shapes: [
+        { id: "arrow-invalida", type: "arrow", x: 0, y: 0, width: 10, height: 10, points: [0, 0, 5, 5, 10] },
+        { id: "line-invalida", type: "line", x: 0, y: 0, width: 10, height: 10, points: [0, 0, 5, 5, 10] },
+      ],
+    });
+
+    expect(parseCanvasContent(raw).shapes).toEqual([]);
+  });
+
   it("retorna cena vazia para string vazia (JSON.parse falha)", () => {
     expect(parseCanvasContent("")).toEqual(createEmptyScene());
   });
