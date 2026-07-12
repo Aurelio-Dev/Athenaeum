@@ -9,11 +9,6 @@ import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
 import type { NotebookExportManifest } from "../features/notebooks/notebookExportHtml";
-// Formato do conteudo do Quadro (engine Konva). canvasScene.ts nao importa nada
-// do projeto, entao nao ha risco de ciclo; reusamos a string canonica para o
-// INSERT nao divergir do parser.
-import { emptyCanvasContentJson } from "../features/canvases/canvasScene";
-
 const databaseUrl = "sqlite:athenaeum.db";
 const listSeparator = String.fromCharCode(31);
 const trashItemCountSql = `
@@ -26,6 +21,9 @@ const defaultCollectionColor = TAG_COLOR_TOKENS.slate.bg;
 const defaultCollectionName = "Sem título";
 
 let databasePromise: Promise<Database> | null = null;
+let preloadedDatabase: Database | null = null;
+
+export type DatabaseHandleSource = "loaded" | "preloaded";
 
 type DocumentRow = {
   id: string;
@@ -190,7 +188,16 @@ function mapDocumentRow(row: DocumentRow): LibraryDocument {
   };
 }
 
-async function getDatabase() {
+function getPreloadedDatabase() {
+  preloadedDatabase ??= Database.get(databaseUrl);
+  return preloadedDatabase;
+}
+
+async function getDatabase(source: DatabaseHandleSource = "loaded") {
+  if (source === "preloaded") {
+    return getPreloadedDatabase();
+  }
+
   databasePromise ??= Database.load(databaseUrl).then(async (database) => {
     await database.execute("PRAGMA foreign_keys = ON");
     await seedInitialData(database);
@@ -1042,6 +1049,9 @@ export async function listCanvases(collectionId: string): Promise<Canvas[]> {
 
 export async function createCanvas(collectionId: string, title = "Quadro sem título"): Promise<Canvas> {
   const database = await getDatabase();
+  // Mantem o parser/formato de Quadro fora do chunk inicial usado pela popout;
+  // a fonte canonica continua sendo carregada somente quando um Quadro e criado.
+  const { emptyCanvasContentJson } = await import("../features/canvases/canvasScene");
   // Passa o content explicito no formato Konva vazio em vez de herdar o DEFAULT
   // antigo da coluna (formato Excalidraw, ainda na migration 0012). Assim um
   // Quadro novo ja nasce no formato atual e nao depende do fallback do parser.
@@ -1435,8 +1445,14 @@ export async function setDocumentFavorite(documentId: string, favorite: boolean)
   await database.execute("UPDATE documents SET favorite = $1 WHERE id = $2", [favorite ? 1 : 0, documentId]);
 }
 
-export async function setDocumentNote(documentId: string, note: string) {
-  const database = await getDatabase();
+export async function getDocumentNotes(documentId: string, source: DatabaseHandleSource = "loaded"): Promise<string> {
+  const database = await getDatabase(source);
+  const [row] = await database.select<Array<{ notes: string | null }>>("SELECT notes FROM documents WHERE id = $1", [documentId]);
+  return row?.notes ?? "";
+}
+
+export async function setDocumentNote(documentId: string, note: string, source: DatabaseHandleSource = "loaded") {
+  const database = await getDatabase(source);
   await database.execute("UPDATE documents SET notes = $1 WHERE id = $2", [note, documentId]);
 }
 
@@ -1586,8 +1602,8 @@ function mapAnnotationRow(row: AnnotationRow): Annotation {
   };
 }
 
-export async function listAnnotations(documentId: string): Promise<Annotation[]> {
-  const database = await getDatabase();
+export async function listAnnotations(documentId: string, source: DatabaseHandleSource = "loaded"): Promise<Annotation[]> {
+  const database = await getDatabase(source);
   const rows = await database.select<AnnotationRow[]>(
     `SELECT
       id,
@@ -1610,8 +1626,8 @@ export async function listAnnotations(documentId: string): Promise<Annotation[]>
 
 // Escrita imediata: ao resolver, o INSERT esta commitado e duravel
 // (synchronous=FULL por conexao). Um unico statement => atomico.
-export async function createAnnotation(input: NewAnnotation): Promise<Annotation> {
-  const database = await getDatabase();
+export async function createAnnotation(input: NewAnnotation, source: DatabaseHandleSource = "loaded"): Promise<Annotation> {
+  const database = await getDatabase(source);
   const now = new Date().toISOString();
   const annotation: Annotation = {
     id: crypto.randomUUID(),
@@ -1653,13 +1669,13 @@ export async function createAnnotation(input: NewAnnotation): Promise<Annotation
   return annotation;
 }
 
-export async function updateAnnotationNote(annotationId: string, note: string): Promise<void> {
-  const database = await getDatabase();
+export async function updateAnnotationNote(annotationId: string, note: string, source: DatabaseHandleSource = "loaded"): Promise<void> {
+  const database = await getDatabase(source);
   await database.execute("UPDATE annotations SET note = $1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $2", [note, annotationId]);
 }
 
-export async function deleteAnnotation(annotationId: string): Promise<void> {
-  const database = await getDatabase();
+export async function deleteAnnotation(annotationId: string, source: DatabaseHandleSource = "loaded"): Promise<void> {
+  const database = await getDatabase(source);
   await database.execute("DELETE FROM annotations WHERE id = $1", [annotationId]);
 }
 

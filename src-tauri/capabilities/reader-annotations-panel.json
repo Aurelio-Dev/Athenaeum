@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "reader-annotations-panel",
+  "description": "Permissões mínimas da janela nativa de notas e anotações do Reader",
+  "windows": [
+    "reader-annotations-panel"
+  ],
+  "permissions": [
+    "core:default",
+    "sql:allow-select",
+    "sql:allow-execute"
+  ]
+}

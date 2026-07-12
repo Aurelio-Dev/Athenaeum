@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
-use tauri::Manager;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
 #[derive(Serialize)]
@@ -91,6 +91,50 @@ struct NotebookExportDestinations(std::sync::Mutex<HashSet<PathBuf>>);
 // se acumular numa sessao longa. Ao estourar, limpamos os obsoletos antes de
 // registrar o novo — a escolha atual sempre sobrevive.
 const MAX_AUTHORIZED_EXPORT_DESTINATIONS: usize = 32;
+
+const READER_PANEL_WINDOW_LABEL: &str = "reader-annotations-panel";
+
+fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
+    let bytes = value.as_bytes();
+    let has_valid_shape = bytes.len() == 36
+        && bytes.iter().enumerate().all(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => *byte == b'-',
+            _ => byte.is_ascii_hexdigit(),
+        });
+
+    if !has_valid_shape {
+        return Err(format!("{label} invalido."));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn open_reader_panel_window<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    document_id: String,
+    document_title: String,
+) -> Result<(), String> {
+    // O ID atravessa a fronteira IPC e precisa ser validado no Rust antes de
+    // entrar na URL, independentemente do tipo declarado no frontend.
+    validate_uuid(&document_id, "Identificador do documento")?;
+
+    if let Some(window) = app.get_webview_window(READER_PANEL_WINDOW_LABEL) {
+        // Fase 3: a Decisao C-1 vai trocar o documento de uma popout ja aberta.
+        // Nesta fase, a janela existente apenas recebe foco e mantem seu conteudo.
+        return window.set_focus().map_err(|error| error.to_string());
+    }
+
+    let url = format!("index.html?readerPanel=1&documentId={document_id}");
+    WebviewWindowBuilder::new(&app, READER_PANEL_WINDOW_LABEL, WebviewUrl::App(url.into()))
+        .title(format!("Anotações — {document_title}"))
+        .inner_size(440.0, 640.0)
+        .min_inner_size(360.0, 440.0)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
 
 #[tauri::command]
 fn select_notebook_export_destination(
@@ -3131,6 +3175,7 @@ pub fn run() {
             open_external_url,
             open_file_location,
             open_notebook_file_attachment,
+            open_reader_panel_window,
             read_pdf_file,
             reveal_notebook_file_attachment,
             save_canvas_file,
@@ -3148,6 +3193,13 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validates_canonical_uuid_shape() {
+        assert!(validate_uuid("550e8400-e29b-41d4-a716-446655440000", "Identificador").is_ok());
+        assert!(validate_uuid("550e8400e29b41d4a716446655440000", "Identificador").is_err());
+        assert!(validate_uuid("550e8400-e29b-41d4-a716-44665544000z", "Identificador").is_err());
+    }
 
     #[test]
     fn parses_sentinels_in_order_with_offsets() {

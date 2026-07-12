@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
@@ -87,6 +88,15 @@ export function ReaderSidePanel({
   const { panels, minimizePanel, restorePanel } = useFloatingPanels();
   const annotationsPanelId = floatingPanelId("annotations", document.id);
 
+  function openSystemWindow() {
+    void invoke("open_reader_panel_window", {
+      documentId: document.id,
+      documentTitle: document.title,
+    }).catch((error) => {
+      console.warn("Nao foi possivel abrir o painel em uma janela do sistema.", error);
+    });
+  }
+
   // Esc fecha o painel flutuante quando ele e o topo da pilha — mesma regra
   // dos paineis de caderno (o leitor, por sua vez, so fecha quando ELE e o
   // topo, entao um unico Esc nunca fecha os dois).
@@ -175,6 +185,22 @@ export function ReaderSidePanel({
         title={<h2 className="min-w-0 truncate text-sm font-bold text-[var(--floating-header-text)]">Anotações — {document.title}</h2>}
         actions={
           <>
+            <button
+              type="button"
+              aria-label="Levar para janela do sistema"
+              title="Levar para janela do sistema"
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                openSystemWindow();
+              }}
+            >
+              <PopOutIcon />
+            </button>
             <button
               type="button"
               aria-label={panel.isMinimized ? "Restaurar painel" : "Minimizar painel"}
