@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sanitizeNotesHtml } from "../notesSanitizer";
 import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, toggleWrapTag, wrapSelectionInCode } from "../richTextShared";
 
 type NotesTabProps = {
@@ -92,11 +93,14 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
     setActiveFormats(nextActive);
   }, []);
 
-  // Carrega o HTML inicial no contentEditable uma vez.
+  // Carrega o HTML inicial no contentEditable uma vez. Sanitizacao no load e
+  // a defesa obrigatoria: documents.notes tambem recebe escrita de superficies
+  // de texto plano (painel de detalhes, import) e pode carregar dado legado —
+  // nada disso e confiavel para innerHTML sem passar pela allowlist.
   useEffect(() => {
     const editor = editorRef.current;
     if (editor) {
-      editor.innerHTML = notesText;
+      editor.innerHTML = sanitizeNotesHtml(notesText);
       prepareCodeElements(editor);
     }
     // Intencional: so no mount. Atualizacoes externas sao tratadas abaixo.
@@ -109,7 +113,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
   useEffect(() => {
     const editor = editorRef.current;
     if (editor && notesText !== lastEmittedRef.current) {
-      editor.innerHTML = notesText;
+      editor.innerHTML = sanitizeNotesHtml(notesText);
       prepareCodeElements(editor);
       lastEmittedRef.current = notesText;
     }
@@ -162,8 +166,14 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
       setActiveFormats(new Set());
     }
 
-    lastEmittedRef.current = editor.innerHTML;
-    onNotesChange(editor.innerHTML);
+    // Sanitizar tambem no save (defesa em profundidade): o banco converge
+    // para o formato canonico da allowlist e nenhum markup que tenha entrado
+    // por um caminho nao coberto (ex.: API nova do browser) e persistido. O
+    // DOM vivo do editor NAO e reescrito aqui — so a string emitida — para
+    // nao reposicionar o cursor a cada tecla.
+    const sanitizedHtml = sanitizeNotesHtml(editor.innerHTML);
+    lastEmittedRef.current = sanitizedHtml;
+    onNotesChange(sanitizedHtml);
   }
 
   function applyFormat(action: FormatAction) {
@@ -215,6 +225,41 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
 
     document.execCommand("insertText", false, text);
     emitChange();
+  }
+
+  // Drop de arrasto NAO passa pelo handlePaste: sem interceptacao o browser
+  // insere o HTML rico arrastado (de outra pagina/app) direto no DOM — vetor
+  // de severidade media mapeado no discovery. Mesmo contrato do paste: so o
+  // text/plain do drop entra. Custo aceito: arrastar texto DENTRO do editor
+  // vira copia em texto plano (a origem nao e removida), em vez do move rico
+  // nativo — comportamento uniforme e auditavel em troca do vetor fechado.
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    const text = event.dataTransfer.getData("text/plain");
+    if (text.length === 0) {
+      return;
+    }
+
+    editor.focus();
+
+    // Move o cursor para o ponto do drop (API do Chromium/WebView2); se o
+    // ponto nao cair dentro do editor, insere na selecao atual mesmo.
+    const dropRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+    if (dropRange && editor.contains(dropRange.startContainer)) {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(dropRange);
+    }
+
+    document.execCommand("insertText", false, text);
+    emitChange();
+    syncSelectionState();
   }
 
   // Enter insere uma quebra de linha simples (<br>) via execCommand, em vez
@@ -285,6 +330,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur }: NotesTabProps) {
         onInput={emitChange}
         onBlur={onBlur}
         onPaste={handlePaste}
+        onDrop={handleDrop}
         onMouseUp={syncSelectionState}
         onKeyDown={handleKeyDown}
         onKeyUp={syncSelectionState}
