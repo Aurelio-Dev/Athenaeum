@@ -1290,6 +1290,39 @@ export async function writeNotebookExport(request: WriteNotebookExportRequest): 
   });
 }
 
+// Soma o file_size (bytes crus em disco) de todas as imagens e anexos das
+// paginas no escopo do export. Usado apenas para ESTIMAR o tamanho final antes
+// de gravar — leitura pura, nao toca no filesystem nem depende dos bytes reais
+// dos arquivos no momento do clique.
+//
+// Duas queries de proposito: notebook_assets.page_id e TEXT (migration v17) e
+// notebook_file_attachments.page_id e INTEGER (migration v18). Cada query recebe
+// o parametro no tipo que casa exatamente com a coluna (string para a de TEXT,
+// number para a de INTEGER), sem depender da coercao de afinidade do SQLite
+// entre tipos diferentes. COALESCE garante 0 quando nao ha linhas.
+export async function sumNotebookExportResourceBytes(pageIds: number[]): Promise<number> {
+  // Sem paginas nao ha o que somar; alem disso um `IN ()` vazio seria erro de
+  // sintaxe no SQLite.
+  if (pageIds.length === 0) {
+    return 0;
+  }
+
+  const database = await getDatabase();
+  const placeholders = pageIds.map((_, index) => `$${index + 1}`).join(", ");
+
+  const [assetsRow] = await database.select<Array<{ total: number }>>(
+    `SELECT COALESCE(SUM(file_size), 0) AS total FROM notebook_assets WHERE page_id IN (${placeholders})`,
+    pageIds.map((pageId) => String(pageId)),
+  );
+
+  const [attachmentsRow] = await database.select<Array<{ total: number }>>(
+    `SELECT COALESCE(SUM(file_size), 0) AS total FROM notebook_file_attachments WHERE page_id IN (${placeholders})`,
+    pageIds,
+  );
+
+  return (assetsRow?.total ?? 0) + (attachmentsRow?.total ?? 0);
+}
+
 function uniqueTrimmed(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
 }

@@ -23,6 +23,7 @@ import {
   selectNotebookExportDestination,
   setNotebookFavorite,
   setSetting,
+  sumNotebookExportResourceBytes,
   unlinkDocumentFromNotebook,
   updateNotebookInfo,
   writeNotebookExport,
@@ -38,6 +39,7 @@ import { DocumentPickerModal } from "../library/DocumentPickerModal";
 import { TagSelector } from "../library/TagSelector";
 import { getNotebookExportDefaultFileName } from "./notebookExportFileName";
 import { buildNotebookExportHtml, type NotebookExportScope, type NotebookExportWarning } from "./notebookExportHtml";
+import { estimateNotebookExportSizeBytes, shouldGateNotebookExportSize } from "./notebookExportSizeEstimate";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
   notebookDetailsCollapseBreakpoint,
@@ -75,6 +77,16 @@ type NotebookExportPreparation = {
   nonce: string;
   manifestSlotCount: number;
   warnings: NotebookExportWarning[];
+  // Estimativa aproximada do tamanho do arquivo final, em bytes. null quando o
+  // calculo falhou (ex.: erro na leitura dos file_size): nesse caso a interface
+  // mostra "indisponivel" e o gate de confirmacao e ativado mesmo assim
+  // (fail-safe) — a estimativa nunca aborta o export, mas "desconhecido" nao
+  // libera silenciosamente.
+  estimatedSizeBytes: number | null;
+  // Verdadeiro quando o export exige confirmacao explicita de tamanho: acima do
+  // limiar de 100MB OU estimativa desconhecida (null). Ver
+  // shouldGateNotebookExportSize.
+  isAboveSizeThreshold: boolean;
 };
 
 const editorZoomOptions = [75, 90, 100, 110, 125, 150] as const;
@@ -196,6 +208,22 @@ function formatExportFileSize(bytes: number) {
   }
 
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Estimativa de tamanho do arquivo de export, tolerante a falha: qualquer erro
+// na leitura dos file_size devolve null (estimativa indisponivel) em vez de
+// abortar a preparacao — a estimativa e uma conveniencia, nunca deve impedir o
+// export. O HTML e medido em BYTES UTF-8 (TextEncoder), nao no length da string
+// em JS, para nao subestimar conteudo com acentos e simbolos.
+async function estimateExportSizeBytes(pageIds: number[], html: string): Promise<number | null> {
+  try {
+    const resourceBytes = await sumNotebookExportResourceBytes(pageIds);
+    const htmlByteLength = new TextEncoder().encode(html).length;
+    return estimateNotebookExportSizeBytes({ htmlByteLength, resourceBytes });
+  } catch (error) {
+    console.warn("Nao foi possivel estimar o tamanho da exportacao.", error);
+    return null;
+  }
 }
 
 function formatNotebookExportBuildWarning(warning: NotebookExportWarning) {
@@ -608,6 +636,10 @@ export function NotebookPanel({
   const [isPreparingExport, setIsPreparingExport] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [preparedExport, setPreparedExport] = useState<NotebookExportPreparation | null>(null);
+  // Confirmacao explicita do usuario para exportar acima do limiar de tamanho.
+  // Resetada a cada nova preparacao e troca de escopo: uma preparacao grande
+  // sempre exige marcar o aviso de novo antes de habilitar "Exportar".
+  const [hasConfirmedLargeExport, setHasConfirmedLargeExport] = useState(false);
   const [isWritingExport, setIsWritingExport] = useState(false);
   const [exportResult, setExportResult] = useState<NotebookExportWriteResult | null>(null);
   const [normalSpacingMode, setNormalSpacingMode] = useState<NotebookSpacingMode>("normal");
@@ -962,6 +994,7 @@ export function NotebookPanel({
     setExportScope("full-notebook");
     setExportError(null);
     setPreparedExport(null);
+    setHasConfirmedLargeExport(false);
     setExportResult(null);
     setIsExportDialogOpen(true);
   }
@@ -978,6 +1011,7 @@ export function NotebookPanel({
   async function prepareNotebookExport() {
     setExportError(null);
     setPreparedExport(null);
+    setHasConfirmedLargeExport(false);
     setExportResult(null);
     setIsPreparingExport(true);
 
@@ -1016,6 +1050,14 @@ export function NotebookPanel({
         pages: selectedPages,
       });
 
+      // Estimativa de tamanho: bytes UTF-8 do HTML montado (fontes/CSS/SVG ja
+      // embutidos) + os binarios de assets/anexos inflados por base64. A falha
+      // do calculo NUNCA aborta o export — degrada para "indisponivel".
+      const estimatedSizeBytes = await estimateExportSizeBytes(pageIds, build.html);
+      // Fail-safe: estimativa desconhecida (null) ATIVA o gate, igual a uma
+      // estimativa acima do limiar. Ver shouldGateNotebookExportSize.
+      const isAboveSizeThreshold = shouldGateNotebookExportSize(estimatedSizeBytes);
+
       setPreparedExport({
         notebookId,
         notebookTitle: exportTitle,
@@ -1026,6 +1068,8 @@ export function NotebookPanel({
         nonce: build.manifest.nonce,
         manifestSlotCount: build.manifest.slots.length,
         warnings: build.warnings,
+        estimatedSizeBytes,
+        isAboveSizeThreshold,
       });
     } catch (error) {
       console.warn("Nao foi possivel preparar a exportacao do caderno.", error);
@@ -1044,6 +1088,12 @@ export function NotebookPanel({
     setIsWritingExport(true);
 
     try {
+      // Garante que a pagina ativa esta persistida ANTES de reler e reconstruir:
+      // se o usuario editou entre "Preparar" e "Exportar", o arquivo gravado
+      // ainda reflete o estado mais recente. Usa a mesma fila serializada de
+      // autosave (saveQueueTailRef), entao nao concorre com um save pendente.
+      await saveActivePage();
+
       const persistedPages = await listNotebookPages(preparedExport.notebookId);
       const persistedPagesById = new Map(persistedPages.map((page) => [page.id, page]));
       const selectedPages = preparedExport.pageIds.map((pageId) => persistedPagesById.get(pageId)).filter((page): page is NotebookPage => Boolean(page));
@@ -2057,6 +2107,7 @@ export function NotebookPanel({
                       setExportScope("current-page");
                       setExportError(null);
                       setPreparedExport(null);
+                      setHasConfirmedLargeExport(false);
                       setExportResult(null);
                     }}
                     className="mt-1"
@@ -2078,6 +2129,7 @@ export function NotebookPanel({
                       setExportScope("full-notebook");
                       setExportError(null);
                       setPreparedExport(null);
+                      setHasConfirmedLargeExport(false);
                       setExportResult(null);
                     }}
                     className="mt-1"
@@ -2109,6 +2161,14 @@ export function NotebookPanel({
                     {preparedExport.manifestSlotCount === 1 ? "sentinela" : "sentinelas"}
                     {preparedExport.warnings.length > 0 ? ` - ${formatCount(preparedExport.warnings.length)} avisos` : ""}
                   </p>
+                  <p className="text-xs text-text-secondary">
+                    Tamanho estimado:{" "}
+                    {preparedExport.estimatedSizeBytes !== null ? (
+                      <span className="font-medium text-text-primary">~{formatExportFileSize(preparedExport.estimatedSizeBytes)}</span>
+                    ) : (
+                      "indisponível"
+                    )}
+                  </p>
                   {preparedExport.warnings.length > 0 ? (
                     <ul className="grid gap-1 text-xs text-text-secondary">
                       {preparedExport.warnings.map((warning, index) => (
@@ -2121,7 +2181,35 @@ export function NotebookPanel({
                   <p className="break-words text-xs font-medium text-text-primary [overflow-wrap:anywhere] [word-break:break-word]" title={preparedExport.destinationPath}>
                     {preparedExport.destinationPath}
                   </p>
-                  {!exportResult ? (
+                  {preparedExport.isAboveSizeThreshold && !exportResult ? (
+                    <div className="mt-1 grid gap-2 rounded-lg border border-accent-icon-amber border-l-4 bg-surface-muted px-3 py-2.5">
+                      {/* Mesmo banner/checkbox nos dois casos; so o texto muda
+                          conforme a causa do gate (tamanho grande vs. estimativa
+                          que nao pode ser calculada). */}
+                      <p className="text-xs font-bold text-text-primary">
+                        {preparedExport.estimatedSizeBytes === null ? "Estimativa indisponível" : "Exportação grande"}
+                      </p>
+                      <p className="text-xs text-text-secondary">
+                        {preparedExport.estimatedSizeBytes === null
+                          ? "Não foi possível estimar o tamanho deste export. Ele pode ser grande e demorar para gravar e para abrir. Deseja continuar mesmo assim?"
+                          : "O tamanho estimado ultrapassa 100 MB. Arquivos grandes podem demorar para gravar e para abrir no navegador."}
+                      </p>
+                      <label className="grid cursor-pointer grid-cols-[auto_1fr] items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={hasConfirmedLargeExport}
+                          onChange={(event) => setHasConfirmedLargeExport(event.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span className="text-xs text-text-secondary">
+                          {preparedExport.estimatedSizeBytes === null
+                            ? "Entendo e quero exportar mesmo assim."
+                            : "Entendo o tamanho e quero exportar mesmo assim."}
+                        </span>
+                      </label>
+                    </div>
+                  ) : null}
+                  {!exportResult && !(preparedExport.isAboveSizeThreshold && !hasConfirmedLargeExport) ? (
                     <p className="text-xs text-text-secondary">Clique em Exportar para gravar o arquivo HTML.</p>
                   ) : null}
                 </div>
@@ -2187,7 +2275,14 @@ export function NotebookPanel({
               {!exportResult ? (
                 <button
                   type="button"
-                  disabled={isPreparingExport || isWritingExport}
+                  disabled={
+                    isPreparingExport ||
+                    isWritingExport ||
+                    // Acima do limiar de tamanho, "Exportar" so habilita apos a
+                    // confirmacao explicita no aviso. Nao afeta "Selecionar
+                    // destino" (quando ainda nao ha preparacao).
+                    Boolean(preparedExport?.isAboveSizeThreshold && !hasConfirmedLargeExport)
+                  }
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => (preparedExport ? void runNotebookExport() : void prepareNotebookExport())}
                 >
