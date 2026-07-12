@@ -25,6 +25,8 @@ desktop.ini
 # Internal development artifacts
 CLAUDE.md
 references/
+# Cópia local aninhada do repositório; não deve participar do build nem dos testes.
+Athenaeum/
 
 # Segoe UI e' fonte proprietaria da Microsoft (licenciada apenas para uso no
 # Windows, sem redistribuicao). Os .ttf sao locais a cada maquina — veja
