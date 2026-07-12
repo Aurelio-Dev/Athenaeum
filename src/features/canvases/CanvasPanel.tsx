@@ -805,6 +805,13 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const hasLoadedRef = useRef(false);
   const hasClosedExplicitlyRef = useRef(false);
 
+  // Uma forma criada passa imediatamente para o mesmo estado que teria apos um
+  // clique no modo Selecionar: propriedades e handles refletem a forma nova.
+  const selectCreatedShape = useCallback((shapeId: string) => {
+    setSelectedId(shapeId);
+    setTool("select");
+  }, []);
+
   // Serializa a cena atual no formato Konva (schemaVersion 1). Le o transform
   // direto do stage (fonte da verdade imperativa) com fallback para o ref.
   const serializeScene = useCallback((): string => {
@@ -1038,7 +1045,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         const nextShapes = [...shapesRef.current, newShape];
         shapesRef.current = nextShapes;
         setShapes(nextShapes);
-        setSelectedId(newShape.id);
+        selectCreatedShape(newShape.id);
         scheduleSave();
       } catch (error) {
         if (isMountedRef.current) {
@@ -1074,7 +1081,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       nextShapes = shapesRef.current.map((shape) =>
         shape.id === editing.id ? { ...shape, text: editing.value, width: box.width, height: box.height } : shape,
       );
-      setSelectedId(editing.id);
+      selectCreatedShape(editing.id);
     }
 
     // Atualiza o ref antes do render: um fechamento imediato precisa serializar
@@ -1082,7 +1089,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     shapesRef.current = nextShapes;
     setShapes(nextShapes);
     scheduleSave();
-  }, [canvasUiFontFamily, scheduleSave]);
+  }, [canvasUiFontFamily, scheduleSave, selectCreatedShape]);
 
   const beginTextEditing = useCallback((shape: CanvasShape) => {
     if (shape.type !== "text") {
@@ -1561,9 +1568,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
       fileId: null,
     };
     setShapes((current) => [...current, newShape]);
-    setSelectedId(newShape.id);
+    selectCreatedShape(newShape.id);
     scheduleSave();
-  }, [draft, finishPan, scheduleSave]);
+  }, [draft, finishPan, scheduleSave, selectCreatedShape]);
 
   // Alterna o modo Mover (pan). Clicar de novo (ou Esc) volta a ferramenta anterior.
   const togglePan = useCallback(() => {
