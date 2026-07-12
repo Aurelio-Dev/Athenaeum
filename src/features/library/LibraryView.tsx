@@ -796,6 +796,7 @@ export function LibraryView() {
                 icon={EmptySearchIcon}
                 title="Nenhum resultado encontrado"
                 description="Tente outro termo, autor ou palavra-chave."
+                verticalPosition="raised"
               />
             ) : activeRoute.type === "collection" ? (
               <EmptyState
