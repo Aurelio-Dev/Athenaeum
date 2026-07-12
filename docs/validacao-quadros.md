@@ -13,6 +13,9 @@
 
 ## Ferramentas atuais do Quadro
 
+Seta e Linha possuem handles customizados de início/fim e um handle de dobra
+intermediário; o handle de dobra faz parte da edição dessas duas ferramentas.
+
 Selecionar, Mover, Retângulo, Losango, Elipse, Seta, Linha, Lápis
 (`freedraw`), Borracha por segmento, Texto, Imagem e Frame — acessíveis pela
 toolbar em pílula (Retângulo/Losango/Elipse/Seta agrupados no popup
@@ -37,6 +40,9 @@ toolbar em pílula (Retângulo/Losango/Elipse/Seta agrupados no popup
 | 15  | Selecionar uma forma e apertar Delete/Backspace                                                      | Forma é removida                                                                                                                                 | Pendente |
 | 16  | Trocar de ferramenta pelos atalhos de teclado (V/R/P/E/T/I/F) com o cursor sobre o Quadro             | A ferramenta correspondente ativa e destaca na toolbar                                                                                          | Pendente |
 | 17  | Abrir Quadro + Caderno + Leitor juntos e editar um Quadro                                            | Painéis coexistem na pilha; ao salvar, o card do Quadro atualiza "Editado há X"                                                                | Pendente |
+| 18  | Selecionar uma Seta ou Linha e arrastar o handle de dobra intermediário                                  | A forma passa a usar três pontos, a curva passa pelos pontos com tension 0.5 e a ponta da Seta acompanha a tangente real da curva                         | Pendente |
+| 19  | Criar qualquer forma (incluindo Imagem e texto não vazio) e concluir o gesto/edição                      | A ferramenta volta para Selecionar, a forma recém-criada fica selecionada e Transformer/handles/painel de propriedades aparecem imediatamente             | Pendente |
+| 20  | Executar criação, mover, resize/rotate, handles, Delete, propriedades, texto e Borracha; usar Ctrl+Z/Ctrl+Y | Undo/Redo restaura os snapshots na ordem correta, limita o histórico a 50 níveis, limpa Redo após nova ação, ignora confirmações sem mudança e não persiste entre sessões | Pendente |
 
 ## Observações anteriores (pré-migração Konva, não reverificadas)
 
