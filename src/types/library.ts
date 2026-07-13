@@ -23,6 +23,7 @@ export type ReadingLocation = {
 export type LibraryDocument = {
   id: string;
   title: string;
+  description: string;
   authors: string[];
   source: string;
   year: number;
@@ -32,6 +33,7 @@ export type LibraryDocument = {
   favorite: boolean;
   collection: string;
   updatedAt: string;
+  lastOpenedAt?: string;
   deletedAt?: string;
   fileName?: string;
   filePath?: string;
@@ -40,6 +42,23 @@ export type LibraryDocument = {
   notes?: string;
   timeSpentSeconds: number;
 };
+
+export type ReaderDocumentDetails = Pick<
+  LibraryDocument,
+  | "id"
+  | "title"
+  | "description"
+  | "authors"
+  | "source"
+  | "year"
+  | "tags"
+  | "status"
+  | "progress"
+  | "favorite"
+  | "fileName"
+  | "readingLocation"
+  | "lastOpenedAt"
+>;
 
 export type LibraryCollection = {
   id: string;

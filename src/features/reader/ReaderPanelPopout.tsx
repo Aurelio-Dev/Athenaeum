@@ -5,36 +5,44 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteAnnotation,
+  getLibraryDocument,
   getDocumentNotes,
   isReaderDocumentPayload,
   isReaderInvalidationPayload,
+  isReaderPageStatePayload,
   isReaderPopoutCloseRequestPayload,
   listAnnotations,
+  listAvailableTagsFromPreloadedDatabase,
   READER_ANNOTATIONS_CHANGED_EVENT,
+  READER_DETAILS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
   READER_NOTES_CHANGED_EVENT,
+  READER_OPEN_NOTEBOOK_EVENT,
+  READER_PAGE_STATE_CHANGED_EVENT,
+  READER_PAGE_STATE_REQUESTED_EVENT,
   READER_POPOUT_CLOSED_EVENT,
   READER_POPOUT_FLUSHED_EVENT,
   READER_REQUEST_POPOUT_CLOSE_EVENT,
   READER_SET_DOCUMENT_EVENT,
   setDocumentNote,
+  setDocumentFavorite,
+  openDocumentExternally,
   updateAnnotationNote,
 } from "../../lib/database";
-import type { ReaderDocumentPayload, ReaderJumpToPagePayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
+import type { ReaderDocumentPayload, ReaderJumpToPagePayload, ReaderOpenNotebookPayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
-import { AiTab } from "./panels/AiTab";
+import type { LibraryDocument } from "../../types/library";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
-import { NotesTab } from "./panels/NotesTab";
+import { DetailsTab } from "./panels/DetailsTab";
 
 type ReaderPanelPopoutProps = {
   documentId: string;
 };
 
-type ReaderTab = "ai" | "notes" | "annotations";
+type ReaderTab = "details" | "annotations";
 
 const tabs: Array<{ id: ReaderTab; label: string }> = [
-  { id: "ai", label: "Ask AI" },
-  { id: "notes", label: "Notas" },
+  { id: "details", label: "Detalhes" },
   { id: "annotations", label: "Anotações" },
 ];
 
@@ -50,8 +58,14 @@ function CloseIcon() {
 export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanelPopoutProps) {
   const [documentId, setDocumentId] = useState(initialDocumentId);
   const documentIdRef = useRef(initialDocumentId);
-  const [activeTab, setActiveTab] = useState<ReaderTab>("ai");
-  const [notesText, setNotesText] = useState("");
+  const [activeTab, setActiveTab] = useState<ReaderTab>("details");
+  const [documentDetails, setDocumentDetails] = useState<LibraryDocument | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [progress, setProgress] = useState(0);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
+  const [fileSizeBytes, setFileSizeBytes] = useState<number | null>(null);
+  const metricsDocumentIdRef = useRef<string | null>(null);
+  const [, setNotesText] = useState("");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -74,11 +88,25 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     (targetDocumentId: string) => listAnnotations(targetDocumentId, "preloaded"),
     [],
   );
+  const loadDocumentDetails = useCallback(
+    (targetDocumentId: string) => getLibraryDocument(targetDocumentId, "preloaded"),
+    [],
+  );
 
   const applyLoadedNotes = useCallback((notes: string) => {
     setNotesText(notes);
     latestNotesRef.current = notes;
     lastPersistedNotesRef.current = notes;
+  }, []);
+
+  const applyLoadedDocument = useCallback((loadedDocument: LibraryDocument) => {
+    setDocumentDetails(loadedDocument);
+    setCurrentPage(loadedDocument.readingLocation?.page ?? 1);
+    setProgress(loadedDocument.progress);
+    if (metricsDocumentIdRef.current !== loadedDocument.id) {
+      setTotalPages(null);
+      setFileSizeBytes(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -92,6 +120,10 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     const annotationsRequestSequence = ++annotationsReloadSequenceRef.current;
     setIsLoading(true);
     setErrorMessage("");
+    if (metricsDocumentIdRef.current !== documentId) {
+      setTotalPages(null);
+      setFileSizeBytes(null);
+    }
 
     if (!documentId) {
       setIsLoading(false);
@@ -100,10 +132,19 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       };
     }
 
-    Promise.all([loadDocumentNotes(documentId), loadDocumentAnnotations(documentId)])
-      .then(([notes, loadedAnnotations]) => {
+    Promise.all([
+      loadDocumentNotes(documentId),
+      loadDocumentAnnotations(documentId),
+      loadDocumentDetails(documentId),
+      listAvailableTagsFromPreloadedDatabase(),
+    ])
+      .then(([notes, loadedAnnotations, loadedDocument]) => {
         if (isCancelled) {
           return;
+        }
+
+        if (!loadedDocument) {
+          throw new Error("Documento nao encontrado.");
         }
 
         if (notesRequestSequence === notesReloadSequenceRef.current) {
@@ -112,6 +153,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
         if (annotationsRequestSequence === annotationsReloadSequenceRef.current) {
           setAnnotations(loadedAnnotations);
         }
+        applyLoadedDocument(loadedDocument);
       })
       .catch((error) => {
         console.warn("Nao foi possivel carregar as notas e anotacoes.", error);
@@ -128,14 +170,18 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     return () => {
       isCancelled = true;
     };
-  }, [applyLoadedNotes, documentId, loadDocumentAnnotations, loadDocumentNotes]);
+  }, [applyLoadedDocument, applyLoadedNotes, documentId, loadDocumentAnnotations, loadDocumentDetails, loadDocumentNotes]);
 
   useEffect(() => {
     let isDisposed = false;
     const unlistenCallbacks: Array<() => void> = [];
     const currentWindowLabel = getCurrentWebviewWindow().label;
 
-    function registerListener<T>(eventName: string, handler: (payload: T) => void) {
+    function registerListener<T>(
+      eventName: string,
+      handler: (payload: T) => void,
+      onRegistered?: () => void,
+    ) {
       void listen<T>(eventName, (event) => handler(event.payload))
         .then((unlisten) => {
           if (isDisposed) {
@@ -144,6 +190,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
           }
 
           unlistenCallbacks.push(unlisten);
+          onRegistered?.();
         })
         .catch((error) => {
           console.warn(`Nao foi possivel escutar o evento ${eventName}.`, error);
@@ -196,11 +243,48 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
         });
     });
 
+    registerListener<unknown>(READER_DETAILS_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderInvalidationPayload(payload) ||
+        payload.documentId !== documentId ||
+        payload.origin === currentWindowLabel
+      ) {
+        return;
+      }
+
+      void loadDocumentDetails(documentId)
+        .then((loadedDocument) => {
+          if (!isDisposed && loadedDocument) {
+            setDocumentDetails(loadedDocument);
+          }
+        })
+        .catch((error) => {
+          console.warn("Nao foi possivel recarregar os detalhes da popout.", error);
+        });
+    });
+
+    registerListener<unknown>(READER_PAGE_STATE_CHANGED_EVENT, (payload) => {
+      if (!isReaderPageStatePayload(payload) || payload.documentId !== documentId) {
+        return;
+      }
+
+      setCurrentPage(payload.page);
+      setProgress(payload.progress);
+      metricsDocumentIdRef.current = payload.documentId;
+      setTotalPages(payload.totalPages);
+      setFileSizeBytes(payload.fileSizeBytes);
+    }, () => {
+      void emitTo<ReaderDocumentPayload>("main", READER_PAGE_STATE_REQUESTED_EVENT, { documentId })
+        .catch((error) => {
+          console.warn("Nao foi possivel solicitar o estado atual do Reader.", error);
+        });
+    });
+
     return () => {
       isDisposed = true;
       unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
     };
-  }, [applyLoadedNotes, documentId, loadDocumentAnnotations, loadDocumentNotes]);
+  }, [applyLoadedNotes, documentId, loadDocumentAnnotations, loadDocumentDetails, loadDocumentNotes]);
 
   const persistNotes = useCallback(
     (targetDocumentId: string, notes: string) => {
@@ -249,23 +333,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     };
   }, [persistNotes]);
 
-  function handleNotesChange(notes: string) {
-    setNotesText(notes);
-    latestNotesRef.current = notes;
-
-    if (notesSaveTimerRef.current !== null) {
-      window.clearTimeout(notesSaveTimerRef.current);
-    }
-
-    notesSaveTimerRef.current = window.setTimeout(() => {
-      notesSaveTimerRef.current = null;
-      void persistNotes(documentIdRef.current, latestNotesRef.current).catch((error) => {
-        console.warn("Nao foi possivel salvar as notas.", error);
-        setErrorMessage("Nao foi possivel salvar as notas.");
-      });
-    }, 500);
-  }
-
   async function handleUpdateAnnotationNote(annotationId: string, note: string) {
     await updateAnnotationNote(annotationId, note, "preloaded");
     const updatedAt = new Date().toISOString();
@@ -289,6 +356,28 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     });
   }
 
+  // Abrir caderno acontece na janela principal (paineis flutuantes vivem la).
+  function requestOpenNotebook(notebookId: number) {
+    const payload: ReaderOpenNotebookPayload = { documentId, notebookId };
+    void emitTo("main", READER_OPEN_NOTEBOOK_EVENT, payload).catch((error) => {
+      console.warn("Nao foi possivel solicitar a abertura do Caderno.", error);
+    });
+  }
+
+  // Eventos da propria janela sao ignorados pelo anti-eco, entao a popout
+  // recarrega os detalhes dela mesma apos editar tags.
+  function handleTagsChanged() {
+    void loadDocumentDetails(documentId)
+      .then((loadedDocument) => {
+        if (loadedDocument) {
+          setDocumentDetails(loadedDocument);
+        }
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel recarregar os detalhes apos editar as tags.", error);
+      });
+  }
+
   const notifyPopoutClosed = useCallback(async (closedDocumentId: string) => {
     await emit<ReaderDocumentPayload>(READER_POPOUT_CLOSED_EVENT, { documentId: closedDocumentId });
   }, []);
@@ -306,13 +395,22 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
           setIsClosing(true);
           setIsLoading(true);
           setErrorMessage("");
+          metricsDocumentIdRef.current = null;
+          setTotalPages(null);
+          setFileSizeBytes(null);
 
           try {
             await flushNotes();
-            const [loadedNotes, loadedAnnotations] = await Promise.all([
+            const [loadedNotes, loadedAnnotations, loadedDocument] = await Promise.all([
               loadDocumentNotes(nextDocumentId),
               loadDocumentAnnotations(nextDocumentId),
+              loadDocumentDetails(nextDocumentId),
+              listAvailableTagsFromPreloadedDatabase(),
             ]);
+
+            if (!loadedDocument) {
+              throw new Error("Documento nao encontrado.");
+            }
 
             await notifyPopoutClosed(previousDocumentId);
 
@@ -325,6 +423,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             setDocumentId(nextDocumentId);
             applyLoadedNotes(loadedNotes);
             setAnnotations(loadedAnnotations);
+            applyLoadedDocument(loadedDocument);
           } catch (error) {
             console.warn("Nao foi possivel trocar o documento da popout.", error);
             setErrorMessage("Nao foi possivel carregar o novo documento.");
@@ -343,7 +442,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       documentSwitchPromiseRef.current = switchPromise;
       return switchPromise;
     },
-    [applyLoadedNotes, flushNotes, loadDocumentAnnotations, loadDocumentNotes, notifyPopoutClosed],
+    [applyLoadedDocument, applyLoadedNotes, flushNotes, loadDocumentAnnotations, loadDocumentDetails, loadDocumentNotes, notifyPopoutClosed],
   );
 
   useEffect(() => {
@@ -462,13 +561,13 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-[var(--card)] text-[var(--foreground)]">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-subtle pr-3">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-subtle pr-3">
         <nav className="flex h-full" aria-label="Conteudo do painel do Reader">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`px-4 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+              className={`px-5 text-[11px] font-bold uppercase tracking-[0.08em] outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
               onClick={() => setActiveTab(tab.id)}
@@ -478,16 +577,18 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
           ))}
         </nav>
 
-        <button
-          type="button"
-          aria-label="Fechar janela"
-          title="Fechar janela"
-          className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-          disabled={isClosing}
-          onClick={() => void closeWindow().catch(() => undefined)}
-        >
-          <CloseIcon />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Fechar janela"
+            title="Fechar janela"
+            className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            disabled={isClosing}
+            onClick={() => void closeWindow().catch(() => undefined)}
+          >
+            <CloseIcon />
+          </button>
+        </div>
       </header>
 
       {errorMessage ? (
@@ -499,22 +600,41 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       <section className="min-h-0 flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm font-semibold text-[var(--muted-foreground)]">Carregando...</div>
-        ) : activeTab === "notes" ? (
-          <NotesTab
-            notesText={notesText}
-            onNotesChange={handleNotesChange}
-            onBlur={() => void flushNotes().catch(() => undefined)}
-            readOnly={isClosing}
-          />
+        ) : !documentDetails ? (
+          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--muted-foreground)]">
+            Informações do documento indisponíveis.
+          </div>
         ) : activeTab === "annotations" ? (
           <AnnotationsTab
+            document={documentDetails}
             annotations={annotations}
+            currentPage={currentPage}
+            progress={progress}
+            databaseSource="preloaded"
             onJumpToPage={handleJumpToPage}
             onDelete={handleDeleteAnnotation}
             onUpdateNote={handleUpdateAnnotationNote}
+            onOpenNotebook={requestOpenNotebook}
+            onTagsChanged={handleTagsChanged}
           />
         ) : (
-          <AiTab />
+          <DetailsTab
+            document={documentDetails}
+            progress={progress}
+            totalPages={totalPages}
+            fileSizeBytes={fileSizeBytes}
+            databaseSource="preloaded"
+            onOpenNotebook={requestOpenNotebook}
+            onToggleFavorite={async () => {
+              const nextFavorite = !documentDetails.favorite;
+              await setDocumentFavorite(documentId, nextFavorite, "preloaded");
+              setDocumentDetails((current) =>
+                current?.id === documentId ? { ...current, favorite: nextFavorite } : current,
+              );
+            }}
+            onOpenExternally={() => openDocumentExternally(documentId)}
+            onTagsChanged={handleTagsChanged}
+          />
         )}
       </section>
     </main>

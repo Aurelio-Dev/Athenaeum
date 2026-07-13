@@ -1,26 +1,23 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
-import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { openDocumentExternally } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
-import type { LibraryDocument, SubjectTag } from "../../types/library";
-import { AiTab } from "./panels/AiTab";
+import type { LibraryDocument } from "../../types/library";
+import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
-import { NotesTab } from "./panels/NotesTab";
+import { DetailsTab } from "./panels/DetailsTab";
 
-type ReaderTab = "ai" | "notes" | "annotations";
+type ReaderTab = "details" | "annotations";
 
 type ReaderSidePanelProps = {
   document: LibraryDocument;
-  notesText: string;
-  onNotesChange: (notes: string) => void;
-  onNotesBlur: () => void;
-  notesReadOnly: boolean;
-  availableTags: SubjectTag[];
-  onAddTag: (tag: SubjectTag) => void;
-  onRemoveTag: (tag: SubjectTag) => void;
   annotations: Annotation[];
+  currentPage: number;
   progress: number;
-  timeSpentSeconds: number;
+  totalPages: number | null;
+  fileSizeBytes: number | null;
   isFloating: boolean;
   initialTab?: ReaderTab;
   onFloat: () => void;
@@ -29,12 +26,12 @@ type ReaderSidePanelProps = {
   onJumpToPage: (page: number) => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onUpdateAnnotationNote: (annotationId: string, note: string) => Promise<void>;
+  onToggleFavorite: () => Promise<void>;
   onClose: () => void;
 };
 
 const tabs: Array<{ id: ReaderTab; label: string }> = [
-  { id: "ai", label: "Ask AI" },
-  { id: "notes", label: "Notas" },
+  { id: "details", label: "Detalhes" },
   { id: "annotations", label: "Anotações" },
 ];
 const floatingPanelWidth = 440;
@@ -72,11 +69,11 @@ function MinimizeIcon() {
 
 export function ReaderSidePanel({
   document,
-  notesText,
-  onNotesChange,
-  onNotesBlur,
-  notesReadOnly,
   annotations,
+  currentPage,
+  progress,
+  totalPages,
+  fileSizeBytes,
   isFloating,
   initialTab,
   onFloat,
@@ -85,10 +82,12 @@ export function ReaderSidePanel({
   onJumpToPage,
   onDeleteAnnotation,
   onUpdateAnnotationNote,
+  onToggleFavorite,
   onClose,
 }: ReaderSidePanelProps) {
-  const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "ai");
-  const { panels, minimizePanel, restorePanel } = useFloatingPanels();
+  const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "details");
+  const { panels, openPanel, minimizePanel, restorePanel } = useFloatingPanels();
+  const queryClient = useQueryClient();
   const annotationsPanelId = floatingPanelId("annotations", document.id);
 
   async function openSystemWindow() {
@@ -122,17 +121,30 @@ export function ReaderSidePanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFloating, panels, annotationsPanelId, onClose]);
 
+  // Handlers compartilhados pelas duas abas.
+  function openNotebookPanel(notebookId: number) {
+    const width = Math.min(notebookPanelWidth, window.innerWidth);
+    const height = Math.min(notebookPanelHeight, window.innerHeight);
+    openPanel("notebook", String(notebookId), getCenteredPanelPosition(width, height));
+  }
+
+  // Tags escritas direto no banco pelas abas: renova o snapshot da biblioteca
+  // para o prop document refletir a mudanca.
+  function handleTagsChanged() {
+    void queryClient.invalidateQueries({ queryKey: ["library"] });
+  }
+
   // Header de abas + conteudo sao os mesmos nos dois modos (dock/flutuante);
   // so a casca em volta muda.
   const panelContent = (
     <>
-      <header className="flex h-[56px] shrink-0 items-center justify-between border-b border-border-subtle pr-4">
-        <div className="flex">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-subtle pr-3">
+        <div className="flex h-full">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`px-5 py-[18px] text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+              className={`h-full px-5 text-[11px] font-bold uppercase tracking-[0.08em] outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 activeTab === tab.id ? "border-b-2 border-primary text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
               onClick={() => setActiveTab(tab.id)}
@@ -156,21 +168,29 @@ export function ReaderSidePanel({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {activeTab === "notes" ? (
-          <div className="flex h-full min-h-0 flex-col">
-            {notesReadOnly ? (
-              <p className="shrink-0 border-b border-border-subtle bg-[var(--muted)] px-4 py-2 text-xs font-semibold text-[var(--muted-foreground)]">
-                Sendo editado na janela separada
-              </p>
-            ) : null}
-            <div className="min-h-0 flex-1">
-              <NotesTab notesText={notesText} onNotesChange={onNotesChange} onBlur={onNotesBlur} readOnly={notesReadOnly} />
-            </div>
-          </div>
-        ) : activeTab === "annotations" ? (
-          <AnnotationsTab annotations={annotations} onJumpToPage={onJumpToPage} onDelete={onDeleteAnnotation} onUpdateNote={onUpdateAnnotationNote} />
+        {activeTab === "annotations" ? (
+          <AnnotationsTab
+            document={document}
+            annotations={annotations}
+            currentPage={currentPage}
+            progress={progress}
+            onJumpToPage={onJumpToPage}
+            onDelete={onDeleteAnnotation}
+            onUpdateNote={onUpdateAnnotationNote}
+            onOpenNotebook={openNotebookPanel}
+            onTagsChanged={handleTagsChanged}
+          />
         ) : (
-          <AiTab />
+          <DetailsTab
+            document={document}
+            progress={progress}
+            totalPages={totalPages}
+            fileSizeBytes={fileSizeBytes}
+            onOpenNotebook={openNotebookPanel}
+            onToggleFavorite={onToggleFavorite}
+            onOpenExternally={() => openDocumentExternally(document.id)}
+            onTagsChanged={handleTagsChanged}
+          />
         )}
       </div>
     </>
@@ -193,7 +213,7 @@ export function ReaderSidePanel({
         minWidth={floatingPanelMinWidth}
         minHeight={panel.isMinimized ? floatingPanelMinimizedHeight : floatingPanelMinHeight}
         resizable={!panel.isMinimized}
-        title={<h2 className="min-w-0 truncate text-sm font-bold text-[var(--floating-header-text)]">Anotações — {document.title}</h2>}
+        title={<h2 className="min-w-0 truncate text-sm font-bold text-[var(--floating-header-text)]">Reader — {document.title}</h2>}
         actions={
           <>
             <button
@@ -259,7 +279,7 @@ export function ReaderSidePanel({
   }
 
   return (
-    <aside className="relative z-20 flex w-[340px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-[var(--card)]">
+    <aside className="relative z-20 flex w-[320px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-border-subtle bg-[var(--card)]">
       {panelContent}
     </aside>
   );

@@ -25,6 +25,13 @@ const defaultCollectionName = "Sem título";
 export const READER_NOTES_CHANGED_EVENT = "reader:notes-changed";
 export const READER_ANNOTATIONS_CHANGED_EVENT = "reader:annotations-changed";
 export const READER_JUMP_TO_PAGE_EVENT = "reader:jump-to-page";
+export const READER_PAGE_STATE_CHANGED_EVENT = "reader:page-state-changed";
+export const READER_PAGE_STATE_REQUESTED_EVENT = "reader:page-state-requested";
+export const READER_OPEN_NOTEBOOK_EVENT = "reader:open-notebook";
+// Pedido de abertura de um documento no leitor da janela principal (usado
+// pelos PDFs relacionados; funciona da popout e da propria main via emitTo).
+export const READER_OPEN_DOCUMENT_EVENT = "reader:open-document";
+export const READER_DETAILS_CHANGED_EVENT = "reader:details-changed";
 export const READER_POPOUT_CLOSED_EVENT = "reader:popout-closed";
 export const READER_SET_DOCUMENT_EVENT = "reader:set-document";
 export const READER_REQUEST_POPOUT_CLOSE_EVENT = "reader:request-popout-close";
@@ -40,6 +47,43 @@ export type ReaderJumpToPagePayload = {
   documentId: string;
   page: number;
 };
+
+export type ReaderPageStatePayload = ReaderJumpToPagePayload & {
+  progress: number;
+  totalPages: number | null;
+  fileSizeBytes: number | null;
+};
+
+export type ReaderOpenNotebookPayload = {
+  documentId: string;
+  notebookId: number;
+};
+
+export type OpenDocumentExternallyError = {
+  code:
+    | "invalid_document_id"
+    | "database_unavailable"
+    | "database_error"
+    | "document_not_found"
+    | "invalid_managed_path"
+    | "file_not_found"
+    | "permission_denied"
+    | "no_associated_application"
+    | "open_failed";
+  message: string;
+};
+
+const openDocumentExternallyErrorCodes: ReadonlySet<OpenDocumentExternallyError["code"]> = new Set([
+  "invalid_document_id",
+  "database_unavailable",
+  "database_error",
+  "document_not_found",
+  "invalid_managed_path",
+  "file_not_found",
+  "permission_denied",
+  "no_associated_application",
+  "open_failed",
+]);
 
 export type ReaderDocumentPayload = {
   documentId: string;
@@ -72,6 +116,55 @@ export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJu
   );
 }
 
+export function isReaderPageStatePayload(payload: unknown): payload is ReaderPageStatePayload {
+  if (!isReaderJumpToPagePayload(payload)) {
+    return false;
+  }
+
+  const candidate = payload as unknown as Record<string, unknown>;
+  const { progress, totalPages, fileSizeBytes } = candidate;
+  const hasValidTotalPages =
+    totalPages === null ||
+    (typeof totalPages === "number" && Number.isInteger(totalPages) && totalPages > 0);
+  const hasValidFileSize =
+    fileSizeBytes === null ||
+    (typeof fileSizeBytes === "number" && Number.isInteger(fileSizeBytes) && fileSizeBytes >= 0);
+
+  return (
+    typeof progress === "number" &&
+    Number.isFinite(progress) &&
+    progress >= 0 &&
+    progress <= 100 &&
+    hasValidTotalPages &&
+    hasValidFileSize
+  );
+}
+
+export function isReaderOpenNotebookPayload(payload: unknown): payload is ReaderOpenNotebookPayload {
+  if (!isReaderDocumentPayload(payload)) {
+    return false;
+  }
+
+  const notebookId = (payload as unknown as Record<string, unknown>).notebookId;
+  return typeof notebookId === "number" && Number.isInteger(notebookId) && notebookId > 0;
+}
+
+export function isOpenDocumentExternallyError(
+  error: unknown,
+): error is OpenDocumentExternallyError {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as Record<string, unknown>;
+
+  return (
+    typeof candidate.code === "string" &&
+    openDocumentExternallyErrorCodes.has(candidate.code as OpenDocumentExternallyError["code"]) &&
+    typeof candidate.message === "string"
+  );
+}
+
 export function isReaderDocumentPayload(payload: unknown): payload is ReaderDocumentPayload {
   if (typeof payload !== "object" || payload === null) {
     return false;
@@ -96,6 +189,7 @@ export type DatabaseHandleSource = "loaded" | "preloaded";
 type DocumentRow = {
   id: string;
   title: string;
+  description: string;
   source: string;
   year: number;
   status: LibraryDocument["status"];
@@ -103,6 +197,7 @@ type DocumentRow = {
   favorite: number;
   collection: string;
   updatedAt: string;
+  lastOpenedAt: string | null;
   deletedAt: string | null;
   fileName: string | null;
   filePath: string | null;
@@ -173,7 +268,7 @@ export type LibrarySnapshot = {
   trashCount: number;
 };
 
-export type DocumentMetadataUpdates = Pick<LibraryDocument, "title" | "authors" | "source" | "year" | "collection" | "tags">;
+export type DocumentMetadataUpdates = Pick<LibraryDocument, "title" | "description" | "authors" | "source" | "year" | "collection" | "tags">;
 
 export type ListDocumentsOptions = {
   searchTerm: string;
@@ -242,6 +337,7 @@ function mapDocumentRow(row: DocumentRow): LibraryDocument {
   return {
     id: row.id,
     title: row.title,
+    description: row.description,
     authors: parseSeparatedList(row.authors),
     source: row.source,
     year: row.year,
@@ -251,6 +347,7 @@ function mapDocumentRow(row: DocumentRow): LibraryDocument {
     favorite: row.favorite === 1,
     collection: row.collection,
     updatedAt: row.updatedAt,
+    lastOpenedAt: row.lastOpenedAt ?? undefined,
     deletedAt: row.deletedAt ?? undefined,
     fileName: row.fileName ?? undefined,
     filePath: row.filePath ?? undefined,
@@ -281,7 +378,10 @@ async function getDatabase(source: DatabaseHandleSource = "loaded") {
 }
 
 async function emitReaderInvalidation(
-  eventName: typeof READER_NOTES_CHANGED_EVENT | typeof READER_ANNOTATIONS_CHANGED_EVENT,
+  eventName:
+    | typeof READER_NOTES_CHANGED_EVENT
+    | typeof READER_ANNOTATIONS_CHANGED_EVENT
+    | typeof READER_DETAILS_CHANGED_EVENT,
   documentId: string,
 ) {
   try {
@@ -403,6 +503,7 @@ async function insertDocument(database: Database, document: LibraryDocument) {
     `INSERT INTO documents (
       id,
       title,
+      description,
       source,
       year,
       status,
@@ -414,10 +515,11 @@ async function insertDocument(database: Database, document: LibraryDocument) {
       notes,
       reading_location_json,
       updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       document.id,
       document.title,
+      document.description,
       document.source,
       document.year,
       document.status,
@@ -449,7 +551,7 @@ async function insertDocument(database: Database, document: LibraryDocument) {
   }
 }
 
-function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOptions) {
+function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOptions, documentId?: string) {
   const joins = [
     "JOIN collections ON collections.id = documents.collection_id",
     `LEFT JOIN (
@@ -476,6 +578,11 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
     whereClauses.push("documents.deleted_at IS NOT NULL");
   } else {
     whereClauses.push("documents.deleted_at IS NULL");
+  }
+
+  if (documentId) {
+    bindValues.push(documentId);
+    whereClauses.push(`documents.id = $${bindValues.length}`);
   }
 
   if (route.type === "favorites") {
@@ -517,6 +624,7 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
       SELECT
         documents.id,
         documents.title,
+        documents.description,
         documents.source,
         documents.year,
         documents.status,
@@ -524,6 +632,7 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
         documents.favorite,
         collections.name AS collection,
         documents.updated_at AS updatedAt,
+        documents.last_opened_at AS lastOpenedAt,
         documents.deleted_at AS deletedAt,
         documents.file_name AS fileName,
         documents.file_path AS filePath,
@@ -574,10 +683,18 @@ export async function listCollections(): Promise<LibraryCollection[]> {
   return database.select<CollectionRow[]>("SELECT id, name, color, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC");
 }
 
-export async function listAvailableTags(): Promise<SubjectTag[]> {
-  const database = await getDatabase();
+async function listAvailableTagsFromDatabase(source: DatabaseHandleSource): Promise<SubjectTag[]> {
+  const database = await getDatabase(source);
   const rows = await database.select<TagRow[]>("SELECT name, color_token AS colorToken FROM tags ORDER BY name COLLATE NOCASE ASC");
   return registerTagRows(rows);
+}
+
+export async function listAvailableTags(): Promise<SubjectTag[]> {
+  return listAvailableTagsFromDatabase("loaded");
+}
+
+export async function listAvailableTagsFromPreloadedDatabase(): Promise<SubjectTag[]> {
+  return listAvailableTagsFromDatabase("preloaded");
 }
 
 export async function updateTagTone(tag: SubjectTag, tone: Tone) {
@@ -601,6 +718,19 @@ export async function listDocuments(database: Database, options: ListDocumentsOp
   const query = buildDocumentListQuery(options);
   const rows = await database.select<DocumentRow[]>(query.sql, query.bindValues);
   return rows.map(mapDocumentRow);
+}
+
+export async function getLibraryDocument(
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+): Promise<LibraryDocument | null> {
+  const database = await getDatabase(source);
+  const query = buildDocumentListQuery(
+    { searchTerm: "", sortMode: "recentes", route: { type: "all" } },
+    documentId,
+  );
+  const [row] = await database.select<DocumentRow[]>(query.sql, query.bindValues);
+  return row ? mapDocumentRow(row) : null;
 }
 
 function normalizeCollectionName(collectionName: string) {
@@ -1054,6 +1184,25 @@ type LinkedDocumentRow = {
   authors: string | null;
 };
 
+export type LatestLinkedNotebook = {
+  id: number;
+  title: string;
+  collectionId: string;
+  linkedAt: string;
+};
+
+export type RelatedDocument = {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number;
+  updatedAt: string;
+};
+
+type RelatedDocumentRow = Omit<RelatedDocument, "authors"> & {
+  authors: string | null;
+};
+
 export async function listNotebookLinkedDocuments(notebookId: number): Promise<LinkedDocument[]> {
   const database = await getDatabase();
   // Ignora documentos na lixeira (deleted_at): o vinculo permanece no banco
@@ -1084,8 +1233,67 @@ export async function listNotebookLinkedDocuments(notebookId: number): Promise<L
   }));
 }
 
-export async function linkDocumentToNotebook(notebookId: number, documentId: string) {
-  const database = await getDatabase();
+export async function getLatestLinkedNotebook(
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+): Promise<LatestLinkedNotebook | null> {
+  const database = await getDatabase(source);
+  const [notebook] = await database.select<LatestLinkedNotebook[]>(
+    `SELECT
+  notebooks.id, notebooks.title, notebooks.collection_id AS collectionId,
+  notebook_linked_documents.linked_at AS linkedAt
+FROM notebook_linked_documents
+JOIN notebooks ON notebooks.id = notebook_linked_documents.notebook_id
+WHERE notebook_linked_documents.document_id = $1
+  AND notebooks.deleted_at IS NULL
+ORDER BY notebook_linked_documents.linked_at DESC, notebooks.id DESC
+LIMIT 1;`,
+    [documentId],
+  );
+
+  return notebook ?? null;
+}
+
+export async function listRelatedDocuments(
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+): Promise<RelatedDocument[]> {
+  const database = await getDatabase(source);
+  const rows = await database.select<RelatedDocumentRow[]>(
+    `SELECT
+       documents.id,
+       documents.title,
+       documents.year,
+       documents.updated_at AS updatedAt,
+       (SELECT group_concat(author, char(31)) FROM document_authors WHERE document_id = documents.id ORDER BY author_order) AS authors
+     FROM documents
+     WHERE documents.collection_id = (
+       SELECT collection_id
+       FROM documents
+       WHERE id = $1
+     )
+       AND documents.id != $1
+       AND documents.deleted_at IS NULL
+     ORDER BY documents.updated_at DESC
+     LIMIT 5`,
+    [documentId],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    authors: parseSeparatedList(row.authors),
+    year: row.year,
+    updatedAt: row.updatedAt,
+  }));
+}
+
+export async function linkDocumentToNotebook(
+  notebookId: number,
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   // INSERT OR IGNORE: o PK composto (notebook_id, document_id) ja garante que
   // vincular o mesmo PDF duas vezes e no-op — a UI tambem previne, mas o banco
   // e a rede de seguranca.
@@ -1093,14 +1301,61 @@ export async function linkDocumentToNotebook(notebookId: number, documentId: str
     "INSERT OR IGNORE INTO notebook_linked_documents (notebook_id, document_id) VALUES ($1, $2)",
     [notebookId, documentId],
   );
+  await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
 }
 
-export async function unlinkDocumentFromNotebook(notebookId: number, documentId: string) {
-  const database = await getDatabase();
+// Opcoes de caderno para o "Enviar para Caderno" do leitor — todas as colecoes,
+// mais recentes primeiro.
+export type NotebookOption = {
+  id: number;
+  title: string;
+};
+
+export async function listNotebookOptions(source: DatabaseHandleSource = "loaded"): Promise<NotebookOption[]> {
+  const database = await getDatabase(source);
+  return database.select<NotebookOption[]>(
+    "SELECT id, title FROM notebooks WHERE deleted_at IS NULL ORDER BY updated_at DESC",
+  );
+}
+
+// Cria uma pagina de caderno ja com titulo e conteudo em um unico INSERT
+// atomico (envio de pagina do leitor). Nao passa pelo editor nem pelo
+// autosave, entao nao ha draft pendente a coordenar.
+export async function createNotebookPageWithContent(
+  notebookId: number,
+  title: string,
+  content: string,
+  source: DatabaseHandleSource = "loaded",
+): Promise<number> {
+  const database = await getDatabase(source);
+  const insertResult = await database.execute(
+    `INSERT INTO notebook_pages (notebook_id, title, content, position)
+     SELECT $1, $2, $3, COALESCE(MAX(position), 0) + 1 FROM notebook_pages WHERE notebook_id = $1`,
+    [notebookId, title, content],
+  );
+  const pageId = insertResult.lastInsertId;
+
+  if (typeof pageId !== "number") {
+    throw new Error("Não foi possível criar a página no Caderno.");
+  }
+
+  // O trigger de updated_at do caderno so cobre UPDATE de pagina; INSERT toca
+  // manualmente, como deleteNotebookPage ja faz.
+  await database.execute("UPDATE notebooks SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1", [notebookId]);
+  return pageId;
+}
+
+export async function unlinkDocumentFromNotebook(
+  notebookId: number,
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   await database.execute(
     "DELETE FROM notebook_linked_documents WHERE notebook_id = $1 AND document_id = $2",
     [notebookId, documentId],
   );
+  await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
 }
 
 type CanvasRow = {
@@ -1501,8 +1756,9 @@ export async function updateDocumentMetadata(documentId: string, updates: Docume
     await upsertTag(database, tag);
   }
 
-  await database.execute("UPDATE documents SET title = $1, source = $2, year = $3, collection_id = $4 WHERE id = $5", [
+  await database.execute("UPDATE documents SET title = $1, description = $2, source = $3, year = $4, collection_id = $5 WHERE id = $6", [
     updates.title,
+    updates.description,
     updates.source,
     updates.year,
     collectionId,
@@ -1526,11 +1782,22 @@ export async function updateDocumentMetadata(documentId: string, updates: Docume
       index,
     ]);
   }
+
+  await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
 }
 
-export async function setDocumentFavorite(documentId: string, favorite: boolean) {
-  const database = await getDatabase();
+export async function setDocumentFavorite(
+  documentId: string,
+  favorite: boolean,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   await database.execute("UPDATE documents SET favorite = $1 WHERE id = $2", [favorite ? 1 : 0, documentId]);
+  await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
+}
+
+export async function openDocumentExternally(documentId: string): Promise<void> {
+  await invoke("open_document_externally", { documentId });
 }
 
 export async function getDocumentNotes(documentId: string, source: DatabaseHandleSource = "loaded"): Promise<string> {
@@ -1554,14 +1821,14 @@ export async function incrementDocumentReadingTime(documentId: string, seconds: 
   await database.execute("UPDATE documents SET time_spent_seconds = time_spent_seconds + $1 WHERE id = $2", [Math.floor(seconds), documentId]);
 }
 
-export async function addDocumentTag(documentId: string, tag: SubjectTag) {
+export async function addDocumentTag(documentId: string, tag: SubjectTag, source: DatabaseHandleSource = "loaded") {
   const normalizedTag = tag.trim().replace(/\s+/g, " ");
 
   if (normalizedTag.length === 0) {
     return;
   }
 
-  const database = await getDatabase();
+  const database = await getDatabase(source);
   await upsertTag(database, normalizedTag);
 
   const tagId = slugify(normalizedTag);
@@ -1575,22 +1842,29 @@ export async function addDocumentTag(documentId: string, tag: SubjectTag) {
     tagId,
     position?.nextOrder ?? 0,
   ]);
+  await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
 }
 
-export async function removeDocumentTag(documentId: string, tag: SubjectTag) {
-  const database = await getDatabase();
+export async function removeDocumentTag(documentId: string, tag: SubjectTag, source: DatabaseHandleSource = "loaded") {
+  const database = await getDatabase(source);
   await database.execute(
     `DELETE FROM document_tags
      WHERE document_id = $1
        AND tag_id = (SELECT id FROM tags WHERE name = $2 COLLATE NOCASE LIMIT 1)`,
     [documentId, tag],
   );
+  await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
 }
 
 export async function setDocumentReadingStarted(documentId: string) {
   const database = await getDatabase();
   await database.execute(
-    "UPDATE documents SET status = CASE WHEN status = 'not-started' THEN 'in-progress' ELSE status END, progress = CASE WHEN status = 'not-started' AND progress < 1 THEN 1 ELSE progress END WHERE id = $1 AND deleted_at IS NULL",
+    `UPDATE documents
+     SET
+       last_opened_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+       status = CASE WHEN status = 'not-started' THEN 'in-progress' ELSE status END,
+       progress = CASE WHEN status = 'not-started' AND progress < 1 THEN 1 ELSE progress END
+     WHERE id = $1 AND deleted_at IS NULL`,
     [documentId],
   );
 }
@@ -1816,4 +2090,18 @@ export async function setSetting(key: string, value: string): Promise<void> {
     "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
     [key, value],
   );
+}
+
+// Preferencia de abertura do leitor. Sem valor persistido (primeira abertura)
+// o leitor abre maximizado; depois disso vale o ultimo estado escolhido pelo
+// usuario no botao maximizar/restaurar.
+const READER_MAXIMIZED_SETTING_KEY = "reader.maximized";
+
+export async function getReaderOpensMaximized(): Promise<boolean> {
+  const value = await getSetting(READER_MAXIMIZED_SETTING_KEY);
+  return value !== "false";
+}
+
+export async function setReaderOpensMaximized(maximized: boolean): Promise<void> {
+  await setSetting(READER_MAXIMIZED_SETTING_KEY, maximized ? "true" : "false");
 }

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, SVGProps } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { remove } from "@tauri-apps/plugin-fs";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
@@ -18,7 +19,9 @@ import {
   deleteCollection as deletePersistedCollection,
   emptyTrash,
   getDocumentFilePaths,
+  getReaderOpensMaximized,
   getTrashFilePaths,
+  isReaderDocumentPayload,
   listAvailableTags,
   listCanvases,
   listCollections,
@@ -30,6 +33,7 @@ import {
   moveNotebookToCollection as movePersistedNotebookToCollection,
   moveNotebookToTrash as movePersistedNotebookToTrash,
   permanentlyDeleteDocument,
+  READER_OPEN_DOCUMENT_EVENT,
   restoreDocument,
   renameCanvas as renamePersistedCanvas,
   renameCollection as renamePersistedCollection,
@@ -216,6 +220,9 @@ export function LibraryView() {
   const [isEditCollectionModalOpen, setIsEditCollectionModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
+  // Preferencia lida do banco a cada abertura do leitor (fonte de verdade em
+  // app_settings) — sem valor salvo, a primeira abertura entra maximizada.
+  const [readerInitialMaximized, setReaderInitialMaximized] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
   const [initialMaximizedNotebookIds, setInitialMaximizedNotebookIds] = useState<Set<number>>(() => new Set());
@@ -438,10 +445,56 @@ export function LibraryView() {
       .filter((floatingPanel) => floatingPanel.type === "reader" && floatingPanel.entityId !== documentToOpen.id)
       .forEach((floatingPanel) => closeFloatingPanel(floatingPanel.id));
 
+    // Preferencia persistida decide se o leitor entra maximizado (edge-to-edge
+    // em {0,0}) ou no tamanho/posicao padrao. Fallback maximizado se a leitura
+    // da preferencia falhar (mesmo default da primeira abertura).
+    const opensMaximized = await getReaderOpensMaximized().catch(() => true);
+    setReaderInitialMaximized(opensMaximized);
+
     setReaderDocumentId(documentToOpen.id);
-    openFloatingPanel("reader", documentToOpen.id, getReaderInitialPosition());
+    openFloatingPanel("reader", documentToOpen.id, opensMaximized ? { x: 0, y: 0 } : getReaderInitialPosition());
     await invalidateLibraryQueries();
   }
+
+  // Pedido de abertura vindo dos "PDFs relacionados" (main ou popout). O
+  // listener vive aqui — e nao no ReaderModal — para funcionar mesmo com o
+  // leitor fechado. Refs porque openForReading/allDocuments mudam por render.
+  const openForReadingRef = useRef(openForReading);
+  openForReadingRef.current = openForReading;
+  const allDocumentsRef = useRef(allDocuments);
+  allDocumentsRef.current = allDocuments;
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen<unknown>(READER_OPEN_DOCUMENT_EVENT, (event) => {
+      if (!isReaderDocumentPayload(event.payload)) {
+        return;
+      }
+
+      const payloadDocumentId = event.payload.documentId;
+      const documentToOpen = allDocumentsRef.current.find((document) => document.id === payloadDocumentId);
+      if (documentToOpen && !documentToOpen.deletedAt) {
+        void openForReadingRef.current(documentToOpen);
+      }
+    })
+      .then((removeListener) => {
+        if (isDisposed) {
+          removeListener();
+          return;
+        }
+        unlisten = removeListener;
+      })
+      .catch((error) => {
+        console.warn("Não foi possível escutar os pedidos de abertura de documento.", error);
+      });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   async function saveDocumentNote(documentId: string, note: string) {
     updateDocumentNotesInCache(documentId, note);
@@ -467,6 +520,7 @@ export function LibraryView() {
       source: document.source,
       year: document.year,
       collection: document.collection,
+      description: document.description,
       tags,
     });
   }
@@ -510,6 +564,7 @@ export function LibraryView() {
       source: document.source,
       year: document.year,
       collection: collection.name,
+      description: document.description,
       tags: document.tags,
     });
   }
@@ -938,12 +993,12 @@ export function LibraryView() {
           <ReaderModal
             key={readerDocument.id}
             document={readerDocument}
-            availableTags={availableTags}
-            onAvailableTagsChange={updateAvailableTags}
-            onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}
+            initialMaximized={readerInitialMaximized}
             onClose={(readingLocation) => void closeReader(readingLocation)}
             onSaveNotes={saveDocumentNote}
             onNotesReloaded={updateDocumentNotesInCache}
+            onToggleFavorite={toggleFavorite}
+            onNavigate={setActiveRoute}
           />
         </Suspense>
       ) : null}

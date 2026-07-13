@@ -5,6 +5,7 @@ import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
 import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
 import { TrashIcon } from "../../components/ui/SharedIcons";
 import { SectionLabel } from "../../components/ui/SectionLabel";
+import { CompactDocumentCard } from "../../components/CompactDocumentCard";
 import { TagBadge } from "../../components/TagBadge";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
@@ -314,15 +315,6 @@ function SearchIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <line x1="21" x2="16.65" y1="21" y2="16.65" />
-    </svg>
-  );
-}
-
-function PdfIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
     </svg>
   );
 }
@@ -1858,30 +1850,23 @@ export function NotebookPanel({
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {linkedDocuments.map((document) => (
-                      <li
-                        key={document.id}
-                        className="group flex items-start gap-2 rounded-md border border-border-subtle bg-surface-card px-3 py-2"
-                      >
-                        <span className="mt-0.5 shrink-0 rounded-md bg-status-red px-1.5 py-1 text-text-inverse">
-                          <PdfIcon />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-text-primary" title={document.title}>
-                            {document.title}
-                          </p>
-                          <p className="truncate text-xs text-text-secondary">
-                            {document.authors.length > 0 ? document.authors.join(", ") : "Sem autor"} - {document.year}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Desvincular ${document.title}`}
-                          title="Desvincular"
-                          className="shrink-0 rounded-md p-1 text-text-subtle opacity-0 transition hover:bg-surface-muted hover:text-status-red-text group-hover:opacity-100"
-                          onClick={() => void handleUnlinkDocument(document.id)}
-                        >
-                          <CloseIcon />
-                        </button>
+                      <li key={document.id}>
+                        <CompactDocumentCard
+                          title={document.title}
+                          authors={document.authors}
+                          year={document.year}
+                          trailingAction={
+                            <button
+                              type="button"
+                              aria-label={`Desvincular ${document.title}`}
+                              title="Desvincular"
+                              className="rounded-md p-1 text-text-subtle opacity-0 transition hover:bg-surface-muted hover:text-status-red-text focus-visible:opacity-100 group-hover:opacity-100"
+                              onClick={() => void handleUnlinkDocument(document.id)}
+                            >
+                              <CloseIcon />
+                            </button>
+                          }
+                        />
                       </li>
                     ))}
                   </ul>

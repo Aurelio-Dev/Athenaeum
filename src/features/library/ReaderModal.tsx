@@ -7,55 +7,65 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
-import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import {
   createAnnotation,
   deleteAnnotation,
   getDocumentNotes,
   isReaderDocumentPayload,
+  isReaderOpenNotebookPayload,
   isReaderInvalidationPayload,
   isReaderJumpToPagePayload,
   isReaderPopoutCloseRequestPayload,
   listAnnotations,
   READER_ANNOTATIONS_CHANGED_EVENT,
+  READER_DETAILS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
   READER_NOTES_CHANGED_EVENT,
+  READER_OPEN_NOTEBOOK_EVENT,
+  READER_PAGE_STATE_CHANGED_EVENT,
+  READER_PAGE_STATE_REQUESTED_EVENT,
   READER_PANEL_WINDOW_LABEL,
   READER_POPOUT_CLOSED_EVENT,
   READER_POPOUT_FLUSHED_EVENT,
   READER_REQUEST_POPOUT_CLOSE_EVENT,
   setDocumentReadingLocation,
+  setReaderOpensMaximized,
   updateAnnotationNote,
 } from "../../lib/database";
-import type { NewAnnotation, ReaderPopoutCloseRequestPayload } from "../../lib/database";
+import type { NewAnnotation, ReaderPageStatePayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
-import type { LibraryDocument, ReadingLocation, SubjectTag } from "../../types/library";
+import type { LibraryDocument, LibraryRoute, ReadingLocation } from "../../types/library";
+import { useInViewport } from "../../hooks/useInViewport";
 import { captureSelection, type CapturedSelection, type PageElement } from "../reader/anchor";
 import { HighlightLayer } from "../reader/HighlightLayer";
 import { NotePopover } from "../reader/NotePopover";
 import { PdfTextLayer } from "../reader/PdfTextLayer";
+import { ReaderLeftSidebar, type PdfOutlineItem } from "../reader/ReaderLeftSidebar";
 import { ReaderSidePanel } from "../reader/ReaderSidePanel";
 import { SelectionToolbar } from "../reader/SelectionToolbar";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
 import { useReadingTimer } from "../reader/useReadingTimer";
+import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
 type PageSize = {
   width: number;
   height: number;
 };
-type PdfOutlineItem = {
-  title: string;
-};
 
 type ReaderModalProps = {
   document: LibraryDocument;
-  availableTags: SubjectTag[];
-  onAvailableTagsChange: (tags: SubjectTag[]) => void;
-  onUpdateDocumentTags: (documentId: string, tags: SubjectTag[]) => void;
+  // Estado inicial maximizado/restaurado, lido da preferencia persistida pelo
+  // LibraryView antes de abrir o painel (o toggle daqui regrava a preferencia).
+  initialMaximized: boolean;
   onClose: (readingLocation: ReadingLocation) => void;
   onSaveNotes: (documentId: string, notes: string) => Promise<void>;
   onNotesReloaded: (documentId: string, notes: string) => void;
+  onToggleFavorite: (documentId: string) => Promise<void>;
+  // Navegacao pedida pela sidebar esquerda do leitor: o LibraryView troca a
+  // rota ativa depois que o leitor fecha salvando a posicao.
+  onNavigate: (route: LibraryRoute) => void;
 };
 
 const fallbackPageCount = 15;
@@ -257,33 +267,26 @@ function getMaximizedReaderSize() {
   };
 }
 
+// Tamanho padrao do leitor restaurado (espelha getReaderInitialPosition do
+// LibraryView). Tambem e o fallback ao restaurar um leitor que abriu
+// maximizado e nunca teve tamanho/posicao proprios.
+function getDefaultReaderSize() {
+  return {
+    width: Math.max(720, Math.min(1240, window.innerWidth - 64)),
+    height: Math.max(480, Math.min(900, window.innerHeight - 96)),
+  };
+}
+
+function getDefaultReaderPosition(size: { width: number; height: number }) {
+  return {
+    x: Math.max(8, Math.round((window.innerWidth - size.width) / 2)),
+    y: 84,
+  };
+}
+
 function centerHorizontalScroll(element: HTMLElement) {
   const scrollMax = Math.max(0, element.scrollWidth - element.clientWidth);
   element.scrollLeft = Math.round(scrollMax / 2);
-}
-
-function useInViewport<T extends Element>(rootMargin: string) {
-  const elementRef = useRef<T | null>(null);
-  const [isInViewport, setIsInViewport] = useState(false);
-
-  useEffect(() => {
-    const element = elementRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsInViewport(entry.isIntersecting);
-      },
-      { root: null, rootMargin },
-    );
-
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [rootMargin]);
-
-  return { elementRef, isInViewport };
 }
 
 function PdfPagePlaceholder({ pageSize, label }: { pageSize: PageSize; label?: string }) {
@@ -294,6 +297,32 @@ function PdfPagePlaceholder({ pageSize, label }: { pageSize: PageSize; label?: s
     >
       {label}
     </article>
+  );
+}
+
+// Resolve o numero de pagina (1-based) de cada item do sumario do PDF. O
+// destino pode ser nomeado (string) ou explicito (array cujo primeiro elemento
+// e a referencia da pagina); itens sem destino resolvivel ficam sem pagina e a
+// sidebar os exibe nao-clicaveis.
+async function resolveOutlineWithPages(pdfDocument: PdfDocument): Promise<PdfOutlineItem[]> {
+  const outline = (await pdfDocument.getOutline()) ?? [];
+
+  return Promise.all(
+    outline.map(async (item) => {
+      try {
+        const destination = typeof item.dest === "string" ? await pdfDocument.getDestination(item.dest) : item.dest;
+        const pageRef = Array.isArray(destination) ? destination[0] : null;
+
+        if (pageRef) {
+          const pageIndex = await pdfDocument.getPageIndex(pageRef);
+          return { title: item.title, page: pageIndex + 1 };
+        }
+      } catch {
+        // Destino invalido/corrompido: mantem o titulo sem pagina.
+      }
+
+      return { title: item.title };
+    }),
   );
 }
 
@@ -413,93 +442,6 @@ function VirtualPdfCanvasPage(props: PdfCanvasPageProps) {
   );
 }
 
-function PdfThumbnail({ pdfDocument, page, active, onClick }: { pdfDocument: PdfDocument; page: number; active: boolean; onClick: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    let isCancelled = false;
-    let renderTask: pdfjsLib.RenderTask | null = null;
-
-    async function renderThumbnail() {
-      const pdfPage = await pdfDocument.getPage(page);
-      const baseViewport = pdfPage.getViewport({ scale: 1 });
-      const viewport = pdfPage.getViewport({ scale: 142 / baseViewport.width });
-      const canvas = canvasRef.current;
-      const canvasContext = canvas?.getContext("2d");
-
-      if (!canvas || !canvasContext || isCancelled) {
-        return;
-      }
-
-      const outputScale = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-
-      renderTask = pdfPage.render({
-        canvasContext,
-        viewport,
-        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
-      });
-
-      await renderTask.promise;
-    }
-
-    renderThumbnail().catch(() => undefined);
-
-    return () => {
-      isCancelled = true;
-      renderTask?.cancel();
-    };
-  }, [page, pdfDocument]);
-
-  return (
-    <button type="button" className="block w-full text-left" onClick={onClick}>
-      <div
-        className={`mx-auto overflow-hidden rounded border bg-white p-1 shadow-sm transition ${
-          active ? "border-primary ring-2 ring-primary-soft" : "border-indigo-200 hover:border-primary"
-        }`}
-      >
-        <canvas ref={canvasRef} className="block" />
-      </div>
-      <span className="mt-2 block text-center text-sm text-text-subtle">{page}</span>
-    </button>
-  );
-}
-
-function ThumbnailPlaceholder({ page, active, onClick }: { page: number; active: boolean; onClick: () => void }) {
-  return (
-    <button type="button" className="block w-full text-left" onClick={onClick}>
-      <div
-        className={`mx-auto h-44 w-36 overflow-hidden rounded border bg-white p-1 shadow-sm transition ${
-          active ? "border-primary ring-2 ring-primary-soft" : "border-indigo-200 hover:border-primary"
-        }`}
-      >
-        <div className="h-full w-full animate-pulse rounded bg-slate-100" />
-      </div>
-      <span className="mt-2 block text-center text-sm text-text-subtle">{page}</span>
-    </button>
-  );
-}
-
-function LazyPdfThumbnail({ pdfDocument, page, active, onClick }: { pdfDocument: PdfDocument; page: number; active: boolean; onClick: () => void }) {
-  const { elementRef, isInViewport } = useInViewport<HTMLDivElement>("600px 0px");
-  const [hasRendered, setHasRendered] = useState(false);
-
-  useEffect(() => {
-    if (isInViewport) {
-      setHasRendered(true);
-    }
-  }, [isInViewport]);
-
-  return (
-    <div ref={elementRef}>
-      {hasRendered ? <PdfThumbnail pdfDocument={pdfDocument} page={page} active={active} onClick={onClick} /> : <ThumbnailPlaceholder page={page} active={active} onClick={onClick} />}
-    </div>
-  );
-}
-
 function FallbackReaderPage({ page, zoom, document }: { page: number; zoom: number; document: LibraryDocument }) {
   const pageWidth = Math.round(850 * (zoom / 100));
   const pageHeight = Math.round(1120 * (zoom / 100));
@@ -574,12 +516,12 @@ function FallbackThumbnail({ page, active, onClick }: { page: number; active: bo
 
 export function ReaderModal({
   document,
-  availableTags,
-  onAvailableTagsChange,
-  onUpdateDocumentTags,
+  initialMaximized,
   onClose,
   onSaveNotes,
   onNotesReloaded,
+  onToggleFavorite,
+  onNavigate,
 }: ReaderModalProps) {
   const fallbackPageNumbers = useMemo(buildFallbackPageNumbers, []);
   const readerSurfaceRef = useRef<HTMLElement | null>(null);
@@ -588,12 +530,15 @@ export function ReaderModal({
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
   const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
   const [pdfError, setPdfError] = useState("");
+  const [fileSizeBytes, setFileSizeBytes] = useState<number | null>(null);
   const [isPdfLoading, setIsPdfLoading] = useState(hasPdfSource(document));
   const [totalPages, setTotalPages] = useState(hasPdfSource(document) ? 1 : fallbackPageCount);
   const [currentPage, setCurrentPage] = useState(document.readingLocation?.page ?? Math.max(1, Math.ceil((document.progress / 100) * totalPages)));
   const [zoom, setZoom] = useState(getInitialZoom(document));
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [leftPanelTab, setLeftPanelTab] = useState<"pages" | "summary">("pages");
+  // Incrementado no Ctrl+F para a sidebar focar o campo de busca depois de
+  // renderizada (sinal deterministico, sem timers de foco).
+  const [searchFocusSignal, setSearchFocusSignal] = useState(0);
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [sidePanelInitialTab, setSidePanelInitialTab] = useState<"annotations" | undefined>(undefined);
   // O modo flutuante do painel de anotacoes agora vive na pilha global de
@@ -608,11 +553,10 @@ export function ReaderModal({
   // openForReading) — le a propria entrada para posicao/zIndex.
   const readerPanelId = floatingPanelId("reader", document.id);
   const readerPanel = floatingPanels.find((panel) => panel.id === readerPanelId) ?? null;
-  const [readerPanelSize, setReaderPanelSize] = useState(() => ({
-    width: Math.max(720, Math.min(1240, window.innerWidth - 64)),
-    height: Math.max(480, Math.min(900, window.innerHeight - 96)),
-  }));
-  const [isReaderMaximized, setIsReaderMaximized] = useState(false);
+  const [readerPanelSize, setReaderPanelSize] = useState(() =>
+    initialMaximized ? getMaximizedReaderSize() : getDefaultReaderSize(),
+  );
+  const [isReaderMaximized, setIsReaderMaximized] = useState(initialMaximized);
   const readerRestoreStateRef = useRef<{
     position: { x: number; y: number };
     size: { width: number; height: number };
@@ -627,13 +571,10 @@ export function ReaderModal({
       closePanel(readerPanelId);
     };
   }, [closePanel, annotationsPanelId, readerPanelId]);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [documentSearchTerm, setDocumentSearchTerm] = useState("");
   const [isHighlightModeEnabled, setIsHighlightModeEnabled] = useState(false);
   const [notesText, setNotesText] = useState(document.notes ?? "");
   const notesSaveTimerRef = useRef<number | null>(null);
   const latestNotesRef = useRef(document.notes ?? "");
-  const [documentTags, setDocumentTags] = useState<SubjectTag[]>(document.tags);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [saveStates, setSaveStates] = useState<Map<string, AnnotationSaveState>>(new Map());
   const saveStatesRef = useRef<Map<string, AnnotationSaveState>>(new Map());
@@ -646,6 +587,21 @@ export function ReaderModal({
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
   const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
+  const currentPageStateRef = useRef<ReaderPageStatePayload>({
+    documentId: document.id,
+    page: currentPage,
+    progress: Math.round((currentPage / totalPages) * 100),
+    totalPages: null,
+    fileSizeBytes: null,
+  });
+
+  currentPageStateRef.current = {
+    documentId: document.id,
+    page: currentPage,
+    progress: Math.round((currentPage / totalPages) * 100),
+    totalPages: pdfDocument?.numPages ?? null,
+    fileSizeBytes,
+  };
 
   const updatePopoutDocumentId = useCallback((nextDocumentId: string | null) => {
     popoutDocumentIdRef.current = nextDocumentId;
@@ -654,8 +610,8 @@ export function ReaderModal({
 
   const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
   const readerDocument = useMemo(
-    () => ({ ...document, tags: documentTags, notes: notesText, timeSpentSeconds: document.timeSpentSeconds }),
-    [document, documentTags, notesText],
+    () => ({ ...document, notes: notesText, timeSpentSeconds: document.timeSpentSeconds }),
+    [document, notesText],
   );
   const defaultPageSize = useMemo(() => estimatedPageSize(zoom), [zoom]);
   const annotationsByPage = useMemo(() => {
@@ -698,7 +654,7 @@ export function ReaderModal({
       return next;
     });
   }, []);
-  const { timeSpentSeconds, flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds);
+  const { flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds);
 
   const flushNotes = useCallback(async () => {
     if (notesSaveTimerRef.current !== null) {
@@ -724,6 +680,7 @@ export function ReaderModal({
       setPdfDocument(null);
       setPdfOutline([]);
       setPdfError("");
+      setFileSizeBytes(null);
       setIsPdfLoading(false);
       setTotalPages(fallbackPageCount);
       return;
@@ -733,22 +690,25 @@ export function ReaderModal({
     let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
     setIsPdfLoading(true);
     setPdfError("");
+    setFileSizeBytes(null);
 
     async function resolvePdfSource() {
       if (document.fileUrl) {
-        return { url: document.fileUrl };
+        return { source: { url: document.fileUrl }, sizeBytes: null };
       }
 
       const base64 = await invoke<string>("read_pdf_file", { filePath: document.filePath });
-      return { data: base64ToBytes(base64) };
+      const bytes = base64ToBytes(base64);
+      return { source: { data: bytes }, sizeBytes: bytes.byteLength };
     }
 
     resolvePdfSource()
-      .then(async (source) => {
+      .then(async ({ source, sizeBytes }) => {
         if (isCancelled) {
           return;
         }
 
+        setFileSizeBytes(sizeBytes);
         loadingTask = pdfjsLib.getDocument(source);
         const loadedDocument = await loadingTask.promise;
 
@@ -760,9 +720,9 @@ export function ReaderModal({
         setTotalPages(loadedDocument.numPages);
         setCurrentPage((page) => clamp(page, 1, loadedDocument.numPages));
 
-        const outline = await loadedDocument.getOutline();
+        const outlineItems = await resolveOutlineWithPages(loadedDocument);
         if (!isCancelled) {
-          setPdfOutline((outline ?? []).map((item) => ({ title: item.title })));
+          setPdfOutline(outlineItems);
         }
       })
       .catch(() => {
@@ -786,10 +746,6 @@ export function ReaderModal({
     setNotesText(document.notes ?? "");
     latestNotesRef.current = document.notes ?? "";
   }, [document.id, document.notes]);
-
-  useEffect(() => {
-    setDocumentTags(document.tags);
-  }, [document.id, document.tags]);
 
   const loadDocumentAnnotations = useCallback(() => listAnnotations(document.id), [document.id]);
 
@@ -953,49 +909,6 @@ export function ReaderModal({
     [clearSaveState],
   );
 
-  // Notas livres do documento: atualiza o estado local e persiste imediatamente
-  // (campo unico em documents.notes, via prop do LibraryView).
-  const handleNotesChange = useCallback(
-    (nextNotes: string) => {
-      setNotesText(nextNotes);
-      latestNotesRef.current = nextNotes;
-
-      if (notesSaveTimerRef.current !== null) {
-        window.clearTimeout(notesSaveTimerRef.current);
-      }
-
-      notesSaveTimerRef.current = window.setTimeout(() => {
-        notesSaveTimerRef.current = null;
-        void onSaveNotes(document.id, latestNotesRef.current);
-      }, 500);
-    },
-    [document.id, onSaveNotes],
-  );
-
-  const updateTags = useCallback(
-    (nextTags: SubjectTag[]) => {
-      const uniqueTags = mergeUniqueTags(nextTags);
-      setDocumentTags(uniqueTags);
-      onAvailableTagsChange(mergeUniqueTags([...availableTags, ...uniqueTags]));
-      onUpdateDocumentTags(document.id, uniqueTags);
-    },
-    [availableTags, document.id, onAvailableTagsChange, onUpdateDocumentTags],
-  );
-
-  const addDocumentTag = useCallback(
-    (tag: SubjectTag) => {
-      updateTags([...documentTags, tag]);
-    },
-    [documentTags, updateTags],
-  );
-
-  const removeDocumentTag = useCallback(
-    (tag: SubjectTag) => {
-      updateTags(documentTags.filter((currentTag) => currentTag !== tag));
-    },
-    [documentTags, updateTags],
-  );
-
   // Remocao pela lista do painel: a falha so mantem o item (sem perda de dado).
   const handleDeleteAnnotationFromList = useCallback(
     (annotationId: string) => {
@@ -1119,12 +1032,48 @@ export function ReaderModal({
         });
     });
 
+    registerListener<unknown>(READER_DETAILS_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderInvalidationPayload(payload) ||
+        payload.documentId !== document.id ||
+        payload.origin === currentWindowLabel
+      ) {
+        return;
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ["library"] });
+    });
+
     registerListener<unknown>(READER_JUMP_TO_PAGE_EVENT, (payload) => {
       if (!isReaderJumpToPagePayload(payload) || payload.documentId !== document.id) {
         return;
       }
 
       scrollToPage(payload.page);
+    });
+
+    registerListener<unknown>(READER_OPEN_NOTEBOOK_EVENT, (payload) => {
+      if (!isReaderOpenNotebookPayload(payload) || payload.documentId !== document.id) {
+        return;
+      }
+
+      const width = Math.min(notebookPanelWidth, window.innerWidth);
+      const height = Math.min(notebookPanelHeight, window.innerHeight);
+      openPanel("notebook", String(payload.notebookId), getCenteredPanelPosition(width, height));
+    });
+
+    registerListener<unknown>(READER_PAGE_STATE_REQUESTED_EVENT, (payload) => {
+      if (!isReaderDocumentPayload(payload) || payload.documentId !== document.id) {
+        return;
+      }
+
+      void emitTo(
+        READER_PANEL_WINDOW_LABEL,
+        READER_PAGE_STATE_CHANGED_EVENT,
+        currentPageStateRef.current,
+      ).catch((error) => {
+        console.warn("Nao foi possivel responder a sincronizacao da popout.", error);
+      });
     });
 
     registerListener<unknown>(READER_POPOUT_CLOSED_EVENT, (payload) => {
@@ -1139,7 +1088,7 @@ export function ReaderModal({
       isDisposed = true;
       unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
     };
-  }, [document.id, loadDocumentAnnotations, onNotesReloaded, scrollToPage, updatePopoutDocumentId]);
+  }, [document.id, loadDocumentAnnotations, onNotesReloaded, openPanel, queryClient, scrollToPage, updatePopoutDocumentId]);
 
   const closePopoutAfterFlush = useCallback(async (): Promise<boolean> => {
     if (popoutDocumentIdRef.current !== document.id) {
@@ -1270,6 +1219,34 @@ export function ReaderModal({
 
     onClose(readingLocation);
   }, [closePopoutAfterFlush, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
+
+  // Navegacao pedida pela sidebar esquerda: fecha o leitor com o mesmo flush
+  // do fechamento normal e, somente se o fechamento nao falhou (flag de
+  // fechamento explicito segue ligada), troca a rota da biblioteca.
+  const handleNavigate = useCallback(
+    async (route: LibraryRoute) => {
+      await closeAndSave();
+
+      if (hasClosedExplicitlyRef.current) {
+        onNavigate(route);
+      }
+    },
+    [closeAndSave, onNavigate],
+  );
+
+  // Ctrl+F abre a sidebar esquerda e foca o campo de busca do documento.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setLeftPanelOpen(true);
+        setSearchFocusSignal((signal) => signal + 1);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Autosave da posicao de leitura DURANTE a leitura. Escrita imediata de 1
   // statement (reading_location_json/progress), agendada com debounce para nao
@@ -1407,14 +1384,23 @@ export function ReaderModal({
       return;
     }
 
+    // A preferencia persiste em fire-and-forget: falha de escrita nao pode
+    // travar o toggle visual (na proxima abertura vale o ultimo valor salvo).
+    void setReaderOpensMaximized(!isReaderMaximized).catch((error) => {
+      console.warn("Nao foi possivel salvar a preferencia de maximizacao do leitor.", error);
+    });
+
     if (isReaderMaximized) {
-      const restoreState = readerRestoreStateRef.current;
+      // Sem restore salvo (leitor abriu ja maximizado): volta ao tamanho e
+      // posicao padrao em vez de ficar edge-to-edge com cantos arredondados.
+      const fallbackSize = getDefaultReaderSize();
+      const restoreState = readerRestoreStateRef.current ?? {
+        size: fallbackSize,
+        position: getDefaultReaderPosition(fallbackSize),
+      };
 
-      if (restoreState) {
-        setReaderPanelSize(restoreState.size);
-        movePanel(readerPanelId, restoreState.position);
-      }
-
+      setReaderPanelSize(restoreState.size);
+      movePanel(readerPanelId, restoreState.position);
       setIsReaderMaximized(false);
       return;
     }
@@ -1443,7 +1429,23 @@ export function ReaderModal({
   }, [isReaderMaximized, movePanel, readerPanelId]);
 
   const progress = Math.round((currentPage / totalPages) * 100);
-  const summaryItems = pdfOutline.length > 0 ? pdfOutline : ["Resumo", "Arquitetura", "Treinamento", "Resultados", "Conclusoes"].map((title) => ({ title }));
+
+  useEffect(() => {
+    if (popoutDocumentId !== document.id) {
+      return;
+    }
+
+    const payload: ReaderPageStatePayload = {
+      documentId: document.id,
+      page: currentPage,
+      progress,
+      totalPages: pdfDocument?.numPages ?? null,
+      fileSizeBytes,
+    };
+    void emitTo(READER_PANEL_WINDOW_LABEL, READER_PAGE_STATE_CHANGED_EVENT, payload).catch((error) => {
+      console.warn("Nao foi possivel sincronizar a pagina atual com a popout.", error);
+    });
+  }, [currentPage, document.id, fileSizeBytes, pdfDocument, popoutDocumentId, progress]);
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
 
   // Entrada da pilha ainda nao criada (transitorio durante abrir/fechar).
@@ -1485,6 +1487,16 @@ export function ReaderModal({
           >
             <Icon name="back" />
           </button>
+          <button
+            type="button"
+            className={`rounded-md p-1.5 transition ${leftPanelOpen ? "bg-[var(--reader-header-active-bg)] text-primary" : "text-[var(--reader-header-control)] hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"}`}
+            aria-label={leftPanelOpen ? "Fechar barra lateral" : "Abrir barra lateral"}
+            title={leftPanelOpen ? "Fechar barra lateral" : "Abrir barra lateral"}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => setLeftPanelOpen((isOpen) => !isOpen)}
+          >
+            <Icon name="leftPanel" />
+          </button>
           <h1 id="reader-title" className="min-w-0 truncate text-sm font-bold text-[var(--reader-header-text)]">
             {document.title}
           </h1>
@@ -1505,24 +1517,18 @@ export function ReaderModal({
             {currentPage} / {totalPages}
           </span>
           <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
-          {isSearchOpen ? (
-            <input
-              value={documentSearchTerm}
-              onChange={(event) => setDocumentSearchTerm(event.target.value)}
-              onBlur={() => {
-                if (documentSearchTerm.trim().length === 0) {
-                  setIsSearchOpen(false);
-                }
-              }}
-              className="h-8 w-52 rounded-md border border-[var(--reader-header-input-border)] bg-[var(--reader-header-input-bg)] px-3 text-sm text-[var(--reader-header-text)] outline-none placeholder:text-[var(--reader-header-muted)] focus:border-primary"
-              placeholder="Buscar no documento..."
-              autoFocus
-            />
-          ) : (
-            <button type="button" aria-label="Buscar no documento" className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => setIsSearchOpen(true)}>
-              <Icon name="search" />
-            </button>
-          )}
+          <button
+            type="button"
+            aria-label="Buscar no documento"
+            title="Buscar no documento (Ctrl+F)"
+            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
+            onClick={() => {
+              setLeftPanelOpen(true);
+              setSearchFocusSignal((signal) => signal + 1);
+            }}
+          >
+            <Icon name="search" />
+          </button>
           <button
             type="button"
             aria-label="Modo marca-texto"
@@ -1579,6 +1585,21 @@ export function ReaderModal({
       )}
     >
       <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+        {leftPanelOpen ? (
+          <ReaderLeftSidebar
+            document={document}
+            pdfDocument={pdfDocument}
+            outline={pdfOutline}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            fileSizeBytes={fileSizeBytes}
+            searchFocusSignal={searchFocusSignal}
+            onJumpToPage={scrollToPage}
+            onNavigate={(route) => void handleNavigate(route)}
+            onToggleFavorite={() => void onToggleFavorite(document.id)}
+          />
+        ) : null}
+
         <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
           {isPdfLoading ? (
             <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
@@ -1622,31 +1643,36 @@ export function ReaderModal({
         {sidePanelOpen ? (
           <ReaderSidePanel
             document={readerDocument}
-            notesText={notesText}
-            onNotesChange={handleNotesChange}
-            onNotesBlur={flushNotes}
-            notesReadOnly={popoutDocumentId === document.id}
-            availableTags={availableTags}
-            onAddTag={addDocumentTag}
-            onRemoveTag={removeDocumentTag}
             annotations={annotations}
+            currentPage={currentPage}
             progress={progress}
-            timeSpentSeconds={timeSpentSeconds}
+            totalPages={pdfDocument?.numPages ?? null}
+            fileSizeBytes={fileSizeBytes}
             isFloating={sidePanelFloating}
             initialTab={sidePanelInitialTab}
             onFloat={() => openPanel("annotations", document.id, getAnnotationsPanelInitialPosition())}
             onOpenSystemWindow={async () => {
               await flushNotes();
+              await setDocumentReadingLocation(document, getCurrentReadingLocation());
               await invoke("open_reader_panel_window", {
                 documentId: document.id,
                 documentTitle: document.title,
               });
               updatePopoutDocumentId(document.id);
+              const payload: ReaderPageStatePayload = {
+                documentId: document.id,
+                page: currentPage,
+                progress,
+                totalPages: pdfDocument?.numPages ?? null,
+                fileSizeBytes,
+              };
+              await emitTo(READER_PANEL_WINDOW_LABEL, READER_PAGE_STATE_CHANGED_EVENT, payload);
             }}
             onDock={() => closePanel(annotationsPanelId)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}
             onUpdateAnnotationNote={saveAnnotationNoteById}
+            onToggleFavorite={() => onToggleFavorite(document.id)}
             onClose={() => {
               setSidePanelInitialTab(undefined);
               closePanel(annotationsPanelId);
@@ -1675,25 +1701,4 @@ export function ReaderModal({
       ) : null}
     </FloatingPanelFrame>
   );
-}
-
-function mergeUniqueTags(tags: SubjectTag[]) {
-  const seenTags = new Set<string>();
-
-  return tags
-    .map((tag) => tag.trim().replace(/\s+/g, " "))
-    .filter((tag) => {
-      if (tag.length === 0) {
-        return false;
-      }
-
-      const key = tag.toLocaleLowerCase("pt-BR");
-
-      if (seenTags.has(key)) {
-        return false;
-      }
-
-      seenTags.add(key);
-      return true;
-    });
 }

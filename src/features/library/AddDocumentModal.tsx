@@ -279,6 +279,7 @@ export function AddDocumentModal({
     return {
       id: createDocumentId(item.fileName),
       title: item.title.trim(),
+      description: "",
       authors: splitAuthors(item.authors),
       source: item.source.trim(),
       year,
@@ -694,4 +695,3 @@ export function AddDocumentModal({
     </div>
   );
 }
-

@@ -101,6 +101,7 @@ struct ReaderDocumentPayload {
     document_id: String,
 }
 
+#[cfg(test)]
 fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
     let bytes = value.as_bytes();
     let has_valid_shape = bytes.len() == 36
@@ -116,6 +117,14 @@ fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_document_id(value: &str) -> Result<(), String> {
+    if value.len() > 255 || validate_file_id(value).is_err() {
+        return Err("Identificador do documento invalido.".to_string());
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn open_reader_panel_window<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -124,7 +133,7 @@ fn open_reader_panel_window<R: tauri::Runtime>(
 ) -> Result<(), String> {
     // O ID atravessa a fronteira IPC e precisa ser validado no Rust antes de
     // entrar na URL, independentemente do tipo declarado no frontend.
-    validate_uuid(&document_id, "Identificador do documento")?;
+    validate_document_id(&document_id)?;
 
     if let Some(window) = app.get_webview_window(READER_PANEL_WINDOW_LABEL) {
         window
@@ -269,6 +278,193 @@ struct ImportDocumentRequest {
 
 // Mesma string usada no TS em Database.load(...). E a chave do pool no estado.
 const DATABASE_KEY: &str = "sqlite:athenaeum.db";
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenDocumentExternallyError {
+    code: &'static str,
+    message: String,
+}
+
+impl OpenDocumentExternallyError {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+fn map_managed_pdf_io_error(
+    error: std::io::Error,
+    missing_message: &'static str,
+) -> OpenDocumentExternallyError {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => {
+            OpenDocumentExternallyError::new("file_not_found", missing_message)
+        }
+        std::io::ErrorKind::PermissionDenied => OpenDocumentExternallyError::new(
+            "permission_denied",
+            "O Athenaeum nao tem permissao para acessar este PDF.",
+        ),
+        _ => OpenDocumentExternallyError::new(
+            "open_failed",
+            format!("Nao foi possivel acessar o PDF gerenciado: {error}"),
+        ),
+    }
+}
+
+fn map_opener_error(error: tauri_plugin_opener::Error) -> OpenDocumentExternallyError {
+    match error {
+        tauri_plugin_opener::Error::Io(io_error) => {
+            #[cfg(target_os = "windows")]
+            if io_error.raw_os_error() == Some(1155) {
+                return OpenDocumentExternallyError::new(
+                    "no_associated_application",
+                    "Nenhum aplicativo esta associado a arquivos PDF no sistema.",
+                );
+            }
+
+            match io_error.kind() {
+                std::io::ErrorKind::NotFound => OpenDocumentExternallyError::new(
+                    "file_not_found",
+                    "A copia gerenciada deste PDF nao foi encontrada.",
+                ),
+                std::io::ErrorKind::PermissionDenied => OpenDocumentExternallyError::new(
+                    "permission_denied",
+                    "O sistema negou permissao para abrir este PDF.",
+                ),
+                _ => OpenDocumentExternallyError::new(
+                    "open_failed",
+                    format!(
+                        "Nao foi possivel abrir o PDF. Verifique se ha um visualizador associado: {io_error}"
+                    ),
+                ),
+            }
+        }
+        other => OpenDocumentExternallyError::new(
+            "open_failed",
+            format!(
+                "Nao foi possivel abrir o PDF. Verifique se ha um visualizador associado: {other}"
+            ),
+        ),
+    }
+}
+
+fn validate_document_storage_id(document_id: &str) -> Result<(), OpenDocumentExternallyError> {
+    validate_document_id(document_id)
+        .map_err(|message| OpenDocumentExternallyError::new("invalid_document_id", message))
+}
+
+#[tauri::command]
+async fn open_document_externally<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    db_instances: tauri::State<'_, DbInstances>,
+    document_id: String,
+) -> Result<(), OpenDocumentExternallyError> {
+    validate_document_storage_id(&document_id)?;
+
+    let stored_file_path = {
+        let instances = db_instances.0.read().await;
+        let pool = match instances.get(DATABASE_KEY) {
+            Some(DbPool::Sqlite(pool)) => pool,
+            _ => {
+                return Err(OpenDocumentExternallyError::new(
+                    "database_unavailable",
+                    "Banco de dados nao carregado.",
+                ));
+            }
+        };
+
+        let row: Option<(Option<String>,)> =
+            sqlx::query_as("SELECT file_path FROM documents WHERE id = ? AND deleted_at IS NULL")
+                .bind(&document_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|error| {
+                    OpenDocumentExternallyError::new(
+                        "database_error",
+                        format!("Nao foi possivel consultar o documento: {error}"),
+                    )
+                })?;
+
+        match row {
+            Some((Some(file_path),)) if !file_path.trim().is_empty() => file_path,
+            Some(_) => {
+                return Err(OpenDocumentExternallyError::new(
+                    "file_not_found",
+                    "Este documento nao possui uma copia local gerenciada.",
+                ));
+            }
+            None => {
+                return Err(OpenDocumentExternallyError::new(
+                    "document_not_found",
+                    "Documento nao encontrado.",
+                ));
+            }
+        }
+    };
+
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        OpenDocumentExternallyError::new(
+            "invalid_managed_path",
+            format!("Nao foi possivel localizar o diretorio de dados: {error}"),
+        )
+    })?;
+    let managed_pdf_dir = data_dir.join("pdfs");
+    let expected_path = managed_pdf_dir.join(format!("{document_id}.pdf"));
+    let stored_path = PathBuf::from(stored_file_path);
+
+    if stored_path.file_name() != expected_path.file_name()
+        || stored_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("pdf")
+    {
+        return Err(OpenDocumentExternallyError::new(
+            "invalid_managed_path",
+            "O caminho registrado nao corresponde a um PDF gerenciado pelo Athenaeum.",
+        ));
+    }
+
+    let canonical_managed_dir = std::fs::canonicalize(&managed_pdf_dir).map_err(|error| {
+        map_managed_pdf_io_error(error, "O diretorio gerenciado de PDFs nao foi encontrado.")
+    })?;
+    let canonical_stored_path = std::fs::canonicalize(&stored_path).map_err(|error| {
+        map_managed_pdf_io_error(error, "A copia gerenciada deste PDF nao foi encontrada.")
+    })?;
+    let canonical_expected_path = std::fs::canonicalize(&expected_path).map_err(|error| {
+        map_managed_pdf_io_error(error, "A copia gerenciada deste PDF nao foi encontrada.")
+    })?;
+
+    // A linha do banco nao e autoridade para sair de app_data/pdfs. A
+    // canonicalizacao tambem impede escape por symlink ou por componentes `..`.
+    if canonical_stored_path != canonical_expected_path
+        || !canonical_stored_path.starts_with(&canonical_managed_dir)
+    {
+        return Err(OpenDocumentExternallyError::new(
+            "invalid_managed_path",
+            "O PDF solicitado esta fora do diretorio gerenciado pelo Athenaeum.",
+        ));
+    }
+
+    let metadata = std::fs::metadata(&canonical_stored_path).map_err(|error| {
+        map_managed_pdf_io_error(error, "A copia gerenciada deste PDF nao foi encontrada.")
+    })?;
+    if !metadata.is_file() {
+        return Err(OpenDocumentExternallyError::new(
+            "invalid_managed_path",
+            "O caminho gerenciado nao aponta para um arquivo PDF.",
+        ));
+    }
+
+    // Testa permissao de leitura sem carregar o PDF inteiro em memoria.
+    File::open(&canonical_stored_path).map_err(|error| {
+        map_managed_pdf_io_error(error, "A copia gerenciada deste PDF nao foi encontrada.")
+    })?;
+
+    tauri_plugin_opener::open_path(&canonical_stored_path, None::<&str>).map_err(map_opener_error)
+}
 
 #[tauri::command]
 async fn import_document<R: tauri::Runtime>(
@@ -3169,6 +3365,12 @@ END;
             sql: include_str!("../migrations/0018_add_notebook_file_attachments.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 19,
+            description: "add_document_details_metadata",
+            sql: include_str!("../migrations/0019_add_document_details_metadata.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -3222,6 +3424,7 @@ pub fn run() {
             load_canvas_files,
             load_notebook_assets,
             load_notebook_file_attachments,
+            open_document_externally,
             open_external_url,
             open_file_location,
             open_notebook_file_attachment,
@@ -3249,6 +3452,16 @@ mod tests {
         assert!(validate_uuid("550e8400-e29b-41d4-a716-446655440000", "Identificador").is_ok());
         assert!(validate_uuid("550e8400e29b41d4a716446655440000", "Identificador").is_err());
         assert!(validate_uuid("550e8400-e29b-41d4-a716-44665544000z", "Identificador").is_err());
+    }
+
+    #[test]
+    fn accepts_document_ids_generated_by_the_import_flow() {
+        assert!(validate_document_storage_id(
+            "lista-circular-550e8400-e29b-41d4-a716-446655440000"
+        )
+        .is_ok());
+        assert!(validate_document_storage_id("../documento").is_err());
+        assert!(validate_document_storage_id(&"a".repeat(256)).is_err());
     }
 
     #[test]

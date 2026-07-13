@@ -26,7 +26,7 @@ type DocumentDetailsPanelProps = {
 };
 
 // Tags saem daqui: agora sao gerenciadas inline no painel via onUpdateDocumentTags.
-type DocumentMetadataUpdates = Pick<LibraryDocument, "title" | "authors" | "source" | "year" | "collection">;
+type DocumentMetadataUpdates = Pick<LibraryDocument, "title" | "authors" | "source" | "year" | "collection" | "description">;
 
 function CloseIcon() {
   return (
@@ -227,6 +227,7 @@ function EditDocumentModal({
   const [source, setSource] = useState(document.source);
   const [year, setYear] = useState(document.year.toString());
   const [collection, setCollection] = useState(document.collection);
+  const [description, setDescription] = useState(document.description);
   const [validationMessage, setValidationMessage] = useState("");
 
   function handleSave() {
@@ -259,6 +260,7 @@ function EditDocumentModal({
       source: source.trim(),
       year: nextYear,
       collection,
+      description: description.trim(),
     });
   }
 
@@ -303,6 +305,16 @@ function EditDocumentModal({
                 <input value={source} onChange={(event) => setSource(event.target.value)} className={metadataInputClassName} placeholder="Conferência, periódico ou editora" />
               </label>
             </div>
+
+            <label className="grid gap-1.5">
+              <span className={metadataLabelClassName}>Descrição</span>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                className={`${metadataInputClassName} min-h-24 resize-y`}
+                placeholder="Adicione uma descrição do documento"
+              />
+            </label>
 
             <label className="grid gap-1.5">
               <span className={metadataLabelClassName}>Coleção</span>

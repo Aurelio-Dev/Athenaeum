@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ContextMenuScopeContext } from "./ContextMenuItem";
@@ -17,12 +17,10 @@ export function ContextMenu({ isOpen, x, y, children }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ left: x, top: y });
 
-  useEffect(() => {
-    if (isOpen) {
-      setPosition({ left: x, top: y });
-    }
-  }, [isOpen, x, y]);
-
+  // Unico efeito de posicionamento: mede o menu ja renderizado e clampa na
+  // viewport ANTES do paint. (Nao adicionar um useEffect espelhado com a
+  // posicao crua — ele rodaria depois deste e desfaria o clamp, deixando o
+  // menu vazar da tela quando aberto perto das bordas.)
   useLayoutEffect(() => {
     if (!isOpen || !menuRef.current) {
       return;
