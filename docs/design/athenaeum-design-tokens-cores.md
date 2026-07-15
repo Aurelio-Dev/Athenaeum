@@ -1,5 +1,44 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 15/07/2026 — Regra de chrome: docado vs. flutuante:**
+> o redesign do Caderno (trilho colapsável, drawer de Detalhes,
+> menu "/") tornou explícita uma distinção que já existia
+> implicitamente entre as telas do app, e que precisa ser seguida
+> por qualquer tela nova: **chrome flutuante (ilhas com margem
+> própria, cantos arredondados nos 4 lados, sobreposição sem reflow)
+> é reservado para superfícies imersivas de objeto único** — telas
+> onde existe um conteúdo central dominante e tudo mais é controle
+> temporário sobre ele. O Reader é o caso de referência: o PDF ocupa
+> a tela inteira, e sidebar de miniaturas, painel de anotações e as
+> ilhas de zoom/edição são chrome que aparece por cima, sem competir
+> pelo espaço do documento.
+>
+> **Chrome docado (painéis flush, sem margem própria, reflow real ao
+> abrir/fechar) é o padrão para telas de workspace com múltiplas
+> regiões coexistindo por definição** — não existe um "objeto
+> central" a respeitar, existe uma composição de painéis que o
+> usuário lê como um único layout. Library (sidebar + grid) e Caderno
+> (trilho + editor, com o drawer de Detalhes como única exceção
+> intencional — ver abaixo) seguem esse padrão.
+>
+> **Nuance:** o drawer de Detalhes do Caderno é overlay (sobrepõe sem
+> reflow), mesmo o Caderno sendo majoritariamente docado. Isso é
+> proposital — o drawer é conteúdo consultado ocasionalmente, não uma
+> região permanente do layout, então se comporta como as ilhas do
+> Reader nesse ponto específico. O trilho de páginas, por outro lado,
+> reflui de verdade ao expandir, porque ele é parte estrutural do
+> workspace.
+>
+> **Ao decidir uma tela nova (ex: Quadro/Canvas):** pergunte primeiro
+> se existe um objeto central único sendo manipulado (→ flutuante) ou
+> se são múltiplas regiões permanentes coexistindo (→ docado, com
+> overlays pontuais permitidos para conteúdo consultivo/ocasional,
+> como o drawer). Não decidir por precedente visual solto — decidir
+> por essa pergunta.
+>
+> Nenhuma alteração de tokens de cor, tipografia ou paleta de tags
+> nesta entrada — é só uma regra de comportamento estrutural.
+
 > **Changelog técnico 10/07/2026 — Migração do Quadro de Excalidraw para
 > Konva.js:** o Quadro (`src/features/canvases/`) deixou de depender de
 > `@excalidraw/excalidraw` e passou a usar [Konva.js](https://konvajs.org/) +
@@ -48,7 +87,7 @@
 > `Negrito`, `Itálico`, `Listas`, `Referências`, `Inserir` e `Layout`.
 > `H1/H2/H3`, listas, Cite, links, anexos e PDF deixaram de ocupar botões
 > permanentes separados e foram movidos para menus dedicados. `Limpar
-> formatação` foi movido para `Texto` e `Remover link` para `Referências`,
+formatação` foi movido para `Texto` e `Remover link` para `Referências`,
 > removendo o menu `...` permanente. O `...` agora aparece apenas como
 > overflow responsivo quando `Layout` e/ou `Referências` precisam ser
 > recolhidos pela largura disponível da própria toolbar. Não houve alteração
@@ -269,7 +308,7 @@
 > migrations `v15`, `v16` e `v17` criam `notebook_tags`,
 > `notebook_linked_documents`, `reading_status`, `author_discipline` e
 > `notebook_assets`. Imagens coladas ou inseridas por `Inserir > Figura >
-> Imagem` são salvas em `notebook-assets/{notebookId}/{pageId}/` via
+Imagem` são salvas em `notebook-assets/{notebookId}/{pageId}/` via
 > `save_notebook_asset`, com allowlist PNG/JPEG/WebP/GIF, limite de 4MB,
 > escrita temp+rename e proteção contra path traversal; o HTML da página salva
 > apenas `data-notebook-asset-id`, sem `src="data:image..."`. O editor também
@@ -503,19 +542,19 @@ são dois sistemas sobrepostos).
 > Diferente da paleta de tags acima (conteúdo: assunto, status), estas
 > cores são da casca do app — header, toolbars, estados ativos.
 
-| Nome                 | Valor     | Uso                                                                                                                                                                                                                              |
-| -------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `surface-header`     | `#14161F` | Fundo do header/top bar (telas com leitor)                                                                                                                                                                                       |
-| `surface-elevated`   | `#1E2130` | Fundo de elementos flutuantes escuros (toolbar de seleção, toolbar de formatação)                                                                                                                                                |
-| `accent-interactive` | `#9C5A2E` | Ícone do logo, botão "+ Adicionar", barra de progresso de leitura, toggle de painel ativo, aba ativa no painel de anotações. **Mesmo hex em claro e escuro — sem variante separada.**                                            |
-| `accent-icon-amber`  | `#F59E0B` | Ícone "Marcar" em estado ativo na toolbar de seleção (mais vívido que `tag-amber-text`, é ícone pequeno, não texto)                                                                                                              |
-| `accent-tint-bg`     | `#EFE2D8` | Fundo de destaque em estado "ativo" de botões de ferramenta (ex: toolbar do Quadro) — tint sutil de terracota sobre o accent. Diferente do fill sólido das tags: aqui o texto/ícone continua na cor accent por cima, não branco. |
-| `sidebar-text`       | claro `#2C1810`; escuro `#F0E8DF` | Texto principal da sidebar, título `Athenaeum`, título da coleção aberta e itens selecionados da navegação/biblioteca. |
-| `sidebar-muted`      | claro `#7A6558`; escuro `#9E8878` | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação. |
-| `document-cover-hue` | hue derivado do documento | Base determinística das miniaturas de documento; o hue é estável por documento e a saturação/luminosidade mudam por tema. |
-| `document-cover-swatch` | claro `hsl(hue 28% 74%)`; escuro `hsl(hue 30% 18%)` | Fundo principal da área de preview dos cards de documento. |
-| `document-cover-line` | claro `hsl(hue 28% 34% / 0.24)`; escuro `rgb(255 255 255 / 0.08)` | Linhas secundárias internas das miniaturas. |
-| `document-cover-line-strong` | claro `hsl(hue 30% 30% / 0.34)`; escuro `rgb(255 255 255 / 0.15)` | Linhas internas mais fortes das miniaturas. |
+| Nome                         | Valor                                                             | Uso                                                                                                                                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `surface-header`             | `#14161F`                                                         | Fundo do header/top bar (telas com leitor)                                                                                                                                                                                       |
+| `surface-elevated`           | `#1E2130`                                                         | Fundo de elementos flutuantes escuros (toolbar de seleção, toolbar de formatação)                                                                                                                                                |
+| `accent-interactive`         | `#9C5A2E`                                                         | Ícone do logo, botão "+ Adicionar", barra de progresso de leitura, toggle de painel ativo, aba ativa no painel de anotações. **Mesmo hex em claro e escuro — sem variante separada.**                                            |
+| `accent-icon-amber`          | `#F59E0B`                                                         | Ícone "Marcar" em estado ativo na toolbar de seleção (mais vívido que `tag-amber-text`, é ícone pequeno, não texto)                                                                                                              |
+| `accent-tint-bg`             | `#EFE2D8`                                                         | Fundo de destaque em estado "ativo" de botões de ferramenta (ex: toolbar do Quadro) — tint sutil de terracota sobre o accent. Diferente do fill sólido das tags: aqui o texto/ícone continua na cor accent por cima, não branco. |
+| `sidebar-text`               | claro `#2C1810`; escuro `#F0E8DF`                                 | Texto principal da sidebar, título `Athenaeum`, título da coleção aberta e itens selecionados da navegação/biblioteca.                                                                                                           |
+| `sidebar-muted`              | claro `#7A6558`; escuro `#9E8878`                                 | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação.                                                                                                                                             |
+| `document-cover-hue`         | hue derivado do documento                                         | Base determinística das miniaturas de documento; o hue é estável por documento e a saturação/luminosidade mudam por tema.                                                                                                        |
+| `document-cover-swatch`      | claro `hsl(hue 28% 74%)`; escuro `hsl(hue 30% 18%)`               | Fundo principal da área de preview dos cards de documento.                                                                                                                                                                       |
+| `document-cover-line`        | claro `hsl(hue 28% 34% / 0.24)`; escuro `rgb(255 255 255 / 0.08)` | Linhas secundárias internas das miniaturas.                                                                                                                                                                                      |
+| `document-cover-line-strong` | claro `hsl(hue 30% 30% / 0.34)`; escuro `rgb(255 255 255 / 0.15)` | Linhas internas mais fortes das miniaturas.                                                                                                                                                                                      |
 
 Regra: `accent-icon-amber` não substitui o par `tag-amber-bg`/`tag-amber-text`
 documentado acima — são usos diferentes (ícone vívido vs. texto sobre fundo
