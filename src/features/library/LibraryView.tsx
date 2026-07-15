@@ -998,7 +998,6 @@ export function LibraryView() {
             onSaveNotes={saveDocumentNote}
             onNotesReloaded={updateDocumentNotesInCache}
             onToggleFavorite={toggleFavorite}
-            onNavigate={setActiveRoute}
           />
         </Suspense>
       ) : null}
@@ -1085,9 +1084,10 @@ export function LibraryView() {
 // abaixo do header do app (espelha o calculo de largura do ReaderModal).
 function getReaderInitialPosition() {
   const readerWidth = Math.max(720, Math.min(1240, window.innerWidth - 64));
+  const readerHeight = Math.max(480, Math.min(900, window.innerHeight - 96));
   return {
-    x: Math.max(8, Math.round((window.innerWidth - readerWidth) / 2)),
-    y: 84,
+    x: Math.max(0, Math.round((window.innerWidth - readerWidth) / 2)),
+    y: Math.max(0, Math.min(84, window.innerHeight - readerHeight)),
   };
 }
 

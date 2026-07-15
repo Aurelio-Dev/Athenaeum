@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -8,10 +17,16 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
+import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
+import { HeartIcon } from "../../components/ui/SharedIcons";
+import { useContextMenu } from "../../hooks/useContextMenu";
 import {
   createAnnotation,
   deleteAnnotation,
   getDocumentNotes,
+  openDocumentExternally,
   isReaderDocumentPayload,
   isReaderOpenNotebookPayload,
   isReaderInvalidationPayload,
@@ -29,20 +44,39 @@ import {
   READER_POPOUT_CLOSED_EVENT,
   READER_POPOUT_FLUSHED_EVENT,
   READER_REQUEST_POPOUT_CLOSE_EVENT,
+  getSetting,
   setDocumentReadingLocation,
-  setReaderOpensMaximized,
+  setSetting,
   updateAnnotationNote,
 } from "../../lib/database";
 import type { NewAnnotation, ReaderPageStatePayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
-import type { LibraryDocument, LibraryRoute, ReadingLocation } from "../../types/library";
+import type { LibraryDocument, ReadingLocation } from "../../types/library";
 import { useInViewport } from "../../hooks/useInViewport";
 import { captureSelection, type CapturedSelection, type PageElement } from "../reader/anchor";
 import { HighlightLayer } from "../reader/HighlightLayer";
 import { NotePopover } from "../reader/NotePopover";
 import { PdfTextLayer } from "../reader/PdfTextLayer";
-import { ReaderLeftSidebar, type PdfOutlineItem } from "../reader/ReaderLeftSidebar";
+import { ReaderAnnotationsDock } from "../reader/ReaderAnnotationsDock";
+import { ReaderFloatingChrome, ReaderToolRail } from "../reader/ReaderChrome";
+import { ReaderLeftSidebar, readerLeftSidebarWidth, type PdfOutlineItem } from "../reader/ReaderLeftSidebar";
+import { analyzePdfPageVisibleContent } from "../reader/pdfVisibleContent";
+import {
+  calculateReaderFitZoom,
+  defaultReaderViewPreferences,
+  fullPageContentBounds,
+  getReaderPageGroup,
+  getReaderProgressPage,
+  groupReaderPages,
+  parseReaderViewPreferences,
+  type NormalizedContentBounds,
+  type ReaderFitPage,
+  type ReaderPageLayout,
+  type ReaderViewPreferences,
+  type ReaderZoomMode,
+} from "../reader/readerView";
 import { ReaderSidePanel } from "../reader/ReaderSidePanel";
+import { ExternalLinkIcon } from "../reader/panels/readerPanelIcons";
 import { SelectionToolbar } from "../reader/SelectionToolbar";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
 import { useReadingTimer } from "../reader/useReadingTimer";
@@ -54,25 +88,62 @@ type PageSize = {
   height: number;
 };
 
+type ReaderPanelGeometry = {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+};
+
+type VisibleFitAlignment = {
+  requestId: number;
+  activePage: number;
+  pageNumbers: number[];
+  boundsByPage: Map<number, NormalizedContentBounds>;
+  expectedSizes: Map<number, PageSize>;
+  targetZoom: number;
+};
+
+type PendingZoomAnchor = {
+  page: number;
+  pageOffsetRatio: number;
+  expectedPageHeight: number;
+  targetZoom: number;
+};
+
 type ReaderModalProps = {
   document: LibraryDocument;
   // Estado inicial maximizado/restaurado, lido da preferencia persistida pelo
-  // LibraryView antes de abrir o painel (o toggle daqui regrava a preferencia).
+  // LibraryView antes de abrir o painel. A tela cheia nativa e independente.
   initialMaximized: boolean;
   onClose: (readingLocation: ReadingLocation) => void;
   onSaveNotes: (documentId: string, notes: string) => Promise<void>;
   onNotesReloaded: (documentId: string, notes: string) => void;
   onToggleFavorite: (documentId: string) => Promise<void>;
-  // Navegacao pedida pela sidebar esquerda do leitor: o LibraryView troca a
-  // rota ativa depois que o leitor fecha salvando a posicao.
-  onNavigate: (route: LibraryRoute) => void;
 };
 
 const fallbackPageCount = 15;
-const minZoom = 70;
-const maxZoom = 140;
+const minZoom = 10;
+const maxZoom = 200;
 const zoomStep = 10;
+const pinchZoomThreshold = 36;
+const pinchZoomResetDelayMs = 180;
+const readerMinWidth = 720;
+const readerMinHeight = 480;
 const popoutFlushTimeoutMs = 5000;
+const readerTopInset = 86;
+const readerBottomInset = 198;
+const readerSideInset = 22;
+const readerReadingInset = 40;
+const readerReadingModeInset = 24;
+const readerPageGap = 24;
+const readerModeTransitionMs = 220;
+const readerViewPreferencesSettingKey = "reader.view-preferences";
+
+// Coordena a janela nativa entre instancias consecutivas do Reader. A troca
+// de PDF desmonta uma instancia e monta outra sem aguardar efeitos assincronos;
+// estes marcadores impedem o cleanup antigo de retirar a nova da tela cheia.
+let activeReaderInstanceToken: symbol | null = null;
+let readerNativeFullscreenSessionActive = false;
+let readerNativeFullscreenTransitionPromise: Promise<void> | null = null;
 
 // Posicao inicial do painel de anotacoes flutuante: encostado a direita, logo
 // abaixo do header do leitor — mesmo comportamento de antes do refactor para
@@ -111,135 +182,6 @@ function pageScale(zoom: number) {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function Icon({ name }: { name: "back" | "close" | "leftPanel" | "notes" | "prev" | "next" | "minus" | "plus" | "search" | "pen" | "split" | "maximize" | "restore" }) {
-  const commonProps = {
-    width: 18,
-    height: 18,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 2,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
-
-  if (name === "back") {
-    return (
-      <svg {...commonProps}>
-        <path d="M19 12H5" />
-        <path d="M12 19l-7-7 7-7" />
-      </svg>
-    );
-  }
-
-  if (name === "close") {
-    return (
-      <svg {...commonProps}>
-        <line x1="18" x2="6" y1="6" y2="18" />
-        <line x1="6" x2="18" y1="6" y2="18" />
-      </svg>
-    );
-  }
-
-  if (name === "leftPanel") {
-    return (
-      <svg {...commonProps}>
-        <rect x="4" y="5" width="16" height="14" rx="2" />
-        <path d="M9 5v14" />
-      </svg>
-    );
-  }
-
-  if (name === "notes") {
-    return (
-      <svg {...commonProps}>
-        <rect x="4" y="5" width="16" height="14" rx="2" />
-        <path d="M15 5v14" />
-      </svg>
-    );
-  }
-
-  if (name === "pen") {
-    return (
-      <svg {...commonProps}>
-        <path d="m15 5 4 4" />
-        <path d="M14 6 4 16v4h4L18 10" />
-        <path d="M13 20h7" />
-      </svg>
-    );
-  }
-
-  if (name === "split") {
-    return (
-      <svg {...commonProps}>
-        <rect x="4" y="5" width="16" height="14" rx="2" />
-        <path d="M14 5v14" />
-      </svg>
-    );
-  }
-
-  if (name === "maximize") {
-    return (
-      <svg {...commonProps}>
-        <path d="M8 4H4v4" />
-        <path d="M16 4h4v4" />
-        <path d="M20 16v4h-4" />
-        <path d="M8 20H4v-4" />
-      </svg>
-    );
-  }
-
-  if (name === "restore") {
-    return (
-      <svg {...commonProps}>
-        <path d="M8 4h12v12" />
-        <path d="M4 8h12v12H4z" />
-      </svg>
-    );
-  }
-
-  if (name === "prev") {
-    return (
-      <svg {...commonProps}>
-        <path d="M15 18l-6-6 6-6" />
-      </svg>
-    );
-  }
-
-  if (name === "next") {
-    return (
-      <svg {...commonProps}>
-        <path d="M9 18l6-6-6-6" />
-      </svg>
-    );
-  }
-
-  if (name === "minus") {
-    return (
-      <svg {...commonProps}>
-        <path d="M5 12h14" />
-      </svg>
-    );
-  }
-
-  if (name === "plus") {
-    return (
-      <svg {...commonProps}>
-        <path d="M12 5v14" />
-        <path d="M5 12h14" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...commonProps}>
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.5-3.5" />
-    </svg>
-  );
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -271,16 +213,35 @@ function getMaximizedReaderSize() {
 // LibraryView). Tambem e o fallback ao restaurar um leitor que abriu
 // maximizado e nunca teve tamanho/posicao proprios.
 function getDefaultReaderSize() {
+  return clampReaderSizeToViewport({
+    width: Math.max(readerMinWidth, Math.min(1240, window.innerWidth - 64)),
+    height: Math.max(readerMinHeight, Math.min(900, window.innerHeight - 96)),
+  });
+}
+
+function clampReaderSizeToViewport(size: { width: number; height: number }) {
+  const viewportWidth = Math.max(1, window.innerWidth);
+  const viewportHeight = Math.max(1, window.innerHeight);
   return {
-    width: Math.max(720, Math.min(1240, window.innerWidth - 64)),
-    height: Math.max(480, Math.min(900, window.innerHeight - 96)),
+    width: Math.min(viewportWidth, Math.max(Math.min(readerMinWidth, viewportWidth), size.width)),
+    height: Math.min(viewportHeight, Math.max(Math.min(readerMinHeight, viewportHeight), size.height)),
+  };
+}
+
+function clampReaderPositionToViewport(
+  position: { x: number; y: number },
+  size: { width: number; height: number },
+) {
+  return {
+    x: Math.max(0, Math.min(position.x, window.innerWidth - Math.min(size.width, window.innerWidth))),
+    y: Math.max(0, Math.min(position.y, window.innerHeight - Math.min(size.height, window.innerHeight))),
   };
 }
 
 function getDefaultReaderPosition(size: { width: number; height: number }) {
   return {
-    x: Math.max(8, Math.round((window.innerWidth - size.width) / 2)),
-    y: 84,
+    x: Math.max(0, Math.round((window.innerWidth - size.width) / 2)),
+    y: Math.max(0, Math.min(84, window.innerHeight - size.height)),
   };
 }
 
@@ -289,10 +250,14 @@ function centerHorizontalScroll(element: HTMLElement) {
   element.scrollLeft = Math.round(scrollMax / 2);
 }
 
+function getPageAlignedScrollTop(pageElement: HTMLElement, topInset: number) {
+  return Math.max(0, pageElement.offsetTop - topInset);
+}
+
 function PdfPagePlaceholder({ pageSize, label }: { pageSize: PageSize; label?: string }) {
   return (
     <article
-      className="mx-auto flex items-center justify-center bg-white text-xs font-semibold text-slate-400 shadow-[0_18px_42px_rgba(15,23,42,0.18)]"
+      className="mx-auto flex items-center justify-center bg-white text-xs font-semibold text-slate-400 shadow-[var(--reader-page-shadow)]"
       style={{ width: pageSize.width, minHeight: pageSize.height }}
     >
       {label}
@@ -337,10 +302,6 @@ function base64ToBytes(base64: string) {
   return bytes;
 }
 
-function buildFallbackPageNumbers() {
-  return Array.from({ length: fallbackPageCount }, (_, index) => index + 1);
-}
-
 type PdfCanvasPageProps = {
   pdfDocument: PdfDocument;
   pageNumber: number;
@@ -350,7 +311,7 @@ type PdfCanvasPageProps = {
   onRetry: (annotationId: string) => void;
   onSelectAnnotation: (annotation: Annotation) => void;
   pageSize: PageSize;
-  onPageSize: (pageNumber: number, size: PageSize) => void;
+  onPageSize: (pageNumber: number, size: PageSize, renderedZoom: number) => void;
 };
 
 function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates, onRetry, onSelectAnnotation, pageSize, onPageSize }: PdfCanvasPageProps) {
@@ -365,8 +326,12 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
     async function renderPage() {
       setIsRendering(true);
       const page = await pdfDocument.getPage(pageNumber);
+      if (isCancelled) {
+        return;
+      }
+
       const viewport = page.getViewport({ scale });
-      onPageSize(pageNumber, { width: viewport.width, height: viewport.height });
+      onPageSize(pageNumber, { width: viewport.width, height: viewport.height }, zoom);
       const canvas = canvasRef.current;
       const canvasContext = canvas?.getContext("2d");
 
@@ -403,12 +368,12 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
       isCancelled = true;
       renderTask?.cancel();
     };
-  }, [onPageSize, pageNumber, pdfDocument, scale]);
+  }, [onPageSize, pageNumber, pdfDocument, scale, zoom]);
 
   // article e `relative` para ancorar a camada de texto e os highlights, que
   // ficam sobrepostos ao canvas com inset-0.
   return (
-    <article className="relative mx-auto bg-white shadow-[0_18px_42px_rgba(15,23,42,0.18)]" style={isRendering ? { width: pageSize.width, minHeight: pageSize.height } : undefined}>
+    <article className="relative mx-auto bg-white shadow-[var(--reader-page-shadow)]" style={isRendering ? { width: pageSize.width, minHeight: pageSize.height } : undefined}>
       {isRendering ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-400">
           Renderizando pagina {pageNumber}...
@@ -427,17 +392,10 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
 
 function VirtualPdfCanvasPage(props: PdfCanvasPageProps) {
   const { elementRef, isInViewport } = useInViewport<HTMLDivElement>("900px 0px");
-  const [hasEnteredViewport, setHasEnteredViewport] = useState(false);
-
-  useEffect(() => {
-    if (isInViewport) {
-      setHasEnteredViewport(true);
-    }
-  }, [isInViewport]);
 
   return (
     <div ref={elementRef}>
-      {hasEnteredViewport ? <PdfCanvasPage {...props} /> : <PdfPagePlaceholder pageSize={props.pageSize} />}
+      {isInViewport ? <PdfCanvasPage {...props} /> : <PdfPagePlaceholder pageSize={props.pageSize} />}
     </div>
   );
 }
@@ -449,7 +407,7 @@ function FallbackReaderPage({ page, zoom, document }: { page: number; zoom: numb
 
   return (
     <article
-      className="mx-auto bg-white text-slate-950 shadow-[0_18px_42px_rgba(15,23,42,0.18)]"
+      className="mx-auto bg-white text-slate-950 shadow-[var(--reader-page-shadow)]"
       style={{ width: pageWidth, minHeight: pageHeight }}
     >
       <div className="px-[8%] py-[8%]">
@@ -494,26 +452,6 @@ function FallbackReaderPage({ page, zoom, document }: { page: number; zoom: numb
   );
 }
 
-function FallbackThumbnail({ page, active, onClick }: { page: number; active: boolean; onClick: () => void }) {
-  return (
-    <button type="button" className="block w-full text-left" onClick={onClick}>
-      <div
-        className={`mx-auto h-44 w-36 rounded border bg-white p-3 shadow-sm transition ${
-          active ? "border-primary ring-2 ring-primary-soft" : "border-indigo-200 hover:border-primary"
-        }`}
-      >
-        <div className="h-1.5 w-24 rounded-full bg-primary" />
-        <div className="mt-3 space-y-1">
-          {Array.from({ length: 9 }, (_, index) => (
-            <div key={index} className="h-1 rounded-full bg-indigo-200" style={{ width: `${100 - (index % 4) * 9}%` }} />
-          ))}
-        </div>
-      </div>
-      <span className="mt-2 block text-center text-sm text-text-subtle">{page}</span>
-    </button>
-  );
-}
-
 export function ReaderModal({
   document,
   initialMaximized,
@@ -521,13 +459,33 @@ export function ReaderModal({
   onSaveNotes,
   onNotesReloaded,
   onToggleFavorite,
-  onNavigate,
 }: ReaderModalProps) {
-  const fallbackPageNumbers = useMemo(buildFallbackPageNumbers, []);
+  const readerInstanceTokenRef = useRef(Symbol(`reader-${document.id}`));
   const readerSurfaceRef = useRef<HTMLElement | null>(null);
+  const pinchZoomAccumulatorRef = useRef(0);
+  const pinchZoomResetTimerRef = useRef<number | null>(null);
+  const readerContextMenuOpenedByKeyboardRef = useRef(false);
+  const readerContextMenu = useContextMenu();
   const pageRefs = useRef<Array<HTMLElement | null>>([]);
+  const activePageLockRef = useRef<{ page: number; expiresAt: number } | null>(null);
+  const leftIslandRef = useRef<HTMLDivElement | null>(null);
+  const dockIslandRef = useRef<HTMLDivElement | null>(null);
+  const readingModeExitButtonRef = useRef<HTMLButtonElement | null>(null);
+  const visibleContentCacheRef = useRef<Map<number, Promise<NormalizedContentBounds>>>(new Map());
+  const visibleContentAbortControllerRef = useRef(new AbortController());
+  const visibleContentGenerationRef = useRef(0);
+  const fitRequestSequenceRef = useRef(0);
+  const pendingVisibleAlignmentRef = useRef<VisibleFitAlignment | null>(null);
+  const pendingZoomAnchorRef = useRef<PendingZoomAnchor | null>(null);
+  const readingModeTransitionAnchorRef = useRef<Pick<PendingZoomAnchor, "page" | "pageOffsetRatio"> | null>(null);
+  const readingRestoreSequenceRef = useRef(0);
+  const pageBaseSizesRef = useRef<Map<number, PageSize>>(new Map());
   const [pageSizes, setPageSizes] = useState<Map<number, PageSize>>(new Map());
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
+  const pdfDocumentRef = useRef<PdfDocument | null>(pdfDocument);
+  pdfDocumentRef.current = pdfDocument;
+  const activeDocumentIdRef = useRef(document.id);
+  activeDocumentIdRef.current = document.id;
   const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
   const [pdfError, setPdfError] = useState("");
   const [fileSizeBytes, setFileSizeBytes] = useState<number | null>(null);
@@ -535,17 +493,32 @@ export function ReaderModal({
   const [totalPages, setTotalPages] = useState(hasPdfSource(document) ? 1 : fallbackPageCount);
   const [currentPage, setCurrentPage] = useState(document.readingLocation?.page ?? Math.max(1, Math.ceil((document.progress / 100) * totalPages)));
   const [zoom, setZoom] = useState(getInitialZoom(document));
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const [viewAlignmentRevision, setViewAlignmentRevision] = useState(0);
+  const [zoomMode, setZoomMode] = useState<ReaderZoomMode>("custom");
+  const [pageLayout, setPageLayout] = useState<ReaderPageLayout>(defaultReaderViewPreferences.pageLayout);
+  const [continuousScroll, setContinuousScroll] = useState(defaultReaderViewPreferences.continuousScroll);
+  const [showCover, setShowCover] = useState(defaultReaderViewPreferences.showCover);
+  const [viewPreferencesLoaded, setViewPreferencesLoaded] = useState(false);
+  const [isReadingMode, setIsReadingMode] = useState(false);
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+  const [isFullscreenTransitioning, setIsFullscreenTransitioning] = useState(false);
+  const [isTogglingFavoriteFromContextMenu, setIsTogglingFavoriteFromContextMenu] = useState(false);
+  const [isOpeningOriginalFromContextMenu, setIsOpeningOriginalFromContextMenu] = useState(false);
+  const [readerActionError, setReaderActionError] = useState("");
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   // Incrementado no Ctrl+F para a sidebar focar o campo de busca depois de
   // renderizada (sinal deterministico, sem timers de foco).
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [sidePanelInitialTab, setSidePanelInitialTab] = useState<"annotations" | undefined>(undefined);
+  // Sinaliza para a doca inferior que o campo de nota deve receber foco. A
+  // nota continua estritamente vinculada a uma selecao capturada no PDF.
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   // O modo flutuante do painel de anotacoes agora vive na pilha global de
   // paineis (FloatingPanelsContext) em vez de um boolean local — assim ele
   // coexiste com outros paineis (ex.: um caderno aberto ao mesmo tempo).
   const queryClient = useQueryClient();
-  const { panels: floatingPanels, openPanel, closePanel, minimizePanel, restorePanel, movePanel } = useFloatingPanels();
+  const { panels: floatingPanels, openPanel, closePanel, minimizePanel, movePanel } = useFloatingPanels();
   const annotationsPanelId = floatingPanelId("annotations", document.id);
   const annotationsPanel = floatingPanels.find((panel) => panel.id === annotationsPanelId) ?? null;
   const sidePanelFloating = annotationsPanel !== null;
@@ -556,11 +529,24 @@ export function ReaderModal({
   const [readerPanelSize, setReaderPanelSize] = useState(() =>
     initialMaximized ? getMaximizedReaderSize() : getDefaultReaderSize(),
   );
-  const [isReaderMaximized, setIsReaderMaximized] = useState(initialMaximized);
-  const readerRestoreStateRef = useRef<{
-    position: { x: number; y: number };
-    size: { width: number; height: number };
-  } | null>(null);
+  const isReaderMaximized = initialMaximized;
+  const nativeFullscreenRestoreStateRef = useRef<ReaderPanelGeometry | null>(null);
+  const nativeFullscreenOwnedRef = useRef(false);
+  const isNativeFullscreenRef = useRef(false);
+  const fullscreenTransitioningRef = useRef(false);
+  const fullscreenTransitionPromiseRef = useRef<Promise<void> | null>(null);
+  const fullscreenSyncSequenceRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const token = readerInstanceTokenRef.current;
+    activeReaderInstanceToken = token;
+
+    return () => {
+      if (activeReaderInstanceToken === token) {
+        activeReaderInstanceToken = null;
+      }
+    };
+  }, []);
 
   // Fechar o leitor remove os paineis dele da pilha (o proprio leitor e o de
   // anotacoes) — sem isso paineis "fantasma" continuariam registrados depois
@@ -571,7 +557,6 @@ export function ReaderModal({
       closePanel(readerPanelId);
     };
   }, [closePanel, annotationsPanelId, readerPanelId]);
-  const [isHighlightModeEnabled, setIsHighlightModeEnabled] = useState(false);
   const [notesText, setNotesText] = useState(document.notes ?? "");
   const notesSaveTimerRef = useRef<number | null>(null);
   const latestNotesRef = useRef(document.notes ?? "");
@@ -595,25 +580,69 @@ export function ReaderModal({
     fileSizeBytes: null,
   });
 
-  currentPageStateRef.current = {
-    documentId: document.id,
-    page: currentPage,
-    progress: Math.round((currentPage / totalPages) * 100),
-    totalPages: pdfDocument?.numPages ?? null,
-    fileSizeBytes,
-  };
-
   const updatePopoutDocumentId = useCallback((nextDocumentId: string | null) => {
     popoutDocumentIdRef.current = nextDocumentId;
     setPopoutDocumentId(nextDocumentId);
   }, []);
 
-  const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
+  const pageGroups = useMemo(
+    () => groupReaderPages(totalPages, pageLayout, pageLayout === "spread" && showCover),
+    [pageLayout, showCover, totalPages],
+  );
+  const currentPageGroup = useMemo(
+    () => getReaderPageGroup(pageGroups, currentPage),
+    [currentPage, pageGroups],
+  );
+  const progressPage = getReaderProgressPage(currentPageGroup, currentPage);
+
+  currentPageStateRef.current = {
+    documentId: document.id,
+    page: currentPage,
+    progress: Math.round((progressPage / totalPages) * 100),
+    totalPages: pdfDocument?.numPages ?? null,
+    fileSizeBytes,
+  };
+  const currentPageGroupIndex = Math.max(
+    0,
+    pageGroups.findIndex((group) => group.includes(currentPage)),
+  );
+  const visiblePageLabel = currentPageGroup.length > 1
+    ? `${currentPageGroup[0]}–${currentPageGroup[currentPageGroup.length - 1]}`
+    : String(currentPageGroup[0] ?? currentPage);
   const readerDocument = useMemo(
     () => ({ ...document, notes: notesText, timeSpentSeconds: document.timeSpentSeconds }),
     [document, notesText],
   );
   const defaultPageSize = useMemo(() => estimatedPageSize(zoom), [zoom]);
+  const isCompactReader = readerPanelSize.width < 1000;
+  const activeTopInset = isReadingMode ? readerReadingModeInset : readerTopInset;
+  const activeBottomInset = isReadingMode ? readerReadingModeInset : readerBottomInset;
+  const readingLeftInset =
+    isReadingMode
+      ? readerReadingModeInset
+      : !isCompactReader && leftPanelOpen
+      ? readerSideInset + readerLeftSidebarWidth + 16
+      : readerReadingInset;
+  const readingRightInset = isReadingMode
+    ? readerReadingModeInset
+    : isCompactReader
+      ? 24
+      : readerReadingInset;
+  const currentPageSize = pageSizes.get(currentPage) ?? defaultPageSize;
+  const readingLaneWidth = Math.max(0, readerPanelSize.width - readingLeftInset - readingRightInset);
+  const currentGroupWidth = currentPageGroup.reduce(
+    (width, page) => width + (pageSizes.get(page) ?? defaultPageSize).width,
+    readerPageGap * Math.max(0, currentPageGroup.length - 1),
+  ) + (
+    pageLayout === "spread" && showCover && currentPageGroup.length === 1 && currentPageGroup[0] === 1
+      ? currentPageSize.width + readerPageGap
+      : 0
+  );
+  const visiblePageWidth = Math.min(currentGroupWidth || currentPageSize.width, readingLaneWidth);
+  const pageRightEdge = readingLeftInset + (readingLaneWidth + visiblePageWidth) / 2;
+  const toolRailRight = isCompactReader
+    ? readerSideInset
+    : Math.max(readerSideInset, Math.round(readerPanelSize.width - pageRightEdge - 26));
   const annotationsByPage = useMemo(() => {
     const grouped = new Map<number, Annotation[]>();
     for (const annotation of annotations) {
@@ -624,9 +653,168 @@ export function ReaderModal({
     return grouped;
   }, [annotations]);
 
+  const captureCurrentPageAnchor = useCallback(
+    (targetZoom: number) => {
+      const readerSurface = readerSurfaceRef.current;
+      const pageElement = pageRefs.current[currentPage - 1];
+      if (!readerSurface || !pageElement) {
+        return;
+      }
+
+      const alignedTop = getPageAlignedScrollTop(pageElement, activeTopInset);
+      const basePageHeight = pageBaseSizesRef.current.get(currentPage)?.height ??
+        pageElement.offsetHeight / Math.max(0.01, zoom / 100);
+      pendingZoomAnchorRef.current = {
+        page: currentPage,
+        pageOffsetRatio: Math.max(0, readerSurface.scrollTop - alignedTop) / Math.max(1, pageElement.offsetHeight),
+        expectedPageHeight: basePageHeight * (targetZoom / 100),
+        targetZoom,
+      };
+    },
+    [activeTopInset, currentPage, zoom],
+  );
+
+  const changeReadingMode = useCallback(
+    (enabled: boolean) => {
+      if (enabled === isReadingMode) {
+        return;
+      }
+
+      readingRestoreSequenceRef.current += 1;
+      fitRequestSequenceRef.current += 1;
+      pendingVisibleAlignmentRef.current = null;
+      captureCurrentPageAnchor(zoomRef.current);
+      const anchor = pendingZoomAnchorRef.current;
+      readingModeTransitionAnchorRef.current = anchor
+        ? { page: anchor.page, pageOffsetRatio: anchor.pageOffsetRatio }
+        : null;
+
+      if (enabled) {
+        window.getSelection()?.removeAllRanges();
+        setPendingSelection(null);
+      }
+
+      setIsReadingMode(enabled);
+      setViewAlignmentRevision((revision) => revision + 1);
+    },
+    [captureCurrentPageAnchor, isReadingMode],
+  );
+
+  const cancelInitialReadingRestore = useCallback(() => {
+    readingRestoreSequenceRef.current += 1;
+  }, []);
+
+  const cancelReaderAutoAlignment = useCallback(() => {
+    readingRestoreSequenceRef.current += 1;
+    fitRequestSequenceRef.current += 1;
+    pendingVisibleAlignmentRef.current = null;
+    pendingZoomAnchorRef.current = null;
+    readingModeTransitionAnchorRef.current = null;
+    activePageLockRef.current = null;
+  }, []);
+
+  // Ao entrar no layout compacto, libera a largura de leitura. O usuario ainda
+  // pode reabrir o painel pelo cartao do documento, quando ele passa a atuar
+  // como overlay sem deslocar a pagina.
+  useEffect(() => {
+    if (isCompactReader) {
+      setLeftPanelOpen(false);
+    }
+  }, [isCompactReader]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void getSetting(readerViewPreferencesSettingKey)
+      .then((value) => {
+        if (isCancelled) {
+          return;
+        }
+
+        const preferences = parseReaderViewPreferences(value);
+        setPageLayout(preferences.pageLayout);
+        setContinuousScroll(preferences.continuousScroll);
+        setShowCover(preferences.showCover);
+        setViewPreferencesLoaded(true);
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel carregar as preferencias de visualizacao do leitor.", error);
+        if (!isCancelled) {
+          setViewPreferencesLoaded(true);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!viewPreferencesLoaded) {
+      return;
+    }
+
+    const preferences: ReaderViewPreferences = { pageLayout, continuousScroll, showCover };
+    void setSetting(readerViewPreferencesSettingKey, JSON.stringify(preferences)).catch((error) => {
+      console.warn("Nao foi possivel salvar as preferencias de visualizacao do leitor.", error);
+    });
+  }, [continuousScroll, pageLayout, showCover, viewPreferencesLoaded]);
+
+  useEffect(() => {
+    visibleContentAbortControllerRef.current.abort();
+    visibleContentAbortControllerRef.current = new AbortController();
+    visibleContentCacheRef.current = new Map();
+    visibleContentGenerationRef.current += 1;
+    pageBaseSizesRef.current.clear();
+    pendingVisibleAlignmentRef.current = null;
+    fitRequestSequenceRef.current += 1;
+  }, [document.id, pdfDocument]);
+
+  useLayoutEffect(() => {
+    fitRequestSequenceRef.current += 1;
+    pendingVisibleAlignmentRef.current = null;
+  }, [currentPage, pageLayout, showCover]);
+
+  useEffect(() => {
+    for (const island of [leftIslandRef.current, dockIslandRef.current]) {
+      island?.toggleAttribute("inert", isReadingMode);
+    }
+
+    if (isReadingMode) {
+      if (sidePanelFloating) {
+        minimizePanel(annotationsPanelId);
+      }
+      window.requestAnimationFrame(() => readingModeExitButtonRef.current?.focus({ preventScroll: true }));
+    }
+  }, [annotationsPanelId, isReadingMode, minimizePanel, sidePanelFloating]);
+
+  useEffect(() => {
+    return () => {
+      visibleContentAbortControllerRef.current.abort();
+      if (pinchZoomResetTimerRef.current !== null) {
+        window.clearTimeout(pinchZoomResetTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     setPageSizes(new Map());
   }, [document.id, zoom]);
+
+  useEffect(() => {
+    setReaderActionError("");
+    setIsTogglingFavoriteFromContextMenu(false);
+    setIsOpeningOriginalFromContextMenu(false);
+  }, [document.id]);
+
+  useEffect(() => {
+    if (!readerActionError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setReaderActionError(""), 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [readerActionError]);
 
   useLayoutEffect(() => {
     const readerSurface = readerSurfaceRef.current;
@@ -635,11 +823,130 @@ export function ReaderModal({
       return;
     }
 
-    const center = () => centerHorizontalScroll(readerSurface);
-    window.requestAnimationFrame(center);
-  }, [zoom, pageSizes, readerPanelSize.width, leftPanelOpen, sidePanelOpen]);
+    const visibleAlignment = pendingVisibleAlignmentRef.current;
+    if (visibleAlignment && Math.abs(visibleAlignment.targetZoom - zoom) < 0.5) {
+      const sizesAreReady = !pdfDocument || visibleAlignment.pageNumbers.every((pageNumber) => {
+        const measured = pageSizes.get(pageNumber);
+        const expected = visibleAlignment.expectedSizes.get(pageNumber);
+        return Boolean(
+          measured &&
+          expected &&
+          Math.abs(measured.width - expected.width) <= 3 &&
+          Math.abs(measured.height - expected.height) <= 3,
+        );
+      });
 
-  const updatePageSize = useCallback((pageNumber: number, size: PageSize) => {
+      if (sizesAreReady) {
+        const alignVisibleContent = () => {
+          if (
+            pendingVisibleAlignmentRef.current !== visibleAlignment ||
+            visibleAlignment.requestId !== fitRequestSequenceRef.current ||
+            Math.abs(visibleAlignment.targetZoom - zoomRef.current) >= 0.5
+          ) {
+            return;
+          }
+
+          const surfaceRect = readerSurface.getBoundingClientRect();
+          let contentLeft = Number.POSITIVE_INFINITY;
+          let contentTop = Number.POSITIVE_INFINITY;
+          let contentRight = Number.NEGATIVE_INFINITY;
+          let contentBottom = Number.NEGATIVE_INFINITY;
+
+          for (const pageNumber of visibleAlignment.pageNumbers) {
+            const pageElement = pageRefs.current[pageNumber - 1];
+            if (!pageElement) {
+              continue;
+            }
+
+            const pageRect = pageElement.getBoundingClientRect();
+            const bounds = visibleAlignment.boundsByPage.get(pageNumber) ?? fullPageContentBounds;
+            const pageLeft = pageRect.left - surfaceRect.left + readerSurface.scrollLeft;
+            const pageTop = pageRect.top - surfaceRect.top + readerSurface.scrollTop;
+            contentLeft = Math.min(contentLeft, pageLeft + pageRect.width * bounds.left);
+            contentTop = Math.min(contentTop, pageTop + pageRect.height * bounds.top);
+            contentRight = Math.max(contentRight, pageLeft + pageRect.width * bounds.right);
+            contentBottom = Math.max(contentBottom, pageTop + pageRect.height * bounds.bottom);
+          }
+
+          if (![contentLeft, contentTop, contentRight, contentBottom].every(Number.isFinite)) {
+            return;
+          }
+
+          const availableWidth = Math.max(1, readerSurface.clientWidth - readingLeftInset - readingRightInset);
+          const availableHeight = Math.max(1, readerSurface.clientHeight - activeTopInset - activeBottomInset);
+          const contentWidth = contentRight - contentLeft;
+          const contentHeight = contentBottom - contentTop;
+          const targetLeft = contentWidth <= availableWidth
+            ? (contentLeft + contentRight) / 2 - (readingLeftInset + availableWidth / 2)
+            : contentLeft - readingLeftInset;
+          const targetTop = contentHeight <= availableHeight
+            ? (contentTop + contentBottom) / 2 - (activeTopInset + availableHeight / 2)
+            : contentTop - activeTopInset;
+          const maxLeft = Math.max(0, readerSurface.scrollWidth - readerSurface.clientWidth);
+          const maxTop = Math.max(0, readerSurface.scrollHeight - readerSurface.clientHeight);
+          activePageLockRef.current = {
+            page: visibleAlignment.activePage,
+            expiresAt: window.performance.now() + 160,
+          };
+          readerSurface.scrollLeft = clamp(targetLeft, 0, maxLeft);
+          readerSurface.scrollTop = clamp(targetTop, 0, maxTop);
+          pendingVisibleAlignmentRef.current = null;
+        };
+
+        const frameId = window.requestAnimationFrame(alignVisibleContent);
+        return () => window.cancelAnimationFrame(frameId);
+      }
+    }
+
+    const zoomAnchor = pendingZoomAnchorRef.current;
+    if (zoomAnchor && Math.abs(zoomAnchor.targetZoom - zoom) < 0.5) {
+      const pageElement = pageRefs.current[zoomAnchor.page - 1];
+      if (pageElement && (!pdfDocument || Math.abs(pageElement.offsetHeight - zoomAnchor.expectedPageHeight) <= 3)) {
+        const frameId = window.requestAnimationFrame(() => {
+          if (
+            pendingZoomAnchorRef.current !== zoomAnchor ||
+            Math.abs(zoomAnchor.targetZoom - zoomRef.current) >= 0.5
+          ) {
+            return;
+          }
+          activePageLockRef.current = {
+            page: zoomAnchor.page,
+            expiresAt: window.performance.now() + 160,
+          };
+          readerSurface.scrollTop = getPageAlignedScrollTop(pageElement, activeTopInset) +
+            zoomAnchor.pageOffsetRatio * pageElement.offsetHeight;
+          centerHorizontalScroll(readerSurface);
+          pendingZoomAnchorRef.current = null;
+        });
+        return () => window.cancelAnimationFrame(frameId);
+      }
+    }
+
+    const frameId = window.requestAnimationFrame(() => centerHorizontalScroll(readerSurface));
+    return () => window.cancelAnimationFrame(frameId);
+  }, [
+    activeBottomInset,
+    activeTopInset,
+    currentPage,
+    isReadingMode,
+    leftPanelOpen,
+    pageLayout,
+    pageSizes,
+    pdfDocument,
+    readerPanelSize.width,
+    readingLeftInset,
+    readingRightInset,
+    showCover,
+    viewAlignmentRevision,
+    zoom,
+  ]);
+
+  const updatePageSize = useCallback((pageNumber: number, size: PageSize, renderedZoom: number) => {
+    pageBaseSizesRef.current.set(pageNumber, {
+      width: size.width / Math.max(0.01, renderedZoom / 100),
+      height: size.height / Math.max(0.01, renderedZoom / 100),
+    });
+
     setPageSizes((current) => {
       const previous = current.get(pageNumber);
       const width = Math.round(size.width);
@@ -840,8 +1147,14 @@ export function ReaderModal({
     [persistNewAnnotation],
   );
 
-  function buildPayload(page: number, text: string, rects: NewAnnotation["rects"], color: HighlightColor): NewAnnotation {
-    return { documentId: document.id, page, color, selectedText: text, note: "", rects };
+  function buildPayload(
+    page: number,
+    text: string,
+    rects: NewAnnotation["rects"],
+    color: HighlightColor,
+    note = "",
+  ): NewAnnotation {
+    return { documentId: document.id, page, color, selectedText: text, note, rects };
   }
 
   // Cria um highlight por pagina tocada pela selecao (regra "uma anotacao por
@@ -855,8 +1168,24 @@ export function ReaderModal({
       addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, color));
     }
 
-    setSidePanelInitialTab("annotations");
-    setSidePanelOpen(true);
+    window.getSelection()?.removeAllRanges();
+    setPendingSelection(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addAnnotationFromPayload, document.id, pendingSelection]);
+
+  const createNoteFromSelection = useCallback((note: string) => {
+    const normalizedNote = note.trim();
+
+    if (!pendingSelection || !normalizedNote) {
+      return;
+    }
+
+    for (const pageRects of pendingSelection.pages) {
+      addAnnotationFromPayload(
+        buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, "amber", normalizedNote),
+      );
+    }
+
     window.getSelection()?.removeAllRanges();
     setPendingSelection(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -949,18 +1278,26 @@ export function ReaderModal({
   }, [pdfDocument]);
 
   const scrollToPage = useCallback((page: number) => {
+    cancelReaderAutoAlignment();
     const readerSurface = readerSurfaceRef.current;
-    const pageElement = pageRefs.current[page - 1];
+    const targetPage = clamp(Math.round(page), 1, totalPages);
+    const pageElement = pageRefs.current[targetPage - 1];
+    activePageLockRef.current = {
+      page: targetPage,
+      expiresAt: window.performance.now() + 700,
+    };
 
     if (!readerSurface || !pageElement) {
+      setCurrentPage(targetPage);
       return;
     }
 
+    setCurrentPage(targetPage);
     readerSurface.scrollTo({
-      top: pageElement.offsetTop - 24,
+      top: getPageAlignedScrollTop(pageElement, activeTopInset),
       behavior: "smooth",
     });
-  }, []);
+  }, [activeTopInset, cancelReaderAutoAlignment, totalPages]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -1186,11 +1523,225 @@ export function ReaderModal({
       scrollMax,
       canMeasure: scrollMax > 0,
       page: currentPage,
-      pageOffset: pageElement ? Math.max(0, scrollTop - pageElement.offsetTop) : 0,
+      pageOffset: pageElement ? Math.max(0, scrollTop - getPageAlignedScrollTop(pageElement, activeTopInset)) : 0,
       zoom,
       savedAt: new Date().toISOString(),
     };
-  }, [currentPage, document.readingLocation?.pageOffset, document.readingLocation?.scrollRatio, totalPages, zoom]);
+  }, [activeTopInset, currentPage, document.readingLocation?.pageOffset, document.readingLocation?.scrollRatio, totalPages, zoom]);
+
+  const applyNativeFullscreenVisualState = useCallback(
+    (fullscreen: boolean) => {
+      if (fullscreen === isNativeFullscreenRef.current) {
+        return;
+      }
+
+      if (fullscreen) {
+        if (!isReaderMaximized && readerPanel) {
+          nativeFullscreenRestoreStateRef.current = {
+            position: readerPanel.position,
+            size: readerPanelSize,
+          };
+        }
+        isNativeFullscreenRef.current = true;
+        setIsNativeFullscreen(true);
+        setReaderPanelSize(getMaximizedReaderSize());
+        movePanel(readerPanelId, { x: 0, y: 0 });
+        return;
+      }
+
+      isNativeFullscreenRef.current = false;
+      setIsNativeFullscreen(false);
+
+      if (isReaderMaximized) {
+        setReaderPanelSize(getMaximizedReaderSize());
+        movePanel(readerPanelId, { x: 0, y: 0 });
+        nativeFullscreenRestoreStateRef.current = null;
+        return;
+      }
+
+      const fallbackSize = getDefaultReaderSize();
+      const restoreState = nativeFullscreenRestoreStateRef.current ?? {
+        size: fallbackSize,
+        position: getDefaultReaderPosition(fallbackSize),
+      };
+      const restoredSize = clampReaderSizeToViewport(restoreState.size);
+      setReaderPanelSize(restoredSize);
+      movePanel(readerPanelId, clampReaderPositionToViewport(restoreState.position, restoredSize));
+      nativeFullscreenRestoreStateRef.current = null;
+    },
+    [isReaderMaximized, movePanel, readerPanel, readerPanelId, readerPanelSize],
+  );
+
+  useLayoutEffect(() => {
+    if (!readerNativeFullscreenSessionActive || isNativeFullscreenRef.current) {
+      return;
+    }
+
+    nativeFullscreenOwnedRef.current = true;
+    applyNativeFullscreenVisualState(true);
+  }, [applyNativeFullscreenVisualState]);
+
+  const setNativeFullscreen = useCallback(
+    async (fullscreen: boolean) => {
+      // Fila global: ao trocar de PDF, mais de uma instancia pode receber Esc
+      // enquanto a mesma entrada em tela cheia termina. O loop revalida a
+      // fila depois de cada await, impedindo duas saidas concorrentes.
+      while (readerNativeFullscreenTransitionPromise) {
+        await readerNativeFullscreenTransitionPromise;
+      }
+
+      if (fullscreen === (isNativeFullscreenRef.current || readerNativeFullscreenSessionActive)) {
+        return;
+      }
+
+      const operation = (async () => {
+        fullscreenSyncSequenceRef.current += 1;
+        fullscreenTransitioningRef.current = true;
+        setIsFullscreenTransitioning(true);
+        setReaderActionError("");
+
+        try {
+          await getCurrentWebviewWindow().setFullscreen(fullscreen);
+          readerNativeFullscreenSessionActive = fullscreen;
+          nativeFullscreenOwnedRef.current = fullscreen;
+          applyNativeFullscreenVisualState(fullscreen);
+        } catch (error) {
+          console.warn("Nao foi possivel alterar a tela cheia nativa.", error);
+          setReaderActionError("Não foi possível alterar o modo de tela cheia.");
+        } finally {
+          fullscreenTransitioningRef.current = false;
+          setIsFullscreenTransitioning(false);
+        }
+      })();
+
+      let transition: Promise<void>;
+      transition = operation.finally(() => {
+        if (fullscreenTransitionPromiseRef.current === transition) {
+          fullscreenTransitionPromiseRef.current = null;
+        }
+        if (readerNativeFullscreenTransitionPromise === transition) {
+          readerNativeFullscreenTransitionPromise = null;
+        }
+      });
+      fullscreenTransitionPromiseRef.current = transition;
+      readerNativeFullscreenTransitionPromise = transition;
+      await transition;
+    },
+    [applyNativeFullscreenVisualState],
+  );
+
+  const toggleNativeFullscreen = useCallback(() => {
+    return setNativeFullscreen(!(isNativeFullscreenRef.current || readerNativeFullscreenSessionActive));
+  }, [setNativeFullscreen]);
+
+  const exitOwnedNativeFullscreen = useCallback(async () => {
+    while (readerNativeFullscreenTransitionPromise) {
+      await readerNativeFullscreenTransitionPromise;
+    }
+
+    if (!nativeFullscreenOwnedRef.current && !readerNativeFullscreenSessionActive) {
+      return;
+    }
+
+    if (!isNativeFullscreenRef.current) {
+      const fullscreen = await getCurrentWebviewWindow().isFullscreen();
+      if (!fullscreen) {
+        nativeFullscreenOwnedRef.current = false;
+        readerNativeFullscreenSessionActive = false;
+        return;
+      }
+      nativeFullscreenOwnedRef.current = true;
+      applyNativeFullscreenVisualState(true);
+    }
+
+    await setNativeFullscreen(false);
+  }, [applyNativeFullscreenVisualState, setNativeFullscreen]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let removeResizeListener: (() => void) | null = null;
+    const appWindow = getCurrentWebviewWindow();
+
+    async function synchronizeFullscreenState() {
+      try {
+        while (readerNativeFullscreenTransitionPromise) {
+          await readerNativeFullscreenTransitionPromise;
+          if (isDisposed) {
+            return;
+          }
+        }
+
+        const requestSequence = ++fullscreenSyncSequenceRef.current;
+        const fullscreen = await appWindow.isFullscreen();
+        if (
+          isDisposed ||
+          fullscreenTransitioningRef.current ||
+          readerNativeFullscreenTransitionPromise ||
+          requestSequence !== fullscreenSyncSequenceRef.current
+        ) {
+          return;
+        }
+
+        if (!fullscreen) {
+          nativeFullscreenOwnedRef.current = false;
+          readerNativeFullscreenSessionActive = false;
+        } else if (readerNativeFullscreenSessionActive) {
+          nativeFullscreenOwnedRef.current = true;
+        }
+        applyNativeFullscreenVisualState(fullscreen);
+      } catch (error) {
+        console.warn("Nao foi possivel sincronizar o estado de tela cheia.", error);
+      }
+    }
+
+    void synchronizeFullscreenState();
+    void appWindow
+      .onResized(() => {
+        void synchronizeFullscreenState();
+      })
+      .then((unlisten) => {
+        if (isDisposed) {
+          unlisten();
+          return;
+        }
+        removeResizeListener = unlisten;
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel observar a janela para sincronizar a tela cheia.", error);
+      });
+
+    return () => {
+      isDisposed = true;
+      removeResizeListener?.();
+    };
+  }, [applyNativeFullscreenVisualState]);
+
+  useEffect(() => {
+    const instanceToken = readerInstanceTokenRef.current;
+
+    return () => {
+      const pendingTransition = fullscreenTransitionPromiseRef.current ?? readerNativeFullscreenTransitionPromise;
+      if (pendingTransition || nativeFullscreenOwnedRef.current || readerNativeFullscreenSessionActive) {
+        nativeFullscreenOwnedRef.current = false;
+        void Promise.resolve(pendingTransition)
+          .catch(() => undefined)
+          .then(() => {
+            // Uma nova instancia assumiu a janela durante a troca de PDF. Ela
+            // herda a sessao; o cleanup antigo nao pode desfazer sua tela cheia.
+            if (activeReaderInstanceToken && activeReaderInstanceToken !== instanceToken) {
+              return;
+            }
+
+            return getCurrentWebviewWindow().setFullscreen(false).then(() => {
+              readerNativeFullscreenSessionActive = false;
+            });
+          })
+          .catch((error) => {
+            console.warn("Nao foi possivel sair da tela cheia ao desmontar o leitor.", error);
+          });
+      }
+    };
+  }, []);
 
   // Marca o fechamento explicito para o flush de unmount (abaixo) nao rodar
   // em duplicidade depois do closeAndSave.
@@ -1217,28 +1768,22 @@ export function ReaderModal({
       return;
     }
 
+    await exitOwnedNativeFullscreen();
     onClose(readingLocation);
-  }, [closePopoutAfterFlush, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
-
-  // Navegacao pedida pela sidebar esquerda: fecha o leitor com o mesmo flush
-  // do fechamento normal e, somente se o fechamento nao falhou (flag de
-  // fechamento explicito segue ligada), troca a rota da biblioteca.
-  const handleNavigate = useCallback(
-    async (route: LibraryRoute) => {
-      await closeAndSave();
-
-      if (hasClosedExplicitlyRef.current) {
-        onNavigate(route);
-      }
-    },
-    [closeAndSave, onNavigate],
-  );
+  }, [closePopoutAfterFlush, exitOwnedNativeFullscreen, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
 
   // Ctrl+F abre a sidebar esquerda e foca o campo de busca do documento.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
+        if (isReadingMode) {
+          changeReadingMode(false);
+        } else {
+          cancelReaderAutoAlignment();
+          captureCurrentPageAnchor(zoomRef.current);
+          setViewAlignmentRevision((revision) => revision + 1);
+        }
         setLeftPanelOpen(true);
         setSearchFocusSignal((signal) => signal + 1);
       }
@@ -1246,7 +1791,7 @@ export function ReaderModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [cancelReaderAutoAlignment, captureCurrentPageAnchor, changeReadingMode, isReadingMode]);
 
   // Autosave da posicao de leitura DURANTE a leitura. Escrita imediata de 1
   // statement (reading_location_json/progress), agendada com debounce para nao
@@ -1303,21 +1848,39 @@ export function ReaderModal({
       return;
     }
 
+    const restoreSequence = ++readingRestoreSequenceRef.current;
     const restorePosition = () => {
+      if (restoreSequence !== readingRestoreSequenceRef.current) {
+        return;
+      }
+
       const pageElement = pageRefs.current[Math.max(0, Math.min(totalPages - 1, location.page - 1))];
       const scrollMax = Math.max(0, readerSurface.scrollHeight - readerSurface.clientHeight);
-      const targetTop = pageElement ? pageElement.offsetTop + (location.pageOffset ?? 0) : location.scrollRatio * scrollMax;
+      const targetTop = pageElement
+        ? getPageAlignedScrollTop(pageElement, activeTopInset) + (location.pageOffset ?? 0)
+        : location.scrollRatio * scrollMax;
       readerSurface.scrollTop = Math.min(scrollMax, Math.max(0, targetTop));
     };
 
-    window.requestAnimationFrame(restorePosition);
+    const frameId = window.requestAnimationFrame(restorePosition);
     const restoreTimer = window.setTimeout(restorePosition, 500);
-    return () => window.clearTimeout(restoreTimer);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(restoreTimer);
+      if (readingRestoreSequenceRef.current === restoreSequence) {
+        readingRestoreSequenceRef.current += 1;
+      }
+    };
   }, [document.id, document.readingLocation, isPdfLoading, pdfDocument, totalPages]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") {
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat) {
+        return;
+      }
+
+      if (readerContextMenu.isOpen) {
+        closeReaderContextMenu();
         return;
       }
 
@@ -1335,11 +1898,31 @@ export function ReaderModal({
         return;
       }
 
-      // Esc primeiro fecha a toolbar de selecao; so fecha o leitor se nao houver
-      // selecao ativa.
+      // Esc primeiro fecha a toolbar de selecao, depois o modo de leitura e
+      // por ultimo a tela cheia. Assim o atalho acompanha a camada visivel
+      // mais proxima do usuario e nunca fecha o Reader por baixo dela.
       if (pendingSelection) {
+        event.preventDefault();
         window.getSelection()?.removeAllRanges();
         setPendingSelection(null);
+        return;
+      }
+
+      if (isReadingMode) {
+        event.preventDefault();
+        changeReadingMode(false);
+        window.requestAnimationFrame(() => readerSurfaceRef.current?.focus({ preventScroll: true }));
+        return;
+      }
+
+      if (
+        fullscreenTransitioningRef.current ||
+        readerNativeFullscreenTransitionPromise ||
+        isNativeFullscreenRef.current ||
+        readerNativeFullscreenSessionActive
+      ) {
+        event.preventDefault();
+        void setNativeFullscreen(false);
         return;
       }
 
@@ -1348,12 +1931,42 @@ export function ReaderModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeAndSave, editingAnnotationId, pendingSelection, floatingPanels, readerPanelId]);
+  }, [changeReadingMode, closeAndSave, editingAnnotationId, pendingSelection, floatingPanels, isReadingMode, readerContextMenu.isOpen, readerPanelId, setNativeFullscreen]);
+
+  useEffect(() => {
+    function handleFullscreenShortcut(event: KeyboardEvent) {
+      if (
+        event.key !== "F11" ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.defaultPrevented ||
+        event.repeat
+      ) {
+        return;
+      }
+
+      const topPanel = [...floatingPanels].reverse().find((panel) => !panel.isMinimized);
+      if (topPanel && topPanel.id !== readerPanelId) {
+        return;
+      }
+
+      event.preventDefault();
+      if (fullscreenTransitioningRef.current || readerNativeFullscreenTransitionPromise) {
+        return;
+      }
+      void toggleNativeFullscreen();
+    }
+
+    window.addEventListener("keydown", handleFullscreenShortcut);
+    return () => window.removeEventListener("keydown", handleFullscreenShortcut);
+  }, [floatingPanels, readerPanelId, toggleNativeFullscreen]);
 
   function handleReaderScroll() {
     // A toolbar e posicionada por coordenadas de viewport; ao rolar ela ficaria
     // deslocada, entao escondemos a selecao pendente.
     if (pendingSelection) {
+      window.getSelection()?.removeAllRanges();
       setPendingSelection(null);
     }
 
@@ -1363,72 +1976,541 @@ export function ReaderModal({
       return;
     }
 
-    const anchor = readerSurface.scrollTop + 120;
-    let activePage = 1;
+    const activePageLock = activePageLockRef.current;
+    if (activePageLock && window.performance.now() < activePageLock.expiresAt) {
+      setCurrentPage(activePageLock.page);
+      scheduleReadingSave();
+      return;
+    }
+    activePageLockRef.current = null;
+
+    const anchor = readerSurface.scrollTop + activeTopInset + 34;
+    let activePages = [1];
+    let activePageTop = Number.NEGATIVE_INFINITY;
     pageRefs.current.forEach((pageElement, index) => {
-      if (pageElement && pageElement.offsetTop <= anchor) {
-        activePage = index + 1;
+      if (!pageElement || pageElement.offsetTop > anchor) {
+        return;
+      }
+
+      if (pageElement.offsetTop > activePageTop) {
+        activePages = [index + 1];
+        activePageTop = pageElement.offsetTop;
+      } else if (pageElement.offsetTop === activePageTop) {
+        activePages.push(index + 1);
       }
     });
+    const activePage = activePages.includes(currentPage) ? currentPage : activePages[0] ?? 1;
     setCurrentPage(activePage);
     scheduleReadingSave();
   }
 
-  function changeZoom(nextZoom: number) {
-    setZoom(clamp(nextZoom, minZoom, maxZoom));
-    scheduleReadingSave();
+  const applyZoom = useCallback(
+    (nextZoom: number, mode: ReaderZoomMode) => {
+      cancelInitialReadingRestore();
+      const targetZoom = clamp(nextZoom, minZoom, maxZoom);
+      captureCurrentPageAnchor(targetZoom);
+
+      if (mode !== "visible") {
+        pendingVisibleAlignmentRef.current = null;
+      }
+      if (mode === "custom") {
+        fitRequestSequenceRef.current += 1;
+      }
+
+      zoomRef.current = targetZoom;
+      setZoomMode(mode);
+      setZoom(targetZoom);
+      scheduleReadingSave();
+    },
+    [cancelInitialReadingRestore, captureCurrentPageAnchor, scheduleReadingSave],
+  );
+
+  const changeZoom = useCallback((nextZoom: number) => {
+    cancelReaderAutoAlignment();
+    applyZoom(nextZoom, "custom");
+  }, [applyZoom, cancelReaderAutoAlignment]);
+
+  const changeZoomBy = useCallback(
+    (delta: number) => {
+      cancelReaderAutoAlignment();
+      applyZoom(zoomRef.current + delta, "custom");
+    },
+    [applyZoom, cancelReaderAutoAlignment],
+  );
+
+  // Mantem os atalhos no zoom do documento e bloqueia o zoom nativo do
+  // WebView, que escalaria toda a interface e desalinharia o PDF da text layer.
+  useEffect(() => {
+    function handleZoomShortcut(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.defaultPrevented) {
+        return;
+      }
+
+      const topPanel = [...floatingPanels].reverse().find((panel) => !panel.isMinimized);
+      if (topPanel && topPanel.id !== readerPanelId) {
+        return;
+      }
+
+      const isZoomIn = event.key === "+" || event.key === "=" || event.code === "NumpadAdd";
+      const isZoomOut = event.key === "-" || event.key === "_" || event.code === "NumpadSubtract";
+      const isReset = event.key === "0" || event.code === "Numpad0";
+
+      if (!isZoomIn && !isZoomOut && !isReset) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isReset) {
+        changeZoom(100);
+      } else {
+        changeZoomBy(isZoomIn ? zoomStep : -zoomStep);
+      }
+    }
+
+    window.addEventListener("keydown", handleZoomShortcut);
+    return () => window.removeEventListener("keydown", handleZoomShortcut);
+  }, [changeZoom, changeZoomBy, floatingPanels, readerPanelId]);
+
+  // Chromium/WebView2 representa a pinca do touchpad como wheel + ctrlKey. O
+  // listener precisa ser nao-passivo para impedir o zoom nativo da janela.
+  useEffect(() => {
+    const readerSurface = readerSurfaceRef.current;
+
+    if (!readerSurface) {
+      return;
+    }
+
+    function handlePinchZoom(event: WheelEvent) {
+      if (!event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      event.preventDefault();
+      if (pinchZoomResetTimerRef.current !== null) {
+        window.clearTimeout(pinchZoomResetTimerRef.current);
+      }
+      pinchZoomResetTimerRef.current = window.setTimeout(() => {
+        pinchZoomAccumulatorRef.current = 0;
+        pinchZoomResetTimerRef.current = null;
+      }, pinchZoomResetDelayMs);
+      const eventSurfaceHeight = event.currentTarget instanceof HTMLElement ? event.currentTarget.clientHeight : 1;
+      const deltaMultiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? eventSurfaceHeight : 1;
+      const normalizedDelta = event.deltaY * deltaMultiplier;
+      const currentAccumulator = pinchZoomAccumulatorRef.current;
+
+      if (currentAccumulator !== 0 && Math.sign(currentAccumulator) !== Math.sign(normalizedDelta)) {
+        pinchZoomAccumulatorRef.current = 0;
+      }
+
+      pinchZoomAccumulatorRef.current += normalizedDelta;
+      const accumulatedDelta = pinchZoomAccumulatorRef.current;
+      const stepCount = Math.trunc(Math.abs(accumulatedDelta) / pinchZoomThreshold);
+
+      if (stepCount === 0) {
+        return;
+      }
+
+      const accumulatedDirection = Math.sign(accumulatedDelta);
+      pinchZoomAccumulatorRef.current -= accumulatedDirection * stepCount * pinchZoomThreshold;
+      changeZoomBy(accumulatedDirection < 0 ? stepCount * zoomStep : -stepCount * zoomStep);
+    }
+
+    readerSurface.addEventListener("wheel", handlePinchZoom, { passive: false });
+    return () => readerSurface.removeEventListener("wheel", handlePinchZoom);
+  }, [changeZoomBy, readerPanel?.id]);
+
+  function closeReaderContextMenu() {
+    const shouldRestoreFocus = readerContextMenuOpenedByKeyboardRef.current;
+    readerContextMenuOpenedByKeyboardRef.current = false;
+    readerContextMenu.close();
+
+    if (shouldRestoreFocus) {
+      window.requestAnimationFrame(() => readerSurfaceRef.current?.focus({ preventScroll: true }));
+    }
   }
 
-  const toggleReaderMaximized = useCallback(() => {
-    if (!readerPanel) {
+  function openReaderContextMenu(event: ReactMouseEvent<HTMLElement>) {
+    readerContextMenuOpenedByKeyboardRef.current = false;
+    readerContextMenu.open(event);
+  }
+
+  function handleReaderContextMenuKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)
+    ) {
+      cancelReaderAutoAlignment();
+    }
+
+    if (!((event.shiftKey && event.key === "F10") || event.key === "ContextMenu")) {
       return;
     }
 
-    // A preferencia persiste em fire-and-forget: falha de escrita nao pode
-    // travar o toggle visual (na proxima abertura vale o ultimo valor salvo).
-    void setReaderOpensMaximized(!isReaderMaximized).catch((error) => {
-      console.warn("Nao foi possivel salvar a preferencia de maximizacao do leitor.", error);
+    event.preventDefault();
+    const surfaceRect = event.currentTarget.getBoundingClientRect();
+    readerContextMenuOpenedByKeyboardRef.current = true;
+    readerContextMenu.openAt(
+      surfaceRect.left + Math.min(surfaceRect.width / 2, 520),
+      surfaceRect.top + Math.min(112, surfaceRect.height / 3),
+    );
+  }
+
+  async function handleContextToggleFavorite() {
+    if (isTogglingFavoriteFromContextMenu) {
+      return;
+    }
+
+    closeReaderContextMenu();
+    setReaderActionError("");
+    setIsTogglingFavoriteFromContextMenu(true);
+
+    try {
+      await onToggleFavorite(document.id);
+    } catch (error) {
+      console.warn("Nao foi possivel atualizar o favorito.", error);
+      setReaderActionError("Não foi possível atualizar o favorito. Tente novamente.");
+    } finally {
+      setIsTogglingFavoriteFromContextMenu(false);
+    }
+  }
+
+  async function handleContextOpenOriginal() {
+    if (isOpeningOriginalFromContextMenu) {
+      return;
+    }
+
+    closeReaderContextMenu();
+    setReaderActionError("");
+    setIsOpeningOriginalFromContextMenu(true);
+
+    try {
+      await openDocumentExternally(document.id);
+    } catch (error) {
+      console.warn("Nao foi possivel abrir o PDF externamente.", error);
+      setReaderActionError("Não foi possível abrir o PDF original. Verifique o arquivo e tente novamente.");
+    } finally {
+      setIsOpeningOriginalFromContextMenu(false);
+    }
+  }
+
+  // A doca 1C permanece no leitor. Esta acao oferece a mesma informacao em um
+  // painel independente para fluxos que precisam de mais espaco; openPanel
+  // tambem restaura e traz para frente uma instancia ja existente.
+  function openDetachedPanel() {
+    openPanel("annotations", document.id, getAnnotationsPanelInitialPosition());
+  }
+
+  // Leva o painel de detalhes/anotacoes para uma janela nativa do SO. Faz o
+  // flush das notas e da posicao ANTES de abrir, para a popout ler do SQLite ja
+  // com o estado atual.
+  async function openPanelSystemWindow() {
+    await flushNotes();
+    await setDocumentReadingLocation(document, getCurrentReadingLocation());
+    await invoke("open_reader_panel_window", {
+      documentId: document.id,
+      documentTitle: document.title,
     });
-
-    if (isReaderMaximized) {
-      // Sem restore salvo (leitor abriu ja maximizado): volta ao tamanho e
-      // posicao padrao em vez de ficar edge-to-edge com cantos arredondados.
-      const fallbackSize = getDefaultReaderSize();
-      const restoreState = readerRestoreStateRef.current ?? {
-        size: fallbackSize,
-        position: getDefaultReaderPosition(fallbackSize),
-      };
-
-      setReaderPanelSize(restoreState.size);
-      movePanel(readerPanelId, restoreState.position);
-      setIsReaderMaximized(false);
-      return;
-    }
-
-    readerRestoreStateRef.current = {
-      position: readerPanel.position,
-      size: readerPanelSize,
+    updatePopoutDocumentId(document.id);
+    const payload: ReaderPageStatePayload = {
+      documentId: document.id,
+      page: currentPage,
+      progress,
+      totalPages: pdfDocument?.numPages ?? null,
+      fileSizeBytes,
     };
-    setReaderPanelSize(getMaximizedReaderSize());
-    movePanel(readerPanelId, { x: 0, y: 0 });
-    setIsReaderMaximized(true);
-  }, [isReaderMaximized, movePanel, readerPanel, readerPanelId, readerPanelSize]);
+    await emitTo(READER_PANEL_WINDOW_LABEL, READER_PAGE_STATE_CHANGED_EVENT, payload);
+  }
+
+  const getVisibleContentBounds = useCallback(
+    (pageNumber: number) => {
+      const sourcePdfDocument = pdfDocument;
+      if (sourcePdfDocument && sourcePdfDocument !== pdfDocumentRef.current) {
+        return Promise.reject(new DOMException("Analise cancelada.", "AbortError"));
+      }
+
+      const cache = visibleContentCacheRef.current;
+      const cached = cache.get(pageNumber);
+      if (cached) {
+        return cached;
+      }
+
+      const generation = visibleContentGenerationRef.current;
+      const signal = visibleContentAbortControllerRef.current.signal;
+      let request: Promise<NormalizedContentBounds>;
+      request = (async () => {
+        if (!sourcePdfDocument) {
+          return fullPageContentBounds;
+        }
+
+        const page = await sourcePdfDocument.getPage(pageNumber);
+        if (
+          signal.aborted ||
+          generation !== visibleContentGenerationRef.current ||
+          sourcePdfDocument !== pdfDocumentRef.current
+        ) {
+          throw new DOMException("Analise cancelada.", "AbortError");
+        }
+        return analyzePdfPageVisibleContent(page, signal);
+      })().catch((error) => {
+        if (cache.get(pageNumber) === request) {
+          cache.delete(pageNumber);
+        }
+        throw error;
+      });
+
+      cache.set(pageNumber, request);
+      return request;
+    },
+    [pdfDocument],
+  );
+
+  const getFitPages = useCallback(
+    async (mode: Exclude<ReaderZoomMode, "custom">): Promise<ReaderFitPage[]> => {
+      const sourceDocumentId = document.id;
+      const sourcePdfDocument = pdfDocument;
+      const ensureCurrentDocument = () => {
+        if (
+          activeDocumentIdRef.current !== sourceDocumentId ||
+          pdfDocumentRef.current !== sourcePdfDocument
+        ) {
+          throw new DOMException("Ajuste cancelado.", "AbortError");
+        }
+      };
+      const group = currentPageGroup.length > 0 ? currentPageGroup : [currentPage];
+      const pages = await Promise.all(
+        group.map(async (pageNumber) => {
+          let size = estimatedPageSize(100);
+
+          if (sourcePdfDocument) {
+            const page = await sourcePdfDocument.getPage(pageNumber);
+            ensureCurrentDocument();
+            const viewport = page.getViewport({ scale: pdfBaseScale });
+            size = { width: viewport.width, height: viewport.height };
+          }
+          ensureCurrentDocument();
+          pageBaseSizesRef.current.set(pageNumber, size);
+
+          const bounds = mode === "visible" ? await getVisibleContentBounds(pageNumber) : undefined;
+          ensureCurrentDocument();
+
+          return {
+            ...size,
+            bounds,
+          };
+        }),
+      );
+
+      // No modo livro, a capa ocupa a folha direita. A folha vazia participa
+      // dos ajustes integrais para preservar o eixo visual do spread.
+      if (
+        mode !== "visible" &&
+        pageLayout === "spread" &&
+        showCover &&
+        group.length === 1 &&
+        group[0] === 1
+      ) {
+        return [{ width: pages[0]?.width ?? estimatedPageSize(100).width, height: pages[0]?.height ?? estimatedPageSize(100).height }, ...pages];
+      }
+
+      return pages;
+    },
+    [currentPage, currentPageGroup, document.id, getVisibleContentBounds, pageLayout, pdfDocument, showCover],
+  );
+
+  const applyFitMode = useCallback(
+    async (mode: Exclude<ReaderZoomMode, "custom">) => {
+      cancelInitialReadingRestore();
+      if (mode === "actual") {
+        fitRequestSequenceRef.current += 1;
+        pendingVisibleAlignmentRef.current = null;
+        applyZoom(100, "actual");
+        return;
+      }
+
+      const readerSurface = readerSurfaceRef.current;
+      if (!readerSurface) {
+        return;
+      }
+
+      const requestId = ++fitRequestSequenceRef.current;
+      try {
+        const pages = await getFitPages(mode);
+        if (requestId !== fitRequestSequenceRef.current) {
+          return;
+        }
+
+        const targetZoom = calculateReaderFitZoom({
+          pages,
+          availableWidth: readerSurface.clientWidth - readingLeftInset - readingRightInset,
+          availableHeight: readerSurface.clientHeight - activeTopInset - activeBottomInset,
+          mode,
+          pageGap: readerPageGap,
+          minZoom,
+          maxZoom,
+        });
+
+        if (mode === "visible") {
+          const boundsByPage = new Map<number, NormalizedContentBounds>();
+          currentPageGroup.forEach((pageNumber, index) => {
+            boundsByPage.set(pageNumber, pages[index]?.bounds ?? fullPageContentBounds);
+          });
+          pendingVisibleAlignmentRef.current = {
+            requestId,
+            activePage: currentPage,
+            pageNumbers: [...currentPageGroup],
+            boundsByPage,
+            expectedSizes: new Map(
+              currentPageGroup.map((pageNumber, index) => [
+                pageNumber,
+                {
+                  width: (pages[index]?.width ?? estimatedPageSize(100).width) * (targetZoom / 100),
+                  height: (pages[index]?.height ?? estimatedPageSize(100).height) * (targetZoom / 100),
+                },
+              ]),
+            ),
+            targetZoom,
+          };
+        }
+
+        applyZoom(targetZoom, mode);
+        if (mode === "page" || mode === "height") {
+          const currentPageIndex = Math.max(0, currentPageGroup.indexOf(currentPage));
+          const coverSlotOffset = pageLayout === "spread" && showCover && currentPageGroup[0] === 1 ? 1 : 0;
+          const expectedPage = pages[currentPageIndex + coverSlotOffset];
+          pendingZoomAnchorRef.current = {
+            page: currentPage,
+            pageOffsetRatio: 0,
+            expectedPageHeight: (expectedPage?.height ?? estimatedPageSize(100).height) * (targetZoom / 100),
+            targetZoom,
+          };
+        } else if (mode === "visible") {
+          pendingZoomAnchorRef.current = null;
+        }
+        if (mode === "page" || mode === "height" || mode === "visible") {
+          setViewAlignmentRevision((revision) => revision + 1);
+        }
+      } catch (error) {
+        if (requestId !== fitRequestSequenceRef.current) {
+          return;
+        }
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        if (error instanceof Error && error.name === "RenderingCancelledException") {
+          return;
+        }
+
+        console.warn("Nao foi possivel calcular o ajuste de visualizacao.", error);
+        setReaderActionError("Não foi possível ajustar esta página. Foi mantida a visualização atual.");
+      }
+    },
+    [
+      activeBottomInset,
+      activeTopInset,
+      applyZoom,
+      cancelInitialReadingRestore,
+      currentPage,
+      currentPageGroup,
+      getFitPages,
+      readingLeftInset,
+      readingRightInset,
+    ],
+  );
 
   useEffect(() => {
-    if (!isReaderMaximized) {
+    if (zoomMode === "custom" || zoomMode === "actual") {
       return;
     }
 
+    const timerId = window.setTimeout(() => {
+      void applyFitMode(zoomMode);
+    }, 80);
+    return () => window.clearTimeout(timerId);
+  }, [
+    activeBottomInset,
+    activeTopInset,
+    applyFitMode,
+    currentPage,
+    pageLayout,
+    readerPanelSize.height,
+    readerPanelSize.width,
+    readingLeftInset,
+    readingRightInset,
+    showCover,
+    zoomMode,
+  ]);
+
+  // O padding da area de leitura anima por 220 ms. Uma segunda ancoragem no
+  // fim da transicao evita que a pagina termine alguns pixels acima/abaixo do
+  // ponto preservado pelo primeiro frame. Modos de ajuste sao recalculados ja
+  // com a geometria final; zoom livre apenas restaura a proporcao capturada.
+  useEffect(() => {
+    const transitionAnchor = readingModeTransitionAnchorRef.current;
+    if (!transitionAnchor) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      if (readingModeTransitionAnchorRef.current !== transitionAnchor) {
+        return;
+      }
+      readingModeTransitionAnchorRef.current = null;
+
+      if (zoomMode !== "custom" && zoomMode !== "actual") {
+        void applyFitMode(zoomMode);
+        return;
+      }
+
+      const readerSurface = readerSurfaceRef.current;
+      const pageElement = pageRefs.current[transitionAnchor.page - 1];
+      if (!readerSurface || !pageElement) {
+        return;
+      }
+
+      const targetTop = getPageAlignedScrollTop(pageElement, activeTopInset) +
+        transitionAnchor.pageOffsetRatio * pageElement.offsetHeight;
+      const maxTop = Math.max(0, readerSurface.scrollHeight - readerSurface.clientHeight);
+      readerSurface.scrollTop = clamp(targetTop, 0, maxTop);
+      centerHorizontalScroll(readerSurface);
+    }, readerModeTransitionMs + 24);
+
+    return () => window.clearTimeout(timerId);
+  }, [activeTopInset, applyFitMode, isReadingMode, zoomMode]);
+
+  useEffect(() => {
     function handleWindowResize() {
-      setReaderPanelSize(getMaximizedReaderSize());
-      movePanel(readerPanelId, { x: 0, y: 0 });
+      if (isNativeFullscreen || isReaderMaximized) {
+        setReaderPanelSize(getMaximizedReaderSize());
+        movePanel(readerPanelId, { x: 0, y: 0 });
+        return;
+      }
+
+      const nextSize = clampReaderSizeToViewport(readerPanelSize);
+      const nextPosition = readerPanel
+        ? clampReaderPositionToViewport(readerPanel.position, nextSize)
+        : null;
+
+      if (nextSize.width !== readerPanelSize.width || nextSize.height !== readerPanelSize.height) {
+        setReaderPanelSize(nextSize);
+      }
+
+      if (
+        readerPanel &&
+        nextPosition &&
+        (nextPosition.x !== readerPanel.position.x || nextPosition.y !== readerPanel.position.y)
+      ) {
+        movePanel(readerPanelId, nextPosition);
+      }
     }
 
     window.addEventListener("resize", handleWindowResize);
     return () => window.removeEventListener("resize", handleWindowResize);
-  }, [isReaderMaximized, movePanel, readerPanelId]);
+  }, [isNativeFullscreen, isReaderMaximized, movePanel, readerPanel, readerPanelId, readerPanelSize]);
 
-  const progress = Math.round((currentPage / totalPages) * 100);
+  const progress = Math.round((progressPage / totalPages) * 100);
 
   useEffect(() => {
     if (popoutDocumentId !== document.id) {
@@ -1447,6 +2529,7 @@ export function ReaderModal({
     });
   }, [currentPage, document.id, fileSizeBytes, pdfDocument, popoutDocumentId, progress]);
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
+  const effectiveNativeFullscreen = isNativeFullscreen || readerNativeFullscreenSessionActive;
 
   // Entrada da pilha ainda nao criada (transitorio durante abrir/fechar).
   if (!readerPanel) {
@@ -1458,189 +2541,283 @@ export function ReaderModal({
       panel={readerPanel}
       width={readerPanelSize.width}
       height={readerPanelSize.height}
-      minWidth={720}
-      minHeight={480}
-      resizable={!isReaderMaximized}
-      edgeToEdge={isReaderMaximized}
+      minWidth={Math.min(readerMinWidth, window.innerWidth)}
+      minHeight={Math.min(readerMinHeight, window.innerHeight)}
+      resizable={!isReaderMaximized && !effectiveNativeFullscreen}
+      edgeToEdge={isReaderMaximized || effectiveNativeFullscreen}
+      onResize={setReaderPanelSize}
       onFocusPanel={() => {
         if (sidePanelFloating) {
           minimizePanel(annotationsPanelId);
         }
       }}
-      // O header proprio do leitor (breadcrumb + toolbar) vira o handle de
-      // drag — os controles interativos param a propagacao do mousedown para
-      // nao iniciar arrasto.
       renderHeader={(startDragging) => (
-        <header
-          className={`flex h-11 shrink-0 items-center border-b border-[var(--reader-header-border)] bg-[var(--reader-header-bg)] text-[var(--reader-header-muted)] ${
-            isReaderMaximized ? "" : "cursor-move"
-          }`}
-          onMouseDown={isReaderMaximized ? undefined : startDragging}
-        >
-        <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
-          <button
-            type="button"
-            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
-            aria-label="Voltar para biblioteca"
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={closeAndSave}
-          >
-            <Icon name="back" />
-          </button>
-          <button
-            type="button"
-            className={`rounded-md p-1.5 transition ${leftPanelOpen ? "bg-[var(--reader-header-active-bg)] text-primary" : "text-[var(--reader-header-control)] hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"}`}
-            aria-label={leftPanelOpen ? "Fechar barra lateral" : "Abrir barra lateral"}
-            title={leftPanelOpen ? "Fechar barra lateral" : "Abrir barra lateral"}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={() => setLeftPanelOpen((isOpen) => !isOpen)}
-          >
-            <Icon name="leftPanel" />
-          </button>
-          <h1 id="reader-title" className="min-w-0 truncate text-sm font-bold text-[var(--reader-header-text)]">
-            {document.title}
-          </h1>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2 px-5" onMouseDown={(event) => event.stopPropagation()}>
-          <button type="button" aria-label="Reduzir zoom" className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => changeZoom(zoom - zoomStep)}>
-            <Icon name="minus" />
-          </button>
-          <button type="button" className="min-w-14 rounded-md px-2 py-1 text-sm font-medium text-[var(--reader-header-strong)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => changeZoom(100)}>
-            {zoom}%
-          </button>
-          <button type="button" aria-label="Aumentar zoom" className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]" onClick={() => changeZoom(zoom + zoomStep)}>
-            <Icon name="plus" />
-          </button>
-          <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
-          <span className="min-w-16 text-center text-sm font-medium text-[var(--reader-header-strong)]">
-            {currentPage} / {totalPages}
-          </span>
-          <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
-          <button
-            type="button"
-            aria-label="Buscar no documento"
-            title="Buscar no documento (Ctrl+F)"
-            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
-            onClick={() => {
-              setLeftPanelOpen(true);
-              setSearchFocusSignal((signal) => signal + 1);
-            }}
-          >
-            <Icon name="search" />
-          </button>
-          <button
-            type="button"
-            aria-label="Modo marca-texto"
-            className={`rounded-md p-1.5 transition ${isHighlightModeEnabled ? "text-primary" : "text-[var(--reader-header-control)] hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"}`}
-            onClick={() => setIsHighlightModeEnabled((isEnabled) => !isEnabled)}
-          >
-            <Icon name="pen" />
-          </button>
-          <button
-            type="button"
-            aria-label={sidePanelFloating ? (annotationsPanel?.isMinimized ? "Restaurar painel" : "Minimizar painel") : sidePanelOpen ? "Fechar painel" : "Abrir painel"}
-            title={sidePanelFloating ? (annotationsPanel?.isMinimized ? "Restaurar painel" : "Minimizar painel") : sidePanelOpen ? "Fechar painel" : "Abrir painel"}
-            className={`rounded-md p-1.5 transition ${sidePanelOpen ? "bg-[var(--reader-header-active-bg)] text-primary" : "text-[var(--reader-header-control)] hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"}`}
-            onClick={() => {
-              setSidePanelInitialTab(undefined);
-              if (sidePanelFloating) {
-                setSidePanelOpen(true);
-
-                if (annotationsPanel?.isMinimized) {
-                  restorePanel(annotationsPanelId);
-                  return;
-                }
-
-                minimizePanel(annotationsPanelId);
-                return;
-              }
-
-              setSidePanelOpen((isOpen) => !isOpen);
-            }}
-          >
-            <Icon name="split" />
-          </button>
-          <div className="mx-2 h-6 w-px bg-[var(--reader-header-divider)]" />
-          <button
-            type="button"
-            aria-label={isReaderMaximized ? "Restaurar janela do leitor" : "Maximizar janela do leitor"}
-            title={isReaderMaximized ? "Restaurar" : "Maximizar"}
-            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
-            onClick={toggleReaderMaximized}
-          >
-            <Icon name={isReaderMaximized ? "restore" : "maximize"} />
-          </button>
-          <button
-            type="button"
-            aria-label="Fechar leitor"
-            title="Fechar"
-            className="rounded-md p-1.5 text-[var(--reader-header-control)] transition hover:bg-[var(--reader-header-hover-bg)] hover:text-[var(--reader-header-text)]"
-            onClick={closeAndSave}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        </header>
+        <ReaderFloatingChrome
+          document={document}
+          totalPages={totalPages}
+          canGoPrevious={currentPageGroupIndex > 0}
+          canGoNext={currentPageGroupIndex < pageGroups.length - 1}
+          zoom={zoom}
+          detailsOpen={leftPanelOpen}
+          readingMode={isReadingMode}
+          pageLayout={pageLayout}
+          continuousScroll={continuousScroll}
+          showCover={showCover}
+          zoomMode={zoomMode}
+          nativeFullscreen={effectiveNativeFullscreen}
+          fullscreenTransitioning={isFullscreenTransitioning || Boolean(readerNativeFullscreenTransitionPromise)}
+          visiblePageLabel={visiblePageLabel}
+          compact={isCompactReader}
+          draggable={!isReaderMaximized && !effectiveNativeFullscreen}
+          onStartDragging={startDragging}
+          onToggleDetails={() => setLeftPanelOpen((isOpen) => !isOpen)}
+          onPreviousPage={() => {
+            const previousGroup = pageGroups[currentPageGroupIndex - 1];
+            if (previousGroup?.[0]) {
+              scrollToPage(previousGroup[0]);
+            }
+          }}
+          onNextPage={() => {
+            const nextGroup = pageGroups[currentPageGroupIndex + 1];
+            if (nextGroup?.[0]) {
+              scrollToPage(nextGroup[0]);
+            }
+          }}
+          onSearch={() => {
+            if (isReadingMode) {
+              changeReadingMode(false);
+            } else {
+              cancelReaderAutoAlignment();
+              captureCurrentPageAnchor(zoomRef.current);
+              setViewAlignmentRevision((revision) => revision + 1);
+            }
+            setLeftPanelOpen(true);
+            setSearchFocusSignal((signal) => signal + 1);
+          }}
+          minZoom={minZoom}
+          maxZoom={maxZoom}
+          zoomStep={zoomStep}
+          onZoomChange={changeZoom}
+          onSetPageLayout={(layout) => {
+            cancelReaderAutoAlignment();
+            window.getSelection()?.removeAllRanges();
+            setPendingSelection(null);
+            captureCurrentPageAnchor(zoomRef.current);
+            setPageLayout(layout);
+            setViewAlignmentRevision((revision) => revision + 1);
+          }}
+          onToggleContinuousScroll={() => {
+            cancelReaderAutoAlignment();
+            captureCurrentPageAnchor(zoomRef.current);
+            setContinuousScroll((enabled) => !enabled);
+            setViewAlignmentRevision((revision) => revision + 1);
+          }}
+          onToggleShowCover={() => {
+            cancelReaderAutoAlignment();
+            window.getSelection()?.removeAllRanges();
+            setPendingSelection(null);
+            captureCurrentPageAnchor(zoomRef.current);
+            setShowCover((enabled) => !enabled);
+            setViewAlignmentRevision((revision) => revision + 1);
+          }}
+          onActualSize={() => void applyFitMode("actual")}
+          onFitPage={() => void applyFitMode("page")}
+          onFitWidth={() => void applyFitMode("width")}
+          onFitHeight={() => void applyFitMode("height")}
+          onFitVisible={() => void applyFitMode("visible")}
+          onToggleReadingMode={() => changeReadingMode(!isReadingMode)}
+          onToggleNativeFullscreen={() => void toggleNativeFullscreen()}
+          onClose={closeAndSave}
+        />
       )}
     >
-      <div className="relative min-h-0 flex flex-1 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-        {leftPanelOpen ? (
-          <ReaderLeftSidebar
-            document={document}
-            pdfDocument={pdfDocument}
-            outline={pdfOutline}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            fileSizeBytes={fileSizeBytes}
-            searchFocusSignal={searchFocusSignal}
-            onJumpToPage={scrollToPage}
-            onNavigate={(route) => void handleNavigate(route)}
-            onToggleFavorite={() => void onToggleFavorite(document.id)}
-          />
-        ) : null}
-
-        <main ref={readerSurfaceRef} className="relative min-w-0 flex-1 overflow-auto px-5 py-10" onScroll={handleReaderScroll} onMouseUp={handleReaderMouseUp}>
+      <div className="relative isolate min-h-0 flex-1 overflow-hidden bg-[var(--reader-workspace-bg)] text-[var(--foreground)]">
+        <h1 className="sr-only">{document.title}</h1>
+        <main
+          ref={readerSurfaceRef}
+          tabIndex={0}
+          aria-label={`Área de leitura de ${document.title}`}
+          aria-keyshortcuts="Shift+F10"
+          className={`reader-reading-surface absolute inset-0 overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px] ${
+            continuousScroll ? "" : "snap-y snap-mandatory"
+          }`}
+          style={{
+            paddingTop: activeTopInset,
+            paddingRight: readingRightInset,
+            paddingBottom: activeBottomInset,
+            paddingLeft: readingLeftInset,
+            scrollPaddingTop: activeTopInset,
+            scrollPaddingBottom: activeBottomInset,
+          }}
+          onScroll={handleReaderScroll}
+          onMouseUp={handleReaderMouseUp}
+          onContextMenu={openReaderContextMenu}
+          onKeyDown={handleReaderContextMenuKeyDown}
+          onPointerDownCapture={cancelReaderAutoAlignment}
+          onWheelCapture={cancelReaderAutoAlignment}
+        >
           {isPdfLoading ? (
-            <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-lg bg-white text-sm font-semibold text-text-secondary shadow-card">
+            <div className="mx-auto flex h-96 max-w-xl items-center justify-center rounded-xl border border-border-subtle bg-[var(--reader-floating-surface)] text-sm font-semibold text-text-secondary shadow-[var(--reader-floating-shadow)]">
               Carregando PDF...
             </div>
           ) : pdfError ? (
-            <div className="mx-auto max-w-xl rounded-lg bg-white px-6 py-5 text-sm font-semibold text-status-red-text shadow-card">
+            <div className="mx-auto max-w-xl rounded-xl border border-border-subtle bg-[var(--reader-floating-surface)] px-6 py-5 text-sm font-semibold text-status-red-text shadow-[var(--reader-floating-shadow)]">
               {pdfError}
             </div>
           ) : (
             <div className="flex w-max min-w-full flex-col items-center gap-10">
-              {pageNumbers.map((page) => (
+              {pageGroups.map((group, groupIndex) => (
                 <div
-                  key={page}
-                  ref={(element) => {
-                    pageRefs.current[page - 1] = element;
-                  }}
-                  className="w-fit"
+                  key={group.join("-")}
+                  className={`flex w-fit items-start justify-center gap-6 ${
+                    continuousScroll ? "" : "snap-start snap-always"
+                  }`}
+                  data-reader-page-group={groupIndex}
                 >
-                  {pdfDocument ? (
-                    <VirtualPdfCanvasPage
-                      pdfDocument={pdfDocument}
-                      pageNumber={page}
-                      zoom={zoom}
-                      pageSize={pageSizes.get(page) ?? defaultPageSize}
-                      annotations={annotationsByPage.get(page) ?? []}
-                      saveStates={saveStates}
-                      onRetry={retryAnnotation}
-                      onSelectAnnotation={openAnnotationEditor}
-                      onPageSize={updatePageSize}
+                  {pageLayout === "spread" && showCover && group.length === 1 && group[0] === 1 ? (
+                    <div
+                      aria-hidden="true"
+                      className="shrink-0"
+                      style={{
+                        width: (pageSizes.get(1) ?? defaultPageSize).width,
+                        minHeight: (pageSizes.get(1) ?? defaultPageSize).height,
+                      }}
                     />
-                  ) : (
-                    <FallbackReaderPage page={page} zoom={zoom} document={document} />
-                  )}
+                  ) : null}
+                  {group.map((page) => (
+                    <div
+                      key={page}
+                      ref={(element) => {
+                        pageRefs.current[page - 1] = element;
+                      }}
+                      className="w-fit shrink-0"
+                    >
+                      {pdfDocument ? (
+                        <VirtualPdfCanvasPage
+                          pdfDocument={pdfDocument}
+                          pageNumber={page}
+                          zoom={zoom}
+                          pageSize={pageSizes.get(page) ?? defaultPageSize}
+                          annotations={annotationsByPage.get(page) ?? []}
+                          saveStates={saveStates}
+                          onRetry={retryAnnotation}
+                          onSelectAnnotation={openAnnotationEditor}
+                          onPageSize={updatePageSize}
+                        />
+                      ) : (
+                        <FallbackReaderPage page={page} zoom={zoom} document={document} />
+                      )}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
           )}
         </main>
 
-        {sidePanelOpen ? (
+        <button
+          ref={readingModeExitButtonRef}
+          type="button"
+          aria-hidden={!isReadingMode}
+          aria-keyshortcuts="Escape"
+          tabIndex={isReadingMode ? 0 : -1}
+          className={`reader-reading-exit absolute right-[22px] top-5 z-40 rounded-[11px] border border-border-subtle bg-surface-card px-3.5 py-2 text-xs font-semibold text-text-primary shadow-[var(--reader-floating-shadow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            isReadingMode ? "reader-reading-exit--visible" : ""
+          }`}
+          onClick={() => {
+            changeReadingMode(false);
+            window.requestAnimationFrame(() => readerSurfaceRef.current?.focus({ preventScroll: true }));
+          }}
+        >
+          Sair do modo de leitura <span aria-hidden="true" className="ml-1 text-text-subtle">· Esc</span>
+        </button>
+
+        <ContextMenu
+          isOpen={readerContextMenu.isOpen}
+          x={readerContextMenu.x}
+          y={readerContextMenu.y}
+          autoFocus
+          onClose={closeReaderContextMenu}
+        >
+          <ContextMenuItem
+            icon={<HeartIcon filled={document.favorite} size={16} />}
+            label={isTogglingFavoriteFromContextMenu ? "Atualizando..." : document.favorite ? "Desfavoritar" : "Favoritar"}
+            disabled={isTogglingFavoriteFromContextMenu}
+            onSelect={() => void handleContextToggleFavorite()}
+          />
+          <ContextMenuDivider />
+          <ContextMenuItem
+            icon={<ExternalLinkIcon size={16} />}
+            label={isOpeningOriginalFromContextMenu ? "Abrindo..." : "Abrir original"}
+            disabled={isOpeningOriginalFromContextMenu}
+            onSelect={() => void handleContextOpenOriginal()}
+          />
+        </ContextMenu>
+
+        {leftPanelOpen ? (
+          <div
+            ref={leftIslandRef}
+            aria-hidden={isReadingMode}
+            className={`reader-reading-island absolute bottom-[198px] left-[22px] top-[92px] z-20 min-h-0 ${
+              isReadingMode ? "reader-reading-island--hidden reader-reading-island--left" : ""
+            }`}
+            style={{ width: readerLeftSidebarWidth }}
+          >
+            <ReaderLeftSidebar
+              document={document}
+              pdfDocument={pdfDocument}
+              outline={pdfOutline}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              fileSizeBytes={fileSizeBytes}
+              progress={progress}
+              searchFocusSignal={searchFocusSignal}
+              onJumpToPage={scrollToPage}
+              onToggleFavorite={() => onToggleFavorite(document.id)}
+            />
+          </div>
+        ) : null}
+
+        <ReaderToolRail
+          hasSelection={pendingSelection !== null}
+          right={toolRailRight}
+          readingMode={isReadingMode}
+          onHighlight={() => highlightSelection("amber")}
+          onAnnotate={() => {
+            if (pendingSelection) {
+              setComposerFocusSignal((signal) => signal + 1);
+            }
+          }}
+        />
+
+        <div
+          ref={dockIslandRef}
+          aria-hidden={isReadingMode}
+          className={`reader-reading-island absolute z-30 ${
+            isReadingMode ? "reader-reading-island--hidden reader-reading-island--bottom" : ""
+          }`}
+          style={{
+            right: readerSideInset,
+            bottom: readerSideInset,
+            left: readerSideInset,
+          }}
+        >
+          <ReaderAnnotationsDock
+            annotations={annotations}
+            currentPage={currentPage}
+            visiblePages={currentPageGroup}
+            pendingSelection={pendingSelection}
+            saveStates={saveStates}
+            composerFocusSignal={composerFocusSignal}
+            onJumpToPage={scrollToPage}
+            onEdit={openAnnotationEditor}
+            onDelete={handleDeleteAnnotationFromList}
+            onRetry={retryAnnotation}
+            onCreateNote={createNoteFromSelection}
+          />
+        </div>
+
+        {sidePanelFloating ? (
           <ReaderSidePanel
             document={readerDocument}
             annotations={annotations}
@@ -1648,39 +2825,35 @@ export function ReaderModal({
             progress={progress}
             totalPages={pdfDocument?.numPages ?? null}
             fileSizeBytes={fileSizeBytes}
-            isFloating={sidePanelFloating}
-            initialTab={sidePanelInitialTab}
-            onFloat={() => openPanel("annotations", document.id, getAnnotationsPanelInitialPosition())}
-            onOpenSystemWindow={async () => {
-              await flushNotes();
-              await setDocumentReadingLocation(document, getCurrentReadingLocation());
-              await invoke("open_reader_panel_window", {
-                documentId: document.id,
-                documentTitle: document.title,
-              });
-              updatePopoutDocumentId(document.id);
-              const payload: ReaderPageStatePayload = {
-                documentId: document.id,
-                page: currentPage,
-                progress,
-                totalPages: pdfDocument?.numPages ?? null,
-                fileSizeBytes,
-              };
-              await emitTo(READER_PANEL_WINDOW_LABEL, READER_PAGE_STATE_CHANGED_EVENT, payload);
-            }}
+            isFloating
+            onFloat={openDetachedPanel}
+            onOpenSystemWindow={openPanelSystemWindow}
             onDock={() => closePanel(annotationsPanelId)}
             onJumpToPage={scrollToPage}
             onDeleteAnnotation={handleDeleteAnnotationFromList}
             onUpdateAnnotationNote={saveAnnotationNoteById}
             onToggleFavorite={() => onToggleFavorite(document.id)}
-            onClose={() => {
-              setSidePanelInitialTab(undefined);
-              closePanel(annotationsPanelId);
-              setSidePanelOpen(false);
-            }}
+            onClose={() => closePanel(annotationsPanelId)}
           />
         ) : null}
       </div>
+
+      {readerActionError ? (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-[10000] flex max-w-sm items-start gap-3 rounded-lg border border-status-red bg-status-red px-4 py-3 text-sm font-semibold text-status-red-text shadow-xl"
+        >
+          <span className="min-w-0 flex-1">{readerActionError}</span>
+          <button
+            type="button"
+            aria-label="Fechar aviso"
+            className="shrink-0 rounded p-0.5 text-lg leading-none transition hover:brightness-90"
+            onClick={() => setReaderActionError("")}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       {pendingSelection ? (
         <SelectionToolbar

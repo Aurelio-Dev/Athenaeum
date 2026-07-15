@@ -37,6 +37,10 @@ mudar sem aviso.
 - Seleção de texto com destaques e comentários
 - Notas livres associadas ao documento
 - Navegação e painéis laterais (Anotações, Notas e IA)
+- Visualização em uma ou duas páginas, rolagem contínua e exibição de capa
+- Zoom por menu, slider, atalhos `Ctrl` + `+`/`-` e pinça no touchpad
+- Ajustes de zoom por página, largura, altura e conteúdo visível
+- Modo de leitura sem ilhas da interface e tela cheia nativa da janela
 - A aba de IA é só um placeholder visual por enquanto — nenhuma integração real ainda
 
 ### Cadernos

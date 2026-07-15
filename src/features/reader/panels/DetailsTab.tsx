@@ -7,10 +7,13 @@ import {
   getLatestLinkedNotebook,
   isOpenDocumentExternallyError,
   isReaderInvalidationPayload,
+  linkDocumentToNotebook,
+  listNotebookOptions,
   READER_DETAILS_CHANGED_EVENT,
   unlinkDocumentFromNotebook,
   type DatabaseHandleSource,
   type LatestLinkedNotebook,
+  type NotebookOption,
 } from "../../../lib/database";
 import { listen } from "@tauri-apps/api/event";
 import type { ReaderDocumentDetails } from "../../../types/library";
@@ -32,20 +35,10 @@ type DetailsTabProps = {
   onOpenNotebook: (notebookId: number) => void;
   onToggleFavorite: () => Promise<void>;
   onOpenExternally: () => Promise<void>;
+  showFooterActions?: boolean;
   // Renovacao de cache do host apos edicao de tags (ver DocumentTagsSection).
   onTagsChanged?: () => void;
 };
-
-function PdfFileIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-      <path d="M8 15h8" />
-      <path d="M8 18h5" />
-    </svg>
-  );
-}
 
 function CloseIcon() {
   return (
@@ -57,7 +50,7 @@ function CloseIcon() {
 }
 
 function formatAuthors(authors: string[]) {
-  return authors.length > 0 ? authors.join(", ") : "Sem autor informado";
+  return authors.length > 0 ? authors.join(" · ") : "Sem autor informado";
 }
 
 function isSameCalendarDay(first: Date, second: Date) {
@@ -82,13 +75,13 @@ function formatLastOpened(lastOpenedAt?: string) {
   const now = new Date();
 
   if (isSameCalendarDay(date, now)) {
-    return `Hoje, ${time}`;
+    return `hoje, ${time}`;
   }
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (isSameCalendarDay(date, yesterday)) {
-    return `Ontem, ${time}`;
+    return `ontem, ${time}`;
   }
 
   return new Intl.DateTimeFormat("pt-BR", {
@@ -121,13 +114,17 @@ export function DetailsTab({
   onOpenNotebook,
   onToggleFavorite,
   onOpenExternally,
+  showFooterActions = true,
   onTagsChanged,
 }: DetailsTabProps) {
   const [linkedNotebook, setLinkedNotebook] = useState<LatestLinkedNotebook | null>(null);
+  const [notebooks, setNotebooks] = useState<NotebookOption[]>([]);
+  const [selectedNotebookId, setSelectedNotebookId] = useState<number | null>(null);
   const [isNotebookLoading, setIsNotebookLoading] = useState(true);
   const [notebookError, setNotebookError] = useState("");
   const [actionError, setActionError] = useState("");
   const [isUnlinking, setIsUnlinking] = useState(false);
+  const [isLinking, setIsLinking] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isOpeningExternally, setIsOpeningExternally] = useState(false);
   const latestDocumentIdRef = useRef(document.id);
@@ -138,10 +135,22 @@ export function DetailsTab({
 
   const reloadLinkedNotebook = useCallback(
     (isCancelledRef?: { current: boolean }) => {
-      void getLatestLinkedNotebook(document.id, databaseSource)
-        .then((notebook) => {
+      void Promise.all([
+        getLatestLinkedNotebook(document.id, databaseSource),
+        listNotebookOptions(databaseSource),
+      ])
+        .then(([notebook, loadedNotebooks]) => {
           if (!isCancelledRef?.current) {
             setLinkedNotebook(notebook);
+            setNotebooks(loadedNotebooks);
+            setSelectedNotebookId((current) => {
+              if (current !== null && loadedNotebooks.some((option) => option.id === current)) {
+                return current;
+              }
+
+              return notebook?.id ?? loadedNotebooks[0]?.id ?? null;
+            });
+            setNotebookError("");
           }
         })
         .catch((error) => {
@@ -162,10 +171,13 @@ export function DetailsTab({
   useEffect(() => {
     const isCancelledRef = { current: false };
     setLinkedNotebook(null);
+    setNotebooks([]);
+    setSelectedNotebookId(null);
     setIsNotebookLoading(true);
     setNotebookError("");
     setActionError("");
     setIsUnlinking(false);
+    setIsLinking(false);
     setIsTogglingFavorite(false);
     setIsOpeningExternally(false);
     reloadLinkedNotebook(isCancelledRef);
@@ -211,6 +223,34 @@ export function DetailsTab({
       unlisten?.();
     };
   }, [document.id, reloadLinkedNotebook]);
+
+  async function handleLinkNotebook() {
+    if (selectedNotebookId === null || isLinking) {
+      return;
+    }
+
+    const documentId = document.id;
+    const notebookId = selectedNotebookId;
+    setActionError("");
+    setIsLinking(true);
+
+    try {
+      await linkDocumentToNotebook(notebookId, documentId, databaseSource);
+      const nextNotebook = await getLatestLinkedNotebook(documentId, databaseSource);
+      if (latestDocumentIdRef.current === documentId) {
+        setLinkedNotebook(nextNotebook);
+      }
+    } catch (error) {
+      console.warn("Não foi possível vincular o Caderno.", error);
+      if (latestDocumentIdRef.current === documentId) {
+        setActionError("Não foi possível vincular o Caderno. Tente novamente.");
+      }
+    } finally {
+      if (latestDocumentIdRef.current === documentId) {
+        setIsLinking(false);
+      }
+    }
+  }
 
   async function handleUnlinkNotebook() {
     if (!linkedNotebook || isUnlinking) {
@@ -275,63 +315,64 @@ export function DetailsTab({
     }
   }
 
-  const infoRows: Array<[string, string]> = [
-    ["Título", document.title],
-    ["Autor / disciplina", formatAuthors(document.authors)],
-    ...(document.source.trim().length > 0 ? [["Fonte", document.source] as [string, string]] : []),
-    ["Ano", String(document.year)],
-    ["Tamanho", formatFileSize(fileSizeBytes)],
-    ["Páginas", totalPages === null ? "Indisponível" : String(totalPages)],
-    ["Última abertura", formatLastOpened(document.lastOpenedAt)],
-  ];
-
   return (
     <div className="flex min-h-full flex-col px-4 py-4">
-      <div className="space-y-5">
-        <section className="flex items-center gap-3 rounded-lg border border-border-subtle bg-[var(--background)] p-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-status-red text-text-inverse">
-            <PdfFileIcon />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-bold text-[var(--foreground)]" title={document.fileName ?? document.title}>
-              {document.fileName ?? document.title}
-            </p>
-            <p className="mt-0.5 truncate text-[10px] text-[var(--muted-foreground)]">{document.authors[0] ?? "Sem autor"}</p>
-            <p className="mt-0.5 truncate text-[10px] text-[var(--muted-foreground)]">
-              {document.year} · {formatFileSize(fileSizeBytes)} · {totalPages === null ? "Páginas indisponíveis" : `${totalPages} páginas`}
-            </p>
-          </div>
-        </section>
+      <div className="reader-island-sections">
+        <section className="pb-5">
+          <h2 className="font-serif text-[15.5px] font-bold leading-[1.35] text-[var(--foreground)]">
+            {document.title}
+          </h2>
+          <p className="mt-2 text-[11px] leading-4 text-[var(--muted-foreground)]">
+            {formatAuthors(document.authors)}
+          </p>
 
-        <section>
-          <h2 className={sectionLabelClassName}>Informações do documento</h2>
-          <dl className="mt-3 grid gap-2.5 text-xs">
-            {infoRows.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[minmax(92px,0.85fr)_minmax(0,1.15fr)] gap-3">
-                <dt className="font-medium text-[var(--muted-foreground)]">{label}</dt>
-                <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
-              </div>
-            ))}
+          <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3.5 font-sans">
+            <div className="min-w-0">
+              <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Fonte</dt>
+              <dd className="mt-0.5 truncate text-xs font-semibold text-[var(--foreground)]" title={document.source.trim() || "Não informada"}>
+                {document.source.trim() || "Não informada"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Ano</dt>
+              <dd className="mt-0.5 text-xs font-semibold text-[var(--foreground)]">{document.year}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Páginas</dt>
+              <dd className="mt-0.5 text-xs font-semibold text-[var(--foreground)]">{totalPages === null ? "Indisponível" : totalPages}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Tamanho</dt>
+              <dd className="mt-0.5 text-xs font-semibold text-[var(--foreground)]">{formatFileSize(fileSizeBytes)}</dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Última abertura</dt>
+              <dd className="mt-0.5 text-xs font-semibold text-[var(--foreground)]">{formatLastOpened(document.lastOpenedAt)}</dd>
+            </div>
           </dl>
         </section>
 
-        <ReadingStatusCard status={document.status} progress={progress} />
+        <div className="py-5">
+          <ReadingStatusCard status={document.status} progress={progress} variant="island" />
+        </div>
 
-        <section>
+        <section className="py-5">
           <h2 className={sectionLabelClassName}>Descrição</h2>
           <p className={`mt-3 whitespace-pre-wrap break-words text-xs leading-5 ${document.description.trim() ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}`}>
             {document.description.trim() || "Nenhuma descrição informada"}
           </p>
         </section>
 
-        <DocumentTagsSection
-          documentId={document.id}
-          tags={document.tags}
-          databaseSource={databaseSource}
-          onTagsChanged={onTagsChanged}
-        />
+        <div className="py-5">
+          <DocumentTagsSection
+            documentId={document.id}
+            tags={document.tags}
+            databaseSource={databaseSource}
+            onTagsChanged={onTagsChanged}
+          />
+        </div>
 
-        <section>
+        <section className="py-5">
           <h2 className={sectionLabelClassName}>Caderno vinculado</h2>
           {isNotebookLoading ? (
             <p className="mt-3 text-xs text-[var(--muted-foreground)]">Carregando Caderno vinculado...</p>
@@ -372,45 +413,79 @@ export function DetailsTab({
                 />
               </ContextMenu>
             </div>
+          ) : notebooks.length > 0 ? (
+            <div className="mt-3 space-y-2.5">
+              <p className="text-xs leading-5 text-[var(--muted-foreground)]">Nenhum Caderno vinculado. Escolha um Caderno para continuar.</p>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <select
+                  aria-label="Selecionar Caderno para vincular"
+                  value={selectedNotebookId ?? ""}
+                  disabled={isLinking}
+                  className="w-full min-w-0 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
+                  onChange={(event) => setSelectedNotebookId(Number(event.target.value))}
+                >
+                  {notebooks.map((notebook) => (
+                    <option key={notebook.id} value={notebook.id}>
+                      {notebook.title}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={selectedNotebookId === null || isLinking}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
+                  onClick={() => void handleLinkNotebook()}
+                >
+                  <BookOpenIcon size={13} />
+                  <span>{isLinking ? "Vinculando..." : "Vincular"}</span>
+                </button>
+              </div>
+            </div>
           ) : (
-            <p className="mt-3 text-xs text-[var(--muted-foreground)]">Nenhum Caderno vinculado</p>
+            <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">
+              Nenhum Caderno disponível. Crie um Caderno na biblioteca para vincular este PDF.
+            </p>
           )}
         </section>
 
-        <RelatedDocumentsSection documentId={document.id} databaseSource={databaseSource} />
+        <div className="py-5">
+          <RelatedDocumentsSection documentId={document.id} databaseSource={databaseSource} />
+        </div>
       </div>
 
-      <footer className="sticky bottom-0 -mx-4 mt-5 border-t border-border-subtle bg-[var(--card)] px-4 pb-4 pt-3">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={optionsMenu.isOpen}
-            className="inline-flex min-w-0 items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-primary"
-            onClick={optionsMenu.open}
-          >
-            <span>Mais opções</span>
-            <MoreVerticalIcon />
-          </button>
-          <button
-            type="button"
-            disabled={isOpeningExternally}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
-            onClick={() => void handleOpenExternally()}
-          >
-            <span>{isOpeningExternally ? "Abrindo..." : "Abrir original"}</span>
-            <ExternalLinkIcon size={13} />
-          </button>
-        </div>
-        <ContextMenu isOpen={optionsMenu.isOpen} x={optionsMenu.x} y={optionsMenu.y} onClose={optionsMenu.close}>
-          <ContextMenuItem
-            icon={<HeartIcon filled={document.favorite} size={16} />}
-            label={isTogglingFavorite ? "Atualizando..." : document.favorite ? "Desfavoritar" : "Favoritar"}
-            disabled={isTogglingFavorite}
-            onSelect={() => void handleToggleFavorite()}
-          />
-        </ContextMenu>
-      </footer>
+      {showFooterActions ? (
+        <footer className="sticky bottom-0 -mx-4 border-t border-border-subtle bg-[var(--card)] px-4 pb-4 pt-3">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={optionsMenu.isOpen}
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-primary"
+              onClick={optionsMenu.open}
+            >
+              <span>Mais opções</span>
+              <MoreVerticalIcon />
+            </button>
+            <button
+              type="button"
+              disabled={isOpeningExternally}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
+              onClick={() => void handleOpenExternally()}
+            >
+              <span>{isOpeningExternally ? "Abrindo..." : "Abrir original"}</span>
+              <ExternalLinkIcon size={13} />
+            </button>
+          </div>
+          <ContextMenu isOpen={optionsMenu.isOpen} x={optionsMenu.x} y={optionsMenu.y} onClose={optionsMenu.close}>
+            <ContextMenuItem
+              icon={<HeartIcon filled={document.favorite} size={16} />}
+              label={isTogglingFavorite ? "Atualizando..." : document.favorite ? "Desfavoritar" : "Favoritar"}
+              disabled={isTogglingFavorite}
+              onSelect={() => void handleToggleFavorite()}
+            />
+          </ContextMenu>
+        </footer>
+      ) : null}
 
       {actionError ? (
         <div

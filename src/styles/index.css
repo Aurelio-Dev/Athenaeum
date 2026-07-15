@@ -153,6 +153,19 @@
   --reader-header-input-bg: var(--input);
   --reader-header-input-border: var(--border);
 
+  /* Reader 1C "Mesa": superfície quente e camadas flutuantes. A página do
+     PDF continua sendo a única superfície branca pura do leitor. */
+  --reader-workspace-bg: #EFE4D5;
+  --reader-floating-surface: var(--card);
+  --reader-annotation-card-bg: #FBF6F0;
+  --reader-island-divider: #EBE0D4;
+  --reader-annotation-divider: #EBE0D4;
+  --reader-chrome-divider: #D9CBBF;
+  --reader-floating-shadow: 0 12px 32px rgba(82, 54, 35, 0.14);
+  --reader-sidebar-shadow: 0 4px 12px rgba(26, 20, 16, 0.08), 0 18px 48px rgba(26, 20, 16, 0.16);
+  --reader-dock-shadow: 0 -4px 14px rgba(26, 20, 16, 0.07), 0 20px 52px rgba(26, 20, 16, 0.18);
+  --reader-page-shadow: 0 14px 34px rgba(82, 54, 35, 0.13);
+
   --floating-header-bg: var(--card);
   --floating-header-border: var(--border);
   --floating-header-text: var(--foreground);
@@ -166,7 +179,7 @@
   --color-border-strong: var(--border);
 
   --color-primary: var(--primary);
-  --color-primary-hover: var(--primary);
+  --color-primary-hover: #814A26;
   --color-primary-soft: var(--muted);
   --color-primary-text: var(--primary);
   --color-accent-tint-bg: #EFE2D8;
@@ -310,6 +323,16 @@
   --reader-header-divider: var(--border);
   --reader-header-input-bg: var(--input);
   --reader-header-input-border: var(--border);
+  --reader-workspace-bg: #1A1410;
+  --reader-floating-surface: var(--card);
+  --reader-annotation-card-bg: #2A211A;
+  --reader-island-divider: var(--border);
+  --reader-annotation-divider: var(--border);
+  --reader-chrome-divider: var(--border);
+  --reader-floating-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  --reader-sidebar-shadow: 0 4px 14px rgba(0, 0, 0, 0.28), 0 18px 48px rgba(0, 0, 0, 0.44);
+  --reader-dock-shadow: 0 -4px 16px rgba(0, 0, 0, 0.24), 0 20px 52px rgba(0, 0, 0, 0.48);
+  --reader-page-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
 
   --floating-header-bg: var(--card);
   --floating-header-border: var(--border);
@@ -1504,4 +1527,107 @@ select {
 
 .notebook-editor.notebook-editor--link-nav a {
   cursor: pointer;
+}
+
+/* Controles do Reader 1C. O progresso do slider e alimentado pelo componente
+   para manter a trilha ativa sincronizada inclusive nos zooms calculados pelo
+   ajuste a largura. */
+.reader-zoom-slider {
+  height: 20px;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.reader-zoom-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-primary) 0 var(--reader-zoom-progress),
+    var(--color-surface-muted) var(--reader-zoom-progress) 100%
+  );
+}
+
+.reader-zoom-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  appearance: none;
+  border: 2px solid var(--color-primary);
+  border-radius: 999px;
+  background: var(--color-surface-card);
+  box-shadow: 0 1px 3px rgba(26, 20, 16, 0.2);
+}
+
+.reader-zoom-slider:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.reader-island-sections > * + * {
+  border-top: 1px solid var(--reader-island-divider);
+}
+
+.reader-annotation-border {
+  border-color: var(--reader-annotation-divider);
+}
+
+.reader-reading-island {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 220ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.reader-reading-island--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reader-reading-island--top {
+  transform: translate3d(0, -12px, 0);
+}
+
+.reader-reading-island--left {
+  transform: translate3d(-20px, 0, 0);
+}
+
+.reader-reading-island--right {
+  transform: translate3d(16px, 0, 0);
+}
+
+.reader-reading-island--bottom {
+  transform: translate3d(0, 20px, 0);
+}
+
+.reader-reading-surface {
+  transition: padding 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reader-reading-exit {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, -10px, 0);
+  transition:
+    opacity 180ms ease 80ms,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1) 80ms;
+}
+
+.reader-reading-exit--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-reading-island,
+  .reader-reading-surface,
+  .reader-reading-exit {
+    transition-duration: 0.01ms;
+    transition-delay: 0ms;
+  }
 }

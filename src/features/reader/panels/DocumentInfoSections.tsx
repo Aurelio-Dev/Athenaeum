@@ -23,6 +23,7 @@ import {
   type RelatedDocument,
 } from "../../../lib/database";
 import type { ReaderDocumentDetails, SubjectTag } from "../../../types/library";
+import { statusTokens } from "../../../styles/designTokens";
 import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon } from "./readerPanelIcons";
 
 // Secoes de informacao do documento compartilhadas entre as abas Detalhes e
@@ -54,15 +55,7 @@ export function formatFileSize(bytes: number | null) {
 }
 
 export function formatReadingStatus(status: ReaderDocumentDetails["status"]) {
-  const labels: Record<ReaderDocumentDetails["status"], string> = {
-    "not-started": "Não iniciado",
-    "in-progress": "Em andamento",
-    completed: "Concluído",
-    error: "Com erro",
-    trashed: "Na lixeira",
-  };
-
-  return labels[status];
+  return statusTokens[status].label;
 }
 
 // Recarrega dados da secao quando outra janela (ou outro componente) altera os
@@ -103,10 +96,28 @@ export function useReaderDetailsInvalidation(documentId: string, reload: () => v
 type ReadingStatusCardProps = {
   status: ReaderDocumentDetails["status"];
   progress: number;
+  variant?: "default" | "island";
 };
 
-export function ReadingStatusCard({ status, progress }: ReadingStatusCardProps) {
+export function ReadingStatusCard({ status, progress, variant = "default" }: ReadingStatusCardProps) {
   const normalizedProgress = Math.min(100, Math.max(0, Math.round(progress)));
+
+  if (variant === "island") {
+    return (
+      <section aria-label="Status de leitura">
+        <div className="flex items-center gap-2 rounded-full bg-[var(--muted)] px-3 py-2 text-xs font-semibold text-primary">
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+          <span>{formatReadingStatus(status)}</span>
+        </div>
+        <div className="mt-3 flex items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <ProgressBar value={normalizedProgress} showValue={false} />
+          </div>
+          <span className="min-w-10 text-right text-[15px] tabular-nums text-[var(--muted-foreground)]">{normalizedProgress}%</span>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section>

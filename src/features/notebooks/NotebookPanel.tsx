@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
@@ -14,11 +15,13 @@ import {
   deleteNotebookPage,
   getNotebookInfo,
   getSetting,
+  isReaderInvalidationPayload,
   linkDocumentToNotebook,
   listNotebookLinkedDocuments,
   listNotebookPages,
   listNotebookTags,
   moveNotebookToTrash as movePersistedNotebookToTrash,
+  READER_DETAILS_CHANGED_EVENT,
   saveNotebookPage,
   saveNotebookTags,
   selectNotebookExportDestination,
@@ -760,6 +763,45 @@ export function NotebookPanel({
     // Intencional: o painel carrega o caderno uma vez; trocar de caderno
     // significa outro painel (outra key na lista do LibraryView).
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookId]);
+
+  // Um vínculo criado ou removido no Reader também precisa aparecer em um
+  // Caderno que já esteja aberto na pilha de painéis.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen<unknown>(READER_DETAILS_CHANGED_EVENT, (event) => {
+      if (!isReaderInvalidationPayload(event.payload)) {
+        return;
+      }
+
+      void listNotebookLinkedDocuments(notebookId)
+        .then((loadedDocuments) => {
+          if (!disposed) {
+            setLinkedDocuments(loadedDocuments);
+          }
+        })
+        .catch((error) => {
+          console.warn("Nao foi possivel sincronizar os PDFs vinculados ao Caderno.", error);
+        });
+    })
+      .then((removeListener) => {
+        if (disposed) {
+          removeListener();
+          return;
+        }
+
+        unlisten = removeListener;
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel escutar alteracoes de vinculo do Reader.", error);
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [notebookId]);
 
   useEffect(() => {
