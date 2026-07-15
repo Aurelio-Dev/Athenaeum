@@ -648,6 +648,10 @@ export function NotebookPanel({
   const detailsToggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailsCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const wasDetailsPanelOpenRef = useRef(false);
+  // "Renomear caderno" abre o drawer (onde vive o campo de título) e pede foco
+  // no título; esta flag faz o efeito de foco de abertura mirar o título em vez
+  // do botão de fechar, sem corrida entre os dois.
+  const pendingTitleFocusRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const notebookTagDropdownRef = useRef<HTMLDivElement | null>(null);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
@@ -946,8 +950,17 @@ export function NotebookPanel({
 
   function focusNotebookTitle() {
     notebookOptionsContextMenu.close();
-    titleInputRef.current?.focus();
-    titleInputRef.current?.select();
+
+    // O campo de título vive no drawer de Detalhes. Se ele estiver fechado,
+    // abre e deixa o efeito de foco de abertura mirar o título (via flag). Se
+    // já estiver aberto, não há transição — foca direto.
+    if (isDetailsPanelOpen) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    } else {
+      pendingTitleFocusRef.current = true;
+      setIsDetailsPanelOpen(true);
+    }
   }
 
   async function moveNotebookFromOptions(collectionId: string) {
@@ -1403,7 +1416,15 @@ export function NotebookPanel({
     wasDetailsPanelOpenRef.current = isDetailsPanelOpen;
 
     if (isDetailsPanelOpen) {
-      detailsCloseButtonRef.current?.focus();
+      // Aberto via "Renomear caderno": foca e seleciona o título. Caso normal:
+      // foca o botão de fechar (foco de teclado dentro do overlay).
+      if (pendingTitleFocusRef.current) {
+        pendingTitleFocusRef.current = false;
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      } else {
+        detailsCloseButtonRef.current?.focus();
+      }
     } else {
       detailsToggleButtonRef.current?.focus();
     }
@@ -1534,17 +1555,6 @@ export function NotebookPanel({
           </nav>
           <div className="flex items-center justify-end gap-1" onMouseDown={(event) => event.stopPropagation()}>
             <button
-              type="button"
-              aria-label="Mais opções"
-              title="Mais opções"
-              aria-haspopup="menu"
-              aria-expanded={notebookOptionsContextMenu.isOpen}
-              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
-              onClick={(event) => openNotebookOptionsMenu(event, "header")}
-            >
-              <MoreVerticalIcon />
-            </button>
-            <button
               ref={detailsToggleButtonRef}
               type="button"
               aria-label={isDetailsPanelOpen ? "Fechar informações do caderno" : "Informações do caderno"}
@@ -1562,6 +1572,17 @@ export function NotebookPanel({
               }}
             >
               <InfoIcon />
+            </button>
+            <button
+              type="button"
+              aria-label="Mais opções"
+              title="Mais opções"
+              aria-haspopup="menu"
+              aria-expanded={notebookOptionsContextMenu.isOpen}
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
+              onClick={(event) => openNotebookOptionsMenu(event, "header")}
+            >
+              <MoreVerticalIcon />
             </button>
             <button
               type="button"
@@ -2040,35 +2061,41 @@ export function NotebookPanel({
                   <MoreVerticalIcon />
                 </button>
               </footer>
-
-              <ContextMenu
-                isOpen={notebookOptionsContextMenu.isOpen}
-                x={notebookOptionsContextMenu.x}
-                y={notebookOptionsContextMenu.y}
-                onClose={notebookOptionsContextMenu.close}
-              >
-                <ContextMenuItem icon={<MenuGlyph name="edit" />} label="Renomear caderno" onSelect={focusNotebookTitle} />
-                <ContextMenuSubmenu
-                  icon={<MenuGlyph name="folder" />}
-                  label="Mover para coleção"
-                  collections={collections}
-                  onSelect={(collectionId) => void moveNotebookFromOptions(collectionId)}
-                  onClose={notebookOptionsContextMenu.close}
-                />
-                <ContextMenuItem icon={<MenuGlyph name="copy" />} label="Duplicar" onSelect={() => undefined} disabled />
-                <ContextMenuItem icon={<MenuGlyph name="pin" />} label="Fixar nos favoritos" onSelect={() => void pinNotebookFavorite()} disabled={Boolean(notebookInfo?.favorite)} />
-                <ContextMenuDivider />
-                <ContextMenuItem icon={<MenuGlyph name="export" />} label="Exportar" onSelect={openNotebookExportDialog} />
-                <ContextMenuItem icon={<MenuGlyph name="print" />} label="Imprimir" onSelect={() => undefined} disabled />
-                <ContextMenuItem icon={<MenuGlyph name="link" />} label="Copiar link interno" onSelect={() => undefined} disabled />
-                <ContextMenuDivider />
-                <ContextMenuItem icon={<MenuGlyph name="history" />} label="Histórico de alterações" onSelect={() => undefined} disabled />
-                <ContextMenuItem icon={<MenuGlyph name="stats" />} label="Contagem detalhada" onSelect={openDetailedCount} />
-                <ContextMenuDivider />
-                <ContextMenuItem icon={<TrashIcon size={16} />} label="Mover para a lixeira" variant="danger" onSelect={() => void moveNotebookToTrashFromOptions()} />
-              </ContextMenu>
             </aside>
           ) : null}
+
+          {/* Menu de opções do caderno: montado no nível do corpo do painel
+              (fora do drawer de Detalhes), senão ficaria desmontado quando o
+              drawer está fechado e o "..." do header não abriria nada. Usa
+              portal para document.body, então a posição na árvore não afeta o
+              layout — é acionado tanto pelo "..." do header quanto pelo do
+              rodapé do drawer. */}
+          <ContextMenu
+            isOpen={notebookOptionsContextMenu.isOpen}
+            x={notebookOptionsContextMenu.x}
+            y={notebookOptionsContextMenu.y}
+            onClose={notebookOptionsContextMenu.close}
+          >
+            <ContextMenuItem icon={<MenuGlyph name="edit" />} label="Renomear caderno" onSelect={focusNotebookTitle} />
+            <ContextMenuSubmenu
+              icon={<MenuGlyph name="folder" />}
+              label="Mover para coleção"
+              collections={collections}
+              onSelect={(collectionId) => void moveNotebookFromOptions(collectionId)}
+              onClose={notebookOptionsContextMenu.close}
+            />
+            <ContextMenuItem icon={<MenuGlyph name="copy" />} label="Duplicar" onSelect={() => undefined} disabled />
+            <ContextMenuItem icon={<MenuGlyph name="pin" />} label="Fixar nos favoritos" onSelect={() => void pinNotebookFavorite()} disabled={Boolean(notebookInfo?.favorite)} />
+            <ContextMenuDivider />
+            <ContextMenuItem icon={<MenuGlyph name="export" />} label="Exportar" onSelect={openNotebookExportDialog} />
+            <ContextMenuItem icon={<MenuGlyph name="print" />} label="Imprimir" onSelect={() => undefined} disabled />
+            <ContextMenuItem icon={<MenuGlyph name="link" />} label="Copiar link interno" onSelect={() => undefined} disabled />
+            <ContextMenuDivider />
+            <ContextMenuItem icon={<MenuGlyph name="history" />} label="Histórico de alterações" onSelect={() => undefined} disabled />
+            <ContextMenuItem icon={<MenuGlyph name="stats" />} label="Contagem detalhada" onSelect={openDetailedCount} />
+            <ContextMenuDivider />
+            <ContextMenuItem icon={<TrashIcon size={16} />} label="Mover para a lixeira" variant="danger" onSelect={() => void moveNotebookToTrashFromOptions()} />
+          </ContextMenu>
         </div>
       )}
 
