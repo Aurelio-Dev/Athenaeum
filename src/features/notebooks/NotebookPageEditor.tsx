@@ -141,6 +141,29 @@ type ActiveDiagramControls = {
   kind: DiagramKind;
 };
 
+// Item da estrutura compartilhada de insercao de blocos: alimenta a secao
+// "Inserir" do menu "..." e o menu inline "/". `keywords` sao termos extras
+// (sem acento) so para o filtro do "/".
+type NotebookInsertMenuItem = {
+  id: string;
+  label: string;
+  keywords: string[];
+  section: "insert" | "diagram" | "reference";
+  icon: JSX.Element;
+  run: () => void;
+};
+
+// Estado de render do menu "/": posicao relativa ao shell do editor, query
+// digitada apos o "/" e item destacado pelo teclado. O ponto exato do "/"
+// (no de texto + offset) fica em slashAnchorRef — detalhe de DOM, nao de
+// render.
+type SlashMenuControls = {
+  top: number;
+  left: number;
+  query: string;
+  selectedIndex: number;
+};
+
 export type NotebookSpacingMode = "compact" | "normal" | "comfortable" | "wide";
 type NotebookToolbarVariant = "default" | "focus";
 type TextStyleCommand = "paragraph" | "h1" | "h2" | "h3";
@@ -175,6 +198,16 @@ const notebookSpacingConfig: Record<NotebookSpacingMode, { lineHeight: number; p
 };
 
 const diagramInsertSubtypes: Array<Exclude<FigureSubtype, "image">> = ["diagram", "graph-diagram", "flowchart"];
+
+const notebookSlashMenuWidth = 236;
+// Altura estimada (itens + rotulo + padding) usada so na decisao de flip
+// vertical na abertura — a altura real e limitada por maxHeight com scroll.
+const notebookSlashMenuEstimatedHeight = 360;
+
+// Filtro do menu "/" ignora acentos e caixa ("equacao" encontra "Equação").
+function normalizeSlashFilterText(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
 function getToolbarButton(action: EditorAction) {
   const button = toolbarButtons.find((candidate) => candidate.action === action);
@@ -546,7 +579,6 @@ export function NotebookPageEditor({
   const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);
   const [isReferenceMenuOpen, setIsReferenceMenuOpen] = useState(false);
-  const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isCiteMenuOpen, setIsCiteMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -561,13 +593,26 @@ export function NotebookPageEditor({
   const [activeEquation, setActiveEquation] = useState<ActiveEquationControls | null>(null);
   const [isEmpty, setIsEmpty] = useState(initialNotebookContentIsEmpty(initialContent));
 
+  // Menu "/" de insercao inline de blocos.
+  const [slashMenu, setSlashMenu] = useState<SlashMenuControls | null>(null);
+  const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  // Posicao do caractere "/" que abriu o menu. A flag pendente existe porque
+  // o keydown valida o contexto ANTES de o caractere existir no DOM — o menu
+  // so abre no input seguinte, depois de confirmar que o "/" foi inserido.
+  const slashAnchorRef = useRef<{ node: Text; offset: number } | null>(null);
+  const pendingSlashTriggerRef = useRef(false);
+
   useEffect(() => {
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
+    // Troca de variante muda paddings/larguras — a posicao ancorada do "/"
+    // ficaria errada; fecha em vez de reposicionar.
+    setSlashMenu(null);
+    slashAnchorRef.current = null;
+    pendingSlashTriggerRef.current = false;
   }, [toolbarVariant]);
 
   const syncActiveActions = useCallback(() => {
@@ -758,7 +803,6 @@ export function NotebookPageEditor({
         setIsTextMenuOpen(false);
         setIsListMenuOpen(false);
         setIsReferenceMenuOpen(false);
-        setIsInsertMenuOpen(false);
         setIsLayoutMenuOpen(false);
         setIsLinkPopoverOpen(false);
         setIsCiteMenuOpen(false);
@@ -794,30 +838,50 @@ export function NotebookPageEditor({
   }, []);
 
   useEffect(() => {
-    if (!isTextMenuOpen && !isListMenuOpen && !isReferenceMenuOpen && !isInsertMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError) {
+    if (!isTextMenuOpen && !isListMenuOpen && !isReferenceMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError && !slashMenu) {
       return;
     }
 
     function handlePointerDown(event: globalThis.MouseEvent) {
-      if (event.target instanceof Node && toolbarRef.current?.contains(event.target)) {
+      if (event.target instanceof Node && (toolbarRef.current?.contains(event.target) || slashMenuRef.current?.contains(event.target))) {
         return;
       }
 
       setIsTextMenuOpen(false);
       setIsListMenuOpen(false);
       setIsReferenceMenuOpen(false);
-      setIsInsertMenuOpen(false);
       setIsLayoutMenuOpen(false);
       setIsLinkPopoverOpen(false);
       setIsCiteMenuOpen(false);
       setIsMoreMenuOpen(false);
       setShowAttachmentNotice(false);
       setAssetPasteError(null);
+      setSlashMenu(null);
+      slashAnchorRef.current = null;
     }
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isTextMenuOpen, isListMenuOpen, isReferenceMenuOpen, isInsertMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError]);
+  }, [isTextMenuOpen, isListMenuOpen, isReferenceMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError, slashMenu]);
+
+  // Caret saindo da regiao da query (clique, setas, Home/End) fecha o menu
+  // "/". A validacao le o DOM direto (nao o estado) para nao depender da
+  // ordem entre o commit do React e o disparo assincrono de selectionchange.
+  useEffect(() => {
+    if (!slashMenu) {
+      return;
+    }
+
+    function handleSelectionChange() {
+      if (readSlashQueryFromDom() === null) {
+        closeSlashMenu();
+      }
+    }
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slashMenu]);
 
   function isSelectionInsideEditor(selection: Selection | null) {
     const editor = editorRef.current;
@@ -876,6 +940,201 @@ export function NotebookPageEditor({
     return restoreSavedRange();
   }
 
+  // ===== Menu "/" (insercao inline de blocos) =====
+
+  function closeSlashMenu() {
+    pendingSlashTriggerRef.current = false;
+    slashAnchorRef.current = null;
+    setSlashMenu(null);
+  }
+
+  // Contextos onde "/" e conteudo legitimo (codigo, fonte de diagrama,
+  // equacao) nunca abrem o menu; fora deles, so vale como trigger no inicio
+  // de bloco ou apos espaco — "https:/", "1/2" e "e/ou" seguem digitaveis.
+  function isValidSlashTriggerContext() {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+
+    if (!editor || !selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    const container = range.startContainer;
+
+    if (!editor.contains(container)) {
+      return false;
+    }
+
+    if (findEnclosingTag(container, "code", editor)) {
+      return false;
+    }
+
+    const diagram = findClosestDiagram(container, editor);
+    if (diagram && findClosestDiagramSource(container, diagram)) {
+      return false;
+    }
+
+    if (findClosestEquation(container, editor)) {
+      return false;
+    }
+
+    if (container instanceof Text) {
+      const textBeforeCaret = (container.textContent ?? "").slice(0, range.startOffset);
+      // \s do JS ja cobre o nbsp (\u00A0), a forma comum de espaco em
+      // contenteditable.
+      return textBeforeCaret.length === 0 || /\s$/.test(textBeforeCaret);
+    }
+
+    // Caret direto num elemento (bloco vazio, ex. <div><br></div>).
+    return true;
+  }
+
+  // Rect do caret com fallback para o rect do bloco pai: range colapsado em
+  // bloco vazio devolve retangulo zerado.
+  function getCaretRect() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+
+    const range = selection.getRangeAt(0).cloneRange();
+    const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+    if (rect.width > 0 || rect.height > 0 || rect.top !== 0 || rect.left !== 0) {
+      return rect;
+    }
+
+    const container = range.startContainer;
+    const element = container instanceof HTMLElement ? container : container.parentElement;
+    return element?.getBoundingClientRect() ?? null;
+  }
+
+  function computeSlashMenuPosition() {
+    const editorShell = editorShellRef.current;
+    const caretRect = getCaretRect();
+
+    if (!editorShell || !caretRect) {
+      return null;
+    }
+
+    const shellRect = editorShell.getBoundingClientRect();
+    const maxLeft = Math.max(8, shellRect.width - notebookSlashMenuWidth - 8);
+    const left = Math.min(Math.max(8, caretRect.left - shellRect.left), maxLeft);
+
+    // Abaixo da linha do caret; perto da borda inferior do shell flipa para
+    // cima — mesmo espirito de getNotebookOptionsMenuPosition.
+    let top = caretRect.bottom - shellRect.top + 6;
+    if (top + notebookSlashMenuEstimatedHeight > shellRect.height - 8) {
+      top = Math.max(8, caretRect.top - shellRect.top - notebookSlashMenuEstimatedHeight - 6);
+    }
+
+    return { top, left };
+  }
+
+  // Deriva a query corrente do DOM (texto entre o "/" e o caret), ou null
+  // quando alguma invariante quebrou e o menu deve fechar: no da ancora
+  // removido, caret em outro no/antes do "/", "/" apagado, espaco na query.
+  function readSlashQueryFromDom() {
+    const anchor = slashAnchorRef.current;
+    const selection = window.getSelection();
+
+    if (!anchor || !anchor.node.isConnected || !selection || !selection.isCollapsed || selection.anchorNode !== anchor.node) {
+      return null;
+    }
+
+    const text = anchor.node.textContent ?? "";
+    const caretOffset = selection.anchorOffset;
+
+    if (text[anchor.offset] !== "/" || caretOffset <= anchor.offset) {
+      return null;
+    }
+
+    const query = text.slice(anchor.offset + 1, caretOffset);
+    // Espaco encerra o modo menu: a partir dali o "/" vira texto comum.
+    return /\s/.test(query) ? null : query;
+  }
+
+  // Abre o menu no input que inseriu o "/". A flag pendente e consumida
+  // SEMPRE e o caractere e reconferido no DOM: um atalho tipo Ctrl+/ que nao
+  // produz texto nao pode deixar a flag armada para um input posterior.
+  function openSlashMenuFromPendingTrigger() {
+    const selection = window.getSelection();
+    const container = selection?.anchorNode ?? null;
+
+    if (!selection || !selection.isCollapsed || !(container instanceof Text) || selection.anchorOffset === 0) {
+      return;
+    }
+
+    const offset = selection.anchorOffset - 1;
+    if ((container.textContent ?? "")[offset] !== "/") {
+      return;
+    }
+
+    const position = computeSlashMenuPosition();
+    if (!position) {
+      return;
+    }
+
+    slashAnchorRef.current = { node: container, offset };
+    setSlashMenu({ top: position.top, left: position.left, query: "", selectedIndex: 0 });
+  }
+
+  function syncSlashMenuQuery() {
+    const query = readSlashQueryFromDom();
+
+    if (query === null) {
+      closeSlashMenu();
+      return;
+    }
+
+    setSlashMenu((current) => (current && current.query !== query ? { ...current, query, selectedIndex: 0 } : current));
+  }
+
+  function handleInput() {
+    emitChange();
+
+    if (pendingSlashTriggerRef.current) {
+      pendingSlashTriggerRef.current = false;
+      openSlashMenuFromPendingTrigger();
+      return;
+    }
+
+    if (slashAnchorRef.current) {
+      syncSlashMenuQuery();
+    }
+  }
+
+  function applySlashMenuItem(item: NotebookInsertMenuItem) {
+    const anchor = slashAnchorRef.current;
+    const query = slashMenu?.query ?? "";
+    closeSlashMenu();
+
+    // Deleta o trigger ("/" + query) e reposiciona caret e savedRangeRef ali
+    // — os insert* existentes leem essa selecao, nada muda no caminho deles.
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (anchor && anchor.node.isConnected && editor && selection && editor.contains(anchor.node)) {
+      const textLength = anchor.node.textContent?.length ?? 0;
+      const deleteEnd = Math.min(anchor.offset + 1 + query.length, textLength);
+
+      const range = document.createRange();
+      range.setStart(anchor.node, anchor.offset);
+      range.setEnd(anchor.node, deleteEnd);
+      range.deleteContents();
+      range.collapse(true);
+
+      editor.focus();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      savedRangeRef.current = range.cloneRange();
+      // Imagem/PDF nao inserem nada agora (dialogo assincrono): o texto do
+      // trigger ja saiu do conteudo, entao o autosave precisa saber aqui.
+      emitChange();
+    }
+
+    item.run();
+  }
+
   function escapeHtml(value: string) {
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
@@ -927,7 +1186,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
@@ -1043,7 +1301,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
@@ -1120,7 +1377,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
@@ -1815,7 +2071,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -1843,7 +2098,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsMoreMenuOpen(false);
@@ -1868,7 +2122,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsCiteMenuOpen(false);
   }
@@ -1878,7 +2131,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
@@ -1896,7 +2148,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
@@ -1909,7 +2160,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
@@ -1933,7 +2183,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
@@ -1946,7 +2195,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
@@ -1956,7 +2204,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
@@ -2011,7 +2258,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
   }
@@ -2054,7 +2300,107 @@ export function NotebookPageEditor({
     emitChange();
   }
 
+  // Fonte unica dos itens de insercao de bloco: alimenta a secao "Inserir"
+  // do menu "..." e o menu inline "/" — nao duplicar entradas ao adicionar
+  // um bloco novo.
+  const insertMenuItems: NotebookInsertMenuItem[] = [
+    { id: "table", section: "insert", label: "Tabela", keywords: ["tabela", "table"], icon: <TableIcon />, run: insertTableBlock },
+    { id: "callout", section: "insert", label: "Callout", keywords: ["callout", "destaque", "chamada", "aviso"], icon: <CalloutIcon />, run: insertCalloutBlock },
+    { id: "image", section: "insert", label: "Imagem", keywords: ["imagem", "image", "figura", "foto"], icon: <FigureIcon />, run: openLocalImagePicker },
+    { id: "equation", section: "insert", label: "Equação", keywords: ["equacao", "formula", "latex", "matematica"], icon: <EquationIcon />, run: insertEquationBlock },
+    {
+      id: "separator",
+      section: "insert",
+      label: "Separador",
+      keywords: ["separador", "divisor", "linha"],
+      icon: <span className="h-[15px] w-[15px] border-t border-current" aria-hidden="true" />,
+      run: insertSeparatorBlock,
+    },
+    ...diagramInsertSubtypes.flatMap((subtype): NotebookInsertMenuItem[] => {
+      const diagramKind = diagramKindFromFigureSubtype(subtype);
+      if (!diagramKind) {
+        return [];
+      }
+
+      return [
+        {
+          id: subtype,
+          section: "diagram",
+          label: figureSubtypeLabels[subtype],
+          keywords: ["diagrama", "diagram", "grafo", "fluxograma"],
+          icon: <FigureIcon />,
+          run: () => insertDiagramBlock(diagramKind),
+        },
+      ];
+    }),
+    { id: "pdf", section: "reference", label: "Vincular PDF", keywords: ["pdf", "anexo", "vincular", "documento"], icon: <PdfToolbarIcon />, run: openPdfPickerFromToolbar },
+  ];
+
+  const slashMenuQuery = slashMenu ? normalizeSlashFilterText(slashMenu.query) : "";
+  const filteredSlashMenuItems =
+    slashMenuQuery.length === 0
+      ? insertMenuItems
+      : insertMenuItems.filter((item) =>
+          [item.label, ...item.keywords].some((term) => normalizeSlashFilterText(term).includes(slashMenuQuery)),
+        );
+  // Indice defensivamente clampado: o filtro pode encolher a lista entre o
+  // ultimo ArrowDown e o proximo render.
+  const slashSelectedIndex = slashMenu ? Math.min(slashMenu.selectedIndex, Math.max(0, filteredSlashMenuItems.length - 1)) : 0;
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    // Menu "/" aberto consome as teclas de navegacao ANTES dos handlers de
+    // Enter/Delete de tabela/callout/diagrama/equacao — sem isso, Enter
+    // escolheria um item E quebraria a linha da tabela ao mesmo tempo.
+    if (slashMenu) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const count = filteredSlashMenuItems.length;
+        if (count > 0) {
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          const nextIndex = (slashSelectedIndex + direction + count) % count;
+          setSlashMenu((current) => (current ? { ...current, selectedIndex: nextIndex } : current));
+        }
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const item = filteredSlashMenuItems[slashSelectedIndex];
+        if (item) {
+          applySlashMenuItem(item);
+        } else {
+          closeSlashMenu();
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        // preventDefault: o NotebookPanel fecha painel/drawer no Escape
+        // quando defaultPrevented e false — este Esc e so do menu.
+        event.preventDefault();
+        closeSlashMenu();
+        return;
+      }
+
+      if (event.key === "Tab") {
+        // Tab abandona o menu e segue o fluxo normal (ex.: navegacao de
+        // celula de tabela).
+        closeSlashMenu();
+      }
+
+      if (event.key === "Backspace" || event.key === "Delete") {
+        // Delecao de texto comum dentro da query: pula os handlers
+        // estruturais abaixo; o input seguinte recalcula ou fecha o menu.
+        return;
+      }
+    }
+
+    if (event.key === "/" && !event.nativeEvent.isComposing && isValidSlashTriggerContext()) {
+      // O caractere e inserido normalmente pelo browser; o menu abre no
+      // input seguinte, depois de confirmar o "/" no DOM.
+      pendingSlashTriggerRef.current = true;
+    }
+
     if (event.key === "Tab" && handleTableTabKey(event)) {
       return;
     }
@@ -2145,7 +2491,6 @@ export function NotebookPageEditor({
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
-    setIsInsertMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
@@ -2254,48 +2599,24 @@ export function NotebookPageEditor({
   const insertMenuContent = (
     <>
       <p className={menuSectionLabelClassName}>Inserir</p>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertTableBlock}>
-        <TableIcon />
-        Tabela
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertCalloutBlock}>
-        <CalloutIcon />
-        Callout
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={openLocalImagePicker}>
-        <FigureIcon />
-        Imagem
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertEquationBlock}>
-        <EquationIcon />
-        Equação
-      </button>
-      <button type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={insertSeparatorBlock}>
-        <span className="h-[15px] w-[15px] border-t border-current" aria-hidden="true" />
-        Separador
-      </button>
+      {insertMenuItems
+        .filter((item) => item.section === "insert")
+        .map((item) => (
+          <button key={item.id} type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={item.run}>
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
       <div className="my-1 h-px bg-border-subtle" />
       <p className={menuSectionLabelClassName}>Diagramas</p>
-      {diagramInsertSubtypes.map((subtype) => {
-        const diagramKind = diagramKindFromFigureSubtype(subtype);
-
-        if (!diagramKind) {
-          return null;
-        }
-
-        return (
-          <button
-            key={subtype}
-            type="button"
-            className={menuItemClassName}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => insertDiagramBlock(diagramKind)}
-          >
-            <FigureIcon />
-            {figureSubtypeLabels[subtype]}
+      {insertMenuItems
+        .filter((item) => item.section === "diagram")
+        .map((item) => (
+          <button key={item.id} type="button" className={menuItemClassName} onMouseDown={(event) => event.preventDefault()} onClick={item.run}>
+            {item.icon}
+            {item.label}
           </button>
-        );
-      })}
+        ))}
     </>
   );
 
@@ -2348,12 +2669,6 @@ export function NotebookPageEditor({
       </div>
     </>
   );
-
-  const insertMenu = isInsertMenuOpen ? (
-    <div className={menuPanelClassName} role="menu" aria-label="Inserir">
-      {insertMenuContent}
-    </div>
-  ) : null;
 
   const moreMenu = isMoreMenuOpen ? (
     <div className={menuPanelClassName}>
@@ -2515,30 +2830,6 @@ export function NotebookPageEditor({
     </button>
   );
 
-  const insertMenuButton = (
-    <button
-      type="button"
-      title="Inserir"
-      aria-label="Inserir"
-      aria-haspopup="menu"
-      aria-expanded={isInsertMenuOpen}
-      className={toolbarChipButtonClassName}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        saveCurrentRange();
-      }}
-      onClick={() => {
-        const shouldOpen = !isInsertMenuOpen;
-        closePeerToolbarMenus();
-        setIsInsertMenuOpen(shouldOpen);
-      }}
-    >
-      <span className="notebook-toolbar-focus-compact-icon text-base leading-none" aria-hidden="true">+</span>
-      <span className="notebook-toolbar-focus-label">Inserir</span>
-      <span className="notebook-toolbar-focus-chevron"><ChevronDownIcon /></span>
-    </button>
-  );
-
   const moreMenuButton = (
     <div className="relative shrink-0">
       <button
@@ -2597,8 +2888,6 @@ export function NotebookPageEditor({
       {renderToolbarActionButton(italicButton)}
       {focusToolbarSeparator}
       {listMenuButton}
-      {focusToolbarSeparator}
-      {insertMenuButton}
       <span className="min-w-2 flex-1" aria-hidden="true" />
       {moreMenuButton}
     </>
@@ -2632,7 +2921,6 @@ export function NotebookPageEditor({
           {toolbarVariant === "focus" ? focusToolbarControls : defaultToolbarControls}
           {toolbarVariant === "focus" ? textMenu : null}
           {toolbarVariant === "focus" ? listMenu : null}
-          {toolbarVariant === "focus" ? insertMenu : null}
 
           {isLinkPopoverOpen ? (
             <div className={`absolute top-[calc(100%+6px)] z-40 flex w-72 items-center gap-2 rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg ${
@@ -2852,6 +3140,38 @@ export function NotebookPageEditor({
             </button>
           </div>
         ) : null}
+        {slashMenu ? (
+          <div
+            ref={slashMenuRef}
+            role="menu"
+            aria-label="Inserir bloco"
+            className="absolute z-40 flex flex-col gap-px overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1.5 shadow-lg"
+            style={{ top: slashMenu.top, left: slashMenu.left, width: notebookSlashMenuWidth, maxHeight: notebookSlashMenuEstimatedHeight }}
+          >
+            <p className={menuSectionLabelClassName}>Inserir bloco</p>
+            {filteredSlashMenuItems.length === 0 ? (
+              <p className="px-3 py-2 text-xs font-medium text-text-subtle">Nenhum bloco encontrado</p>
+            ) : (
+              filteredSlashMenuItems.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs font-semibold transition ${
+                    index === slashSelectedIndex ? activeMenuItemClassName : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                  }`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applySlashMenuItem(item)}
+                >
+                  <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-surface-muted text-text-primary" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
         {isEmpty ? (
           <div className="pointer-events-none absolute inset-x-0 top-0">
             <span
@@ -2869,12 +3189,20 @@ export function NotebookPageEditor({
           aria-label="Conteúdo da página"
           contentEditable
           suppressContentEditableWarning
-          onInput={emitChange}
-          onBlur={onBlur}
+          onInput={handleInput}
+          onBlur={() => {
+            closeSlashMenu();
+            onBlur();
+          }}
           onClick={handleEditorClick}
           onPaste={handlePaste}
           onKeyDown={handleKeyDown}
-          onScroll={syncActiveActions}
+          onScroll={() => {
+            // Menu "/" e ancorado na posicao de abertura; rolagem fecha em
+            // vez de reposicionar.
+            closeSlashMenu();
+            syncActiveActions();
+          }}
           style={editorStyle}
           className={`notebook-editor notebook-editor--spaced ${isFocusMode ? "notebook-editor--focus" : ""} ${isCtrlPressed ? "notebook-editor--link-nav" : ""} ${isDiagramCleanMode ? "notebook-editor--diagram-clean-mode" : ""} h-full w-full overflow-y-auto break-words border-0 bg-transparent py-4 pr-5 text-sm leading-7 text-[var(--foreground)] outline-none ${contentInsetClassName}`}
         />
