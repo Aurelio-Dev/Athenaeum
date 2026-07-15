@@ -46,9 +46,7 @@ import { buildNotebookExportHtml, type NotebookExportScope, type NotebookExportW
 import { estimateNotebookExportSizeBytes, shouldGateNotebookExportSize } from "./notebookExportSizeEstimate";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
-  notebookDetailsCollapseBreakpoint,
   notebookDetailsColumnWidth,
-  notebookEditorMinWidth,
   notebookPagesColumnWidth,
   notebookPanelHeight,
   notebookPanelMinHeight,
@@ -451,7 +449,7 @@ function MenuGlyph({
 }
 
 // Icone do botao que mostra/esconde a coluna de Paginas (esquerda): retangulo
-// do painel com a coluna ESQUERDA destacada. Espelho do DetailsToggleIcon.
+// do painel com a coluna ESQUERDA destacada.
 function PagesToggleIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -461,13 +459,13 @@ function PagesToggleIcon() {
   );
 }
 
-// Icone do botao que mostra/esconde a coluna de Detalhes: retangulo do painel
-// com a coluna DIREITA destacada — glifo comum para "toggle sidebar".
-function DetailsToggleIcon() {
+// Icone do botao que abre/fecha o drawer de Detalhes: glifo de informacao "i".
+function InfoIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <line x1="15" x2="15" y1="4" y2="20" />
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" x2="12" y1="11" y2="16" />
+      <line x1="12" x2="12.01" y1="7.5" y2="7.5" />
     </svg>
   );
 }
@@ -652,12 +650,9 @@ export function NotebookPanel({
   // navegacao) — so o toggle manual do usuario a esconde/mostra.
   const [isPagesPanelOpen, setIsPagesPanelOpen] = useState(true);
 
-  // Coluna de Detalhes (Parte 3): visivel por padrao, mas escondida atras do
-  // botao de toggle do header quando o painel comeca (ou e redimensionado)
-  // abaixo do breakpoint — a coluna de paginas tem prioridade sobre a de
-  // Detalhes, entao e sempre ela que cede espaco primeiro.
-  const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(() => getInitialPanelSize().width >= notebookDetailsCollapseBreakpoint);
-  const wasNarrowRef = useRef(getInitialPanelSize().width < notebookDetailsCollapseBreakpoint);
+  // Drawer de Detalhes: fechado por padrao, sempre um overlay flutuante sobre
+  // o editor (nunca reflow) — so abre sob demanda pelo icone "i" do header.
+  const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
 
   // Dados do caderno (titulo/colecao/descricao). O ESTADO ja existe desde a
   // Parte 2, mas os CAMPOS de edicao (Colecao, Tags, PDFs vinculados,
@@ -683,6 +678,9 @@ export function NotebookPanel({
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
   const notebookOptionsContextMenu = useContextMenu();
   const detailsColumnRef = useRef<HTMLElement | null>(null);
+  const detailsToggleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const detailsCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const wasDetailsPanelOpenRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const notebookTagDropdownRef = useRef<HTMLDivElement | null>(null);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1346,21 +1344,9 @@ export function NotebookPanel({
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [isMaximized, movePanel, panel.id]);
 
-  // Auto-esconde a coluna de Detalhes so na TRANSICAO para largura estreita
-  // (nunca forca reabrir sozinho — se o usuario reabriu manualmente via
-  // toggle e depois alargar/estreitar de novo, a escolha dele fica de pe).
-  useEffect(() => {
-    const isNarrow = panelSize.width < notebookDetailsCollapseBreakpoint;
-
-    if (isNarrow && !wasNarrowRef.current) {
-      setIsDetailsPanelOpen(false);
-    }
-
-    wasNarrowRef.current = isNarrow;
-  }, [panelSize.width]);
-
-  // Esc fecha o painel — mas so quando ele e o TOPO da pilha, para nao fechar
-  // varios paineis com um unico Esc.
+  // Esc fecha o drawer de Detalhes se ele estiver aberto; caso contrario fecha
+  // o painel — mas so quando ele e o TOPO da pilha, para nao fechar varios
+  // paineis com um unico Esc.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.defaultPrevented) {
@@ -1375,13 +1361,60 @@ export function NotebookPanel({
           return;
         }
 
+        if (isDetailsPanelOpen) {
+          event.preventDefault();
+          setIsDetailsPanelOpen(false);
+          return;
+        }
+
         void handleClose();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [panels, panel.id, handleClose, isFocusMode, exitFocusMode]);
+  }, [panels, panel.id, handleClose, isFocusMode, exitFocusMode, isDetailsPanelOpen]);
+
+  // Fecha o drawer de Detalhes ao clicar fora dele (fora tambem do proprio
+  // botao "i" que o abre/fecha, senao o mousedown fecharia e o click do botao
+  // reabriria em seguida).
+  useEffect(() => {
+    if (!isDetailsPanelOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!(event.target instanceof Node)) {
+        return;
+      }
+      if (detailsColumnRef.current?.contains(event.target)) {
+        return;
+      }
+      if (detailsToggleButtonRef.current?.contains(event.target)) {
+        return;
+      }
+      setIsDetailsPanelOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isDetailsPanelOpen]);
+
+  // Move o foco para dentro do drawer ao abrir e devolve para o botao "i" ao
+  // fechar — sem isso o foco de teclado fica preso atras do overlay (aberto)
+  // ou e perdido de vez (fechado). So dispara na TRANSICAO, nunca no mount.
+  useEffect(() => {
+    if (wasDetailsPanelOpenRef.current === isDetailsPanelOpen) {
+      return;
+    }
+    wasDetailsPanelOpenRef.current = isDetailsPanelOpen;
+
+    if (isDetailsPanelOpen) {
+      detailsCloseButtonRef.current?.focus();
+    } else {
+      detailsToggleButtonRef.current?.focus();
+    }
+  }, [isDetailsPanelOpen]);
 
   // Best-effort no unmount (ex.: app fechando o painel por outra via): salva
   // o que estiver sujo. saveActivePage e estavel (useCallback []), entao este
@@ -1444,9 +1477,6 @@ export function NotebookPanel({
   const activeContentInset = isFocusMode ? focusContentInset : contentInset;
   const shouldShowPagesPanel = isPagesPanelOpen && !isFocusMode;
   const shouldShowDetailsPanel = isDetailsPanelOpen && !isFocusMode;
-  const pagesColumnWidth = shouldShowPagesPanel ? notebookPagesColumnWidth : 0;
-  const canRenderDetailsInline = panelSize.width >= pagesColumnWidth + notebookDetailsColumnWidth + notebookEditorMinWidth;
-  const shouldRenderDetailsAsDrawer = shouldShowDetailsPanel && !canRenderDetailsInline;
   const zoomControl = (
     <div className="relative" ref={zoomMenuRef}>
       <button
@@ -1538,6 +1568,18 @@ export function NotebookPanel({
           <div className="flex items-center justify-end gap-1" onMouseDown={(event) => event.stopPropagation()}>
             <button
               type="button"
+              aria-label="Mais opções"
+              title="Mais opções"
+              aria-haspopup="menu"
+              aria-expanded={notebookOptionsContextMenu.isOpen}
+              className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
+              onClick={(event) => openNotebookOptionsMenu(event, "header")}
+            >
+              <MoreVerticalIcon />
+            </button>
+            <button
+              ref={detailsToggleButtonRef}
+              type="button"
               aria-label={isDetailsPanelOpen ? "Fechar informações do caderno" : "Informações do caderno"}
               title={isDetailsPanelOpen ? "Fechar informações do caderno" : "Informações do caderno"}
               aria-pressed={shouldShowDetailsPanel}
@@ -1552,7 +1594,7 @@ export function NotebookPanel({
                 setIsDetailsPanelOpen((current) => !current);
               }}
             >
-              <DetailsToggleIcon />
+              <InfoIcon />
             </button>
             <button
               type="button"
@@ -1781,24 +1823,21 @@ export function NotebookPanel({
           {shouldShowDetailsPanel ? (
             <aside
               ref={detailsColumnRef}
-              style={{ width: notebookDetailsColumnWidth, maxWidth: shouldRenderDetailsAsDrawer ? "calc(100% - 3rem)" : undefined }}
-              className={`flex flex-col overflow-hidden border-l border-border-subtle bg-[var(--card)] ${
-                shouldRenderDetailsAsDrawer ? "absolute bottom-0 right-0 top-0 z-30 shadow-2xl" : "shrink-0"
-              }`}
+              style={{ width: notebookDetailsColumnWidth, maxWidth: "calc(100% - 3rem)" }}
+              className="absolute bottom-0 right-0 top-0 z-30 flex flex-col overflow-hidden border-l border-border-strong bg-[var(--card)]"
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <SectionLabel>Detalhes</SectionLabel>
                 <button
+                  ref={detailsCloseButtonRef}
                   type="button"
-                  aria-label="Mais opções"
-                  title="Mais opções"
-                  aria-haspopup="menu"
-                  aria-expanded={notebookOptionsContextMenu.isOpen}
+                  aria-label="Fechar informações do caderno"
+                  title="Fechar informações do caderno"
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                  onClick={(event) => openNotebookOptionsMenu(event, "header")}
+                  onClick={() => setIsDetailsPanelOpen(false)}
                 >
-                  <MoreVerticalIcon />
+                  <CloseIcon />
                 </button>
               </div>
 

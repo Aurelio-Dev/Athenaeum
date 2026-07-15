@@ -13,14 +13,9 @@ export const notebookPanelHeight = 760;
 export const notebookPanelMinWidth = 640;
 export const notebookPanelMinHeight = 440;
 
-// Larguras fixas das colunas laterais (a coluna do meio, do editor, e quem
-// flexiona). Mesmos valores usados no calculo do breakpoint abaixo.
+// Largura fixa da coluna de Paginas (a coluna do meio, do editor, e quem
+// flexiona). A coluna de Detalhes nao entra nesse calculo: ela e sempre um
+// drawer overlay, sem reflow, entao sua largura nao disputa espaco com as
+// demais colunas.
 export const notebookPagesColumnWidth = 260;
-export const notebookDetailsColumnWidth = 320;
-export const notebookEditorMinWidth = 600;
-
-// Abaixo desta largura de PAINEL (nao de janela), a coluna de Detalhes some
-// atras do botao de toggle no header — sem isso, o espaco que sobra para o
-// editor ficaria apertado demais. 240 (paginas) + 320 (detalhes) + ~500
-// (minimo confortavel para o editor com toolbar) arredondado.
-export const notebookDetailsCollapseBreakpoint = notebookPagesColumnWidth + notebookDetailsColumnWidth + notebookEditorMinWidth;
+export const notebookDetailsColumnWidth = 360;
