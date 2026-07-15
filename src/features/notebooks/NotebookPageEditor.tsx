@@ -2333,7 +2333,8 @@ export function NotebookPageEditor({
         },
       ];
     }),
-    { id: "pdf", section: "reference", label: "Vincular PDF", keywords: ["pdf", "anexo", "vincular", "documento"], icon: <PdfToolbarIcon />, run: openPdfPickerFromToolbar },
+    { id: "attachment", section: "reference", label: "Anexar arquivo", keywords: ["anexo", "anexar", "arquivo", "attachment", "file"], icon: <AttachmentIcon />, run: openLocalAttachmentPicker },
+    { id: "pdf", section: "reference", label: "Vincular PDF", keywords: ["pdf", "vincular", "documento"], icon: <PdfToolbarIcon />, run: openPdfPickerFromToolbar },
   ];
 
   const slashMenuQuery = slashMenu ? normalizeSlashFilterText(slashMenu.query) : "";
@@ -2462,7 +2463,6 @@ export function NotebookPageEditor({
   const toolbarBaseTextClassName = "text-[var(--color-sidebar-muted)] hover:text-[var(--color-sidebar-text)]";
   const toolbarIconButtonClassName = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const toolbarHeadingButtonClassName = `inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-2 transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
-  const toolbarPdfButtonClassName = `inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const toolbarChipButtonClassName = `notebook-toolbar-focus-menu-button inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const activeToolbarButtonClassName = "bg-primary-soft text-[var(--color-sidebar-text)]";
   const toolbarSeparator = <span className="mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
@@ -2755,33 +2755,6 @@ export function NotebookPageEditor({
     </button>
   );
 
-  const attachmentToolbarButton = (
-    <button
-      type="button"
-      title="Anexar arquivo"
-      aria-label="Anexar arquivo"
-      className={toolbarIconButtonClassName}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={openLocalAttachmentPicker}
-    >
-      <AttachmentIcon />
-    </button>
-  );
-
-  const pdfToolbarButton = (
-    <button
-      type="button"
-      title="Vincular PDF"
-      aria-label="Vincular PDF"
-      className={toolbarPdfButtonClassName}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={openPdfPickerFromToolbar}
-    >
-      <PdfToolbarIcon />
-      PDF
-    </button>
-  );
-
   const textMenuButton = (
     <button
       type="button"
@@ -2873,8 +2846,6 @@ export function NotebookPageEditor({
       {citeToolbarButton}
       {toolbarSeparator}
       {linkToolbarButton}
-      {attachmentToolbarButton}
-      {pdfToolbarButton}
       <span className="min-w-4 flex-1" aria-hidden="true" />
       {moreMenuButton}
     </>
