@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
@@ -38,6 +38,7 @@ import {
   type NotebookReadingStatus,
 } from "../../lib/database";
 import { useContextMenu } from "../../hooks/useContextMenu";
+import { deriveCoverHue } from "../../lib/documentColor";
 import type { LibraryCollection, LibraryDocument, NotebookPage, SubjectTag } from "../../types/library";
 import { DocumentPickerModal } from "../library/DocumentPickerModal";
 import { TagSelector } from "../library/TagSelector";
@@ -47,7 +48,8 @@ import { estimateNotebookExportSizeBytes, shouldGateNotebookExportSize } from ".
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
 import {
   notebookDetailsColumnWidth,
-  notebookPagesColumnWidth,
+  notebookPagesRailCollapsedWidth,
+  notebookPagesRailExpandedWidth,
   notebookPanelHeight,
   notebookPanelMinHeight,
   notebookPanelMinWidth,
@@ -238,15 +240,24 @@ function formatNotebookExportWriteWarning(warning: NotebookExportWriteWarning) {
   return location ? `${warning.message} (${location})` : warning.message;
 }
 
-function NotebookHeaderIcon() {
+// Icone de "pilha de paginas" no topo do trilho: sempre visivel (mesmo
+// colapsado), sinaliza que a coluna e a navegacao entre paginas. Tambem e o
+// alvo de clique que alterna colapsado/expandido.
+function PagesStackIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3z" />
-      <path d="M9 7h7" />
-      <path d="M9 11h5" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="3" width="11" height="15" rx="2" />
+      <path d="M8 21h9a2 2 0 0 0 2-2V7" />
     </svg>
   );
+}
+
+// Cor do dot de cada pagina: reusa o hue deterministico das capas de documento
+// (deriveCoverHue) com a mesma saturacao/luminosidade dos dots de colecao — sem
+// calculo de hue novo e sem cor nova. Seed = id da pagina (estavel e unico; o
+// titulo pode ser vazio ou repetido entre paginas).
+function pageDotColor(pageId: number) {
+  return `hsl(${deriveCoverHue(String(pageId))} 55% 52%)`;
 }
 
 function BreadcrumbChevronIcon() {
@@ -307,15 +318,6 @@ function PlusIcon({ size = 14 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
       <line x1="12" x2="12" y1="5" y2="19" />
       <line x1="5" x2="19" y1="12" y2="12" />
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <line x1="21" x2="16.65" y1="21" y2="16.65" />
     </svg>
   );
 }
@@ -448,17 +450,6 @@ function MenuGlyph({
   );
 }
 
-// Icone do botao que mostra/esconde a coluna de Paginas (esquerda): retangulo
-// do painel com a coluna ESQUERDA destacada.
-function PagesToggleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <line x1="9" x2="9" y1="4" y2="20" />
-    </svg>
-  );
-}
-
 // Icone do botao que abre/fecha o drawer de Detalhes: glifo de informacao "i".
 function InfoIcon() {
   return (
@@ -505,33 +496,6 @@ function formatNotebookDate(value: string) {
     minute: "2-digit",
     second: "2-digit",
   });
-}
-
-function formatEditedAgo(value?: string) {
-  if (!value) {
-    return "Editado agora";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Editado agora";
-  }
-
-  const diffMinutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
-  if (diffMinutes < 1) {
-    return "Editado agora";
-  }
-  if (diffMinutes < 60) {
-    return `Editado há ${diffMinutes} min`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `Editado há ${diffHours} h`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `Editado há ${diffDays} d`;
 }
 
 const notebookReadingStatusOptions: Array<{ value: NotebookReadingStatus; label: string }> = [
@@ -615,7 +579,6 @@ export function NotebookPanel({
   const initialPanelSizeRef = useRef(getInitialPanelSize());
   const [panelSize, setPanelSize] = useState(() => (initialMaximized ? getMaximizedPanelSize() : initialPanelSizeRef.current));
   const [isMaximized, setIsMaximized] = useState(initialMaximized);
-  const [pageSearchTerm, setPageSearchTerm] = useState("");
   const pageContextMenu = useContextMenu();
   const [draftTitle, setDraftTitle] = useState("");
   const [editorStats, setEditorStats] = useState<EditorStats>({ words: 0, characters: 0 });
@@ -645,10 +608,14 @@ export function NotebookPanel({
   } | null>(initialMaximized ? { position: panel.position, size: initialPanelSizeRef.current, collapsed: false } : null);
   const hasAppliedInitialMaximizedRef = useRef(initialMaximized);
 
-  // Coluna de Paginas (esquerda): sempre visivel por padrao. Diferente da de
-  // Detalhes, ela NUNCA colapsa sozinha pelo breakpoint (tem prioridade de
-  // navegacao) — so o toggle manual do usuario a esconde/mostra.
-  const [isPagesPanelOpen, setIsPagesPanelOpen] = useState(true);
+  // Trilho de Paginas (esquerda): sempre presente fora do modo foco. O UNICO
+  // mecanismo de recolher e o toggle do proprio trilho (icone de pilha), que
+  // alterna a largura entre colapsado (so os dots) e expandido (com titulos).
+  // Nasce SEMPRE colapsado e nunca persiste — reabrir o caderno recomeca
+  // colapsado. A expansao faz reflow real do editor (diferente do drawer de
+  // Detalhes, que sobrepoe).
+  const [isPagesRailExpanded, setIsPagesRailExpanded] = useState(false);
+  const pagesRailRef = useRef<HTMLElement | null>(null);
 
   // Drawer de Detalhes: fechado por padrao, sempre um overlay flutuante sobre
   // o editor (nunca reflow) — so abre sob demanda pelo icone "i" do header.
@@ -1344,9 +1311,11 @@ export function NotebookPanel({
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [isMaximized, movePanel, panel.id]);
 
-  // Esc fecha o drawer de Detalhes se ele estiver aberto; caso contrario fecha
-  // o painel — mas so quando ele e o TOPO da pilha, para nao fechar varios
-  // paineis com um unico Esc.
+  // Esc fecha, nesta ordem, o que estiver "por cima": modo foco, drawer de
+  // Detalhes, trilho de Paginas expandido; so entao fecha o painel — e apenas
+  // quando ele e o TOPO da pilha, para nao fechar varios paineis com um Esc.
+  // O menu "/" do editor ja trata o proprio Esc com preventDefault, entao o
+  // guard de defaultPrevented no topo evita conflito com a Fase 2.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.defaultPrevented) {
@@ -1367,13 +1336,37 @@ export function NotebookPanel({
           return;
         }
 
+        if (isPagesRailExpanded) {
+          event.preventDefault();
+          setIsPagesRailExpanded(false);
+          return;
+        }
+
         void handleClose();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [panels, panel.id, handleClose, isFocusMode, exitFocusMode, isDetailsPanelOpen]);
+  }, [panels, panel.id, handleClose, isFocusMode, exitFocusMode, isDetailsPanelOpen, isPagesRailExpanded]);
+
+  // Colapsa o trilho de Paginas ao clicar fora dele — mesmo padrao do
+  // clique-fora do drawer de Detalhes logo abaixo.
+  useEffect(() => {
+    if (!isPagesRailExpanded) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (event.target instanceof Node && pagesRailRef.current?.contains(event.target)) {
+        return;
+      }
+      setIsPagesRailExpanded(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isPagesRailExpanded]);
 
   // Fecha o drawer de Detalhes ao clicar fora dele (fora tambem do proprio
   // botao "i" que o abre/fecha, senao o mousedown fecharia e o click do botao
@@ -1461,21 +1454,12 @@ export function NotebookPanel({
   const exportPreparedScopeLabel =
     preparedExport?.scope === "current-page" ? "Página atual" : preparedExport?.scope === "full-notebook" ? "Caderno completo" : "";
 
-  const visiblePages = useMemo(() => {
-    const term = pageSearchTerm.trim().toLowerCase();
-    if (!term) {
-      return pages;
-    }
-    return pages.filter((page) => pageDisplayTitle(page).toLowerCase().includes(term));
-  }, [pages, pageSearchTerm]);
   const currentCollectionName = collections.find((collection) => collection.id === infoDraftCollectionId)?.name ?? notebookInfo?.collectionName ?? "Sem título";
-  const notebookSummary = `${pages.length} ${pages.length === 1 ? "página" : "páginas"} - ${formatEditedAgo(notebookInfo?.updatedAt)}`;
   const saveStatusText = getNotebookSaveStatusLabel(saveStatus);
   const readingStatusPercent = getReadingStatusPercent(infoDraftReadingStatus);
   const editorZoomScale = editorZoomPercent / 100;
   const activeSpacingMode = isFocusMode ? focusSpacingMode : normalSpacingMode;
   const activeContentInset = isFocusMode ? focusContentInset : contentInset;
-  const shouldShowPagesPanel = isPagesPanelOpen && !isFocusMode;
   const shouldShowDetailsPanel = isDetailsPanelOpen && !isFocusMode;
   const zoomControl = (
     <div className="relative" ref={zoomMenuRef}>
@@ -1534,27 +1518,10 @@ export function NotebookPanel({
           }`}
           onMouseDown={isMaximized ? undefined : startDragging}
         >
-          <div className="flex min-w-0 items-center gap-1">
-            <button
-              type="button"
-              aria-label={isPagesPanelOpen ? "Fechar lista de páginas" : "Lista de páginas"}
-              title={isPagesPanelOpen ? "Fechar lista de páginas" : "Lista de páginas"}
-              aria-pressed={shouldShowPagesPanel}
-              className={`shrink-0 rounded-md p-1.5 transition hover:bg-[var(--floating-header-hover-bg)] ${
-                shouldShowPagesPanel ? "text-[var(--floating-header-text)]" : "text-[var(--floating-header-control)]"
-              }`}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => {
-                if (isFocusMode) {
-                  exitFocusMode();
-                  return;
-                }
-                setIsPagesPanelOpen((current) => !current);
-              }}
-            >
-              <PagesToggleIcon />
-            </button>
-          </div>
+          {/* Celula esquerda do grid do header mantida vazia (o toggle de
+              paginas agora vive no proprio trilho) so para o breadcrumb
+              central continuar centralizado entre as tres colunas. */}
+          <div aria-hidden="true" />
           <nav
             aria-label="Localização do caderno"
             className="flex min-w-0 items-center justify-center gap-2 text-xs font-semibold text-[var(--floating-header-muted)]"
@@ -1637,90 +1604,96 @@ export function NotebookPanel({
         </div>
       ) : (
         <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[var(--card)]">
-          {/* ================= COLUNA 1: PAGINAS ================= */}
-          {shouldShowPagesPanel ? (
+          {/* ================= COLUNA 1: TRILHO DE PAGINAS ================= */}
+          {/* Trilho colapsavel: nasce estreito (so os dots) e expande revelando
+              os titulos. shrink-0 + largura fixa => o editor (flex-1) reflui de
+              verdade quando expande, ao contrario do drawer de Detalhes. Fora
+              do modo foco ele esta sempre presente (recolhido, nao escondido). */}
+          {!isFocusMode ? (
           <aside
-            style={{ width: notebookPagesColumnWidth }}
-            className="flex shrink-0 flex-col border-r border-border-subtle bg-surface-card"
+            ref={pagesRailRef}
+            style={{ width: isPagesRailExpanded ? notebookPagesRailExpandedWidth : notebookPagesRailCollapsedWidth }}
+            className="flex shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200"
           >
-            <div className="border-b border-border-subtle p-4">
-              <div className="mb-4 flex min-w-0 items-center gap-3">
-                <div className="flex h-12 w-10 shrink-0 items-center justify-center rounded-md border border-primary bg-primary-soft text-primary shadow-sm">
-                  <NotebookHeaderIcon />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-text-primary" title={notebookTitle || "Caderno"}>
-                    {notebookTitle || "Caderno"}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-text-secondary">{notebookSummary}</p>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-text-subtle">
-                <SearchIcon />
-                <input
-                  value={pageSearchTerm}
-                  onChange={(event) => setPageSearchTerm(event.target.value)}
-                  placeholder="Buscar páginas..."
-                  aria-label="Buscar páginas"
-                  className="min-w-0 flex-1 border-0 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-subtle"
-                />
-              </label>
-
+            {/* Cabecalho: icone de pilha de paginas SEMPRE visivel; alterna
+                colapsado/expandido. O rotulo "Páginas" aparece so no expandido. */}
+            <div className="flex h-[52px] shrink-0 items-center gap-3 px-3">
               <button
                 type="button"
-                onClick={() => void addPage()}
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-bold text-text-inverse shadow-sm transition hover:bg-primary-dark"
+                aria-label={isPagesRailExpanded ? "Recolher lista de páginas" : "Expandir lista de páginas"}
+                aria-expanded={isPagesRailExpanded}
+                title={isPagesRailExpanded ? "Recolher páginas" : "Expandir páginas"}
+                onClick={() => setIsPagesRailExpanded((current) => !current)}
+                className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
               >
-                <PlusIcon />
-                Nova página
+                <PagesStackIcon />
               </button>
+              <span
+                aria-hidden={!isPagesRailExpanded}
+                className={`min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em] text-sidebar-muted transition-opacity duration-150 ${
+                  isPagesRailExpanded ? "opacity-100" : "opacity-0"
+                }`}
+              >
+                Páginas
+              </span>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
-              <div className="px-1 pb-2 pt-5">
-                <SectionLabel>Páginas</SectionLabel>
-              </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 pb-3 pt-0.5">
+              {pages.map((page) => {
+                const isActivePage = page.id === activePageId;
 
-              <ul className="flex flex-col gap-1">
-                {visiblePages.map((page) => (
-                  <li
+                return (
+                  <button
                     key={page.id}
+                    type="button"
+                    onClick={() => void switchToPage(page.id)}
                     onContextMenu={(event) => {
                       event.stopPropagation();
                       setContextPageId(page.id);
                       pageContextMenu.open(event);
                     }}
+                    aria-current={isActivePage}
+                    title={pageDisplayTitle(page)}
+                    className="flex items-center gap-3 rounded-lg px-0 py-1.5 text-left transition hover:bg-sidebar-raised"
                   >
-                    <button
-                      type="button"
-                      onClick={() => void switchToPage(page.id)}
-                      aria-current={page.id === activePageId}
-                      title={pageDisplayTitle(page)}
-                      className={`block w-full truncate rounded-md px-3 py-2 text-left text-sm transition ${
-                        page.id === activePageId
-                          ? "border-l-2 border-primary bg-primary-soft font-semibold text-primary"
-                          : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-                      }`}
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        background: pageDotColor(page.id),
+                        boxShadow: isActivePage ? "0 0 0 2px var(--sidebar), 0 0 0 4px var(--primary)" : undefined,
+                      }}
+                      className="h-[30px] w-[30px] shrink-0 rounded-full"
+                    />
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[13px] transition-opacity duration-150 ${
+                        isPagesRailExpanded ? "opacity-100" : "opacity-0"
+                      } ${isActivePage ? "font-semibold text-sidebar-text" : "font-medium text-sidebar-muted"}`}
                     >
                       {pageDisplayTitle(page)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                    </span>
+                  </button>
+                );
+              })}
 
-              {/* Secoes reais (agrupar paginas) ficam para uma proxima rodada —
-                  por ora a lista e sempre plana. O link fica visivel (mesmo
-                  visual da referencia) mas desabilitado, para nao fingir uma
-                  funcionalidade que ainda nao existe. */}
+              {/* "+" tracejado: acessivel colapsado (so o circulo) e expandido
+                  (com o rotulo). Mantem addPage, sem forcar expansao. */}
               <button
                 type="button"
-                disabled
-                title="Em breve"
-                className="mt-2 inline-flex w-fit items-center gap-1.5 px-1 text-xs font-medium text-text-subtle opacity-60"
+                onClick={() => void addPage()}
+                aria-label="Nova página"
+                title="Nova página"
+                className="mt-1 flex items-center gap-3 rounded-lg px-0 py-1.5 text-left text-sidebar-muted transition hover:text-sidebar-text"
               >
-                <PlusIcon size={11} />
-                Adicionar seção
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-sidebar-border">
+                  <PlusIcon size={15} />
+                </span>
+                <span
+                  className={`min-w-0 flex-1 truncate text-[13px] font-medium transition-opacity duration-150 ${
+                    isPagesRailExpanded ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  Nova página
+                </span>
               </button>
             </div>
           </aside>
