@@ -181,6 +181,11 @@
   --floating-header-hover-bg: var(--muted);
   --floating-header-divider: var(--border);
 
+  /* Barras do Caderno no modo foco. Elas nao somem: recuam, convergindo para a
+     cor da pagina, e o conteudo delas apaga (ver .notebook-focus-bar). */
+  --notebook-focus-bar-bg: #F6F0E8;
+  --notebook-focus-rail-bg: #F2EBE1;
+
   --color-border-subtle: var(--border);
   --color-border-muted: var(--border);
   --color-border-strong: var(--border);
@@ -348,6 +353,9 @@
   --floating-header-control: var(--muted-foreground);
   --floating-header-hover-bg: var(--muted);
   --floating-header-divider: var(--border);
+
+  --notebook-focus-bar-bg: #1D1712;
+  --notebook-focus-rail-bg: #18130E;
 
   --border: #3D2E22;
   --input: #2E2018;
@@ -1558,6 +1566,29 @@ select {
 
 .notebook-editor--spaced blockquote {
   margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.5) 0;
+}
+
+/* Barra recuada do modo foco: o conteudo (texto, botoes, icones) apaga e volta
+   ao normal quando o ponteiro entra NAQUELA barra — por isso a opacidade vai
+   nos filhos, e nao na barra: aplicada na barra, o fundo apagaria junto.
+   O :hover ja da o comportamento "individual por barra", e sair do foco
+   restaura todas de uma vez, porque a classe deixa de ser aplicada.
+   :focus-within existe para a navegacao por teclado: sem ele, dar Tab para
+   dentro de uma barra apagada esconderia o proprio anel de foco. */
+.notebook-focus-bar > * {
+  opacity: 0.45;
+  transition: opacity 160ms ease;
+}
+
+.notebook-focus-bar:hover > *,
+.notebook-focus-bar:focus-within > * {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notebook-focus-bar > * {
+    transition: none;
+  }
 }
 
 .notebook-editor--focus::-webkit-scrollbar {

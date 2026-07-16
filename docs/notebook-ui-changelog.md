@@ -1,5 +1,59 @@
 # Changelog da UI do Caderno
 
+## 16/07/2026 — Modo foco recuado, autosave real e Ctrl+S
+
+As barras do modo foco deixaram de sumir e passaram a recuar, e o salvamento
+automático — que não existia — foi implementado. Sem migrations.
+
+Modo foco:
+
+- O trilho de páginas era **removido do DOM** no modo foco; agora permanece,
+  como o header e o rodapé (que já ficavam e só trocavam de conteúdo).
+- As três barras ganharam cor própria no foco, convergindo para a cor da
+  página: header e rodapé em `#F6F0E8` (`#1D1712` no escuro) e trilho em
+  `#F2EBE1` (`#18130E` no escuro), via os tokens `--notebook-focus-bar-bg` e
+  `--notebook-focus-rail-bg`.
+- O conteúdo das barras (texto, botões, ícones) fica em `opacity: 0.45` e volta
+  ao normal ao passar o mouse — individualmente, uma barra por vez. Sair do
+  modo foco restaura todas. A opacidade vai nos filhos da barra, não na barra:
+  aplicada nela, o fundo apagaria junto. `:focus-within` acompanha o `:hover`
+  para que a navegação por teclado não caia numa barra apagada.
+- `enterFocusMode` passou a largar o foco de teclado: o botão "Foco" vive no
+  rodapé, e sem isso o `:focus-within` mantinha aquela barra acesa logo ao
+  entrar no modo.
+- O status de salvamento saiu do rodapé; ele agora vive só no header.
+- O botão `(i)` no modo foco abria mão do foco para mostrar o drawer. Agora ele
+  abre o drawer **por cima** do modo foco: o drawer não apaga (não é uma barra
+  recuada) e o resto continua no foco.
+- A ordem do `Esc` passou a fechar o drawer antes de sair do modo foco — o
+  drawer agora pode estar aberto por cima dele, e sair do foco primeiro o
+  deixaria aberto para trás.
+- O ícone do topo do trilho virou uma seta que aponta para onde o trilho vai:
+  `>` expande, `<` recolhe. Reusa o `ChevronRightIcon` compartilhado.
+
+Salvamento:
+
+- **Não havia autosave.** O painel só gravava em blur de campo, troca de
+  página, fechamento, export e lixeira — digitar sem sair do campo mantinha
+  "Alterações não salvas" indefinidamente, e um fechamento anormal perdia tudo
+  desde o último blur. Agora um autosave com debounce de 1,2 s grava depois de
+  uma pausa na digitação.
+- `Ctrl+S` / `Cmd+S` grava na hora e cancela o autosave agendado. Só responde
+  quando o painel é o topo da pilha, como o `Esc`, e usa `preventDefault` para
+  o WebView2 não abrir o "salvar página" do Chromium.
+- Ambos reusam a fila serializada existente (`saveQueueTailRef`), então não
+  concorrem com um save em andamento; os dois saves são guardados pelos refs de
+  "sujo", então agendar sem nada sujo é um no-op.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- Verificação manual via CDP (claro e escuro): cores e opacidades das três
+  barras medidas na entrada do foco, no hover individual e na saída; autosave e
+  `Ctrl+S` verificados por reload sem blur (o conteúdo sobrevive).
+
 ## 16/07/2026 — Superfície, tipografia serifada, callouts e modo limpo
 
 Esta fase aproximou o corpo do Caderno da referência visual e corrigiu um bug

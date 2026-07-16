@@ -4,7 +4,7 @@ import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
 import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
-import { TrashIcon } from "../../components/ui/SharedIcons";
+import { ChevronRightIcon, TrashIcon } from "../../components/ui/SharedIcons";
 import { SectionLabel } from "../../components/ui/SectionLabel";
 import { CompactDocumentCard } from "../../components/CompactDocumentCard";
 import { ProgressBar } from "../../components/ProgressBar";
@@ -62,6 +62,11 @@ const contentInset = "mx-auto w-full max-w-[760px] px-6";
 const focusContentInset = "mx-auto w-full max-w-[720px] px-6";
 const notebookNormalSpacingSettingKey = "notebook_spacing_normal";
 const notebookFocusSpacingSettingKey = "notebook_spacing_focus";
+// Silencio de digitacao antes do autosave disparar. Ate existirem os saves de
+// blur/troca de pagina/fechamento, nada gravava enquanto o usuario digitava
+// sem sair do campo: o rotulo ficava em "Alterações não salvas" e um
+// fechamento anormal perdia tudo desde o ultimo blur.
+const notebookAutosaveDelayMs = 1200;
 // Altura do header do frame (h-10) + bordas: o painel minimizado vira so a
 // barra de titulo arrastavel.
 const collapsedHeight = 42;
@@ -242,18 +247,6 @@ function formatNotebookExportWriteWarning(warning: NotebookExportWriteWarning) {
   return location ? `${warning.message} (${location})` : warning.message;
 }
 
-// Icone de "pilha de paginas" no topo do trilho: sempre visivel (mesmo
-// colapsado), sinaliza que a coluna e a navegacao entre paginas. Tambem e o
-// alvo de clique que alterna colapsado/expandido.
-function PagesStackIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="3" width="11" height="15" rx="2" />
-      <path d="M8 21h9a2 2 0 0 0 2-2V7" />
-    </svg>
-  );
-}
-
 // Cor do dot de cada pagina: reusa o hue deterministico das capas de documento
 // (deriveCoverHue) com a mesma saturacao/luminosidade dos dots de colecao — sem
 // calculo de hue novo e sem cor nova. Seed = id da pagina (estavel e unico; o
@@ -266,14 +259,6 @@ function BreadcrumbChevronIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="m9 18 6-6-6-6" />
-    </svg>
-  );
-}
-
-function SavedIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" />
     </svg>
   );
 }
@@ -675,6 +660,7 @@ export function NotebookPanel({
   const draftContentRef = useRef("");
   const isDirtyRef = useRef(false);
   const saveQueueTailRef = useRef<Promise<void>>(Promise.resolve());
+  const autosaveTimerRef = useRef<number | null>(null);
   const onNotebookChangedRef = useRef(onNotebookChanged);
   onNotebookChangedRef.current = onNotebookChanged;
 
@@ -890,6 +876,65 @@ export function NotebookPanel({
       setSaveStatus("error");
     }
   }, [collections, notebookId, notebookInfo?.collectionId]);
+
+  // Salva sozinho depois de uma pausa na digitacao. Cada chamada reinicia a
+  // contagem, entao digitar sem parar nao grava a cada tecla — grava quando o
+  // usuario respira. Os dois saves sao guardados pelos refs de "sujo", entao
+  // chamar ambos aqui e barato e idempotente.
+  const flushSaves = useCallback(() => {
+    void saveActivePage();
+    void saveNotebookInfoDraft();
+  }, [saveActivePage, saveNotebookInfoDraft]);
+
+  const scheduleAutosave = useCallback(() => {
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      flushSaves();
+    }, notebookAutosaveDelayMs);
+  }, [flushSaves]);
+
+  // Ctrl+S / Cmd+S: grava na hora e cancela o autosave agendado. So responde
+  // quando este painel e o topo da pilha, como o Esc.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "s" || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      const topPanel = panels[panels.length - 1];
+      if (topPanel?.id !== panel.id) {
+        return;
+      }
+
+      // preventDefault: sem isso o WebView2 abre o "salvar pagina" do Chromium.
+      event.preventDefault();
+
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+
+      flushSaves();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [panels, panel.id, flushSaves]);
+
+  // Um autosave agendado nao pode disparar depois do painel sair de cena: o
+  // cleanup de unmount ja grava o que estiver sujo.
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleTagsChange = useCallback(
     async (nextTags: SubjectTag[]) => {
@@ -1253,6 +1298,12 @@ export function NotebookPanel({
 
   const enterFocusMode = useCallback(() => {
     setIsTagDropdownOpen(false);
+    // O botao "Foco" vive no rodape, que vira uma .notebook-focus-bar: sem
+    // largar o foco de teclado, o :focus-within dela a manteria acesa logo ao
+    // entrar no modo — a barra so apagaria depois de um clique em outro lugar.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setIsFocusMode(true);
   }, []);
 
@@ -1334,9 +1385,11 @@ export function NotebookPanel({
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [isMaximized, movePanel, panel.id]);
 
-  // Esc fecha, nesta ordem, o que estiver "por cima": modo foco, drawer de
-  // Detalhes, trilho de Paginas expandido; so entao fecha o painel — e apenas
+  // Esc fecha, nesta ordem, o que estiver "por cima": drawer de Detalhes,
+  // modo foco, trilho de Paginas expandido; so entao fecha o painel — e apenas
   // quando ele e o TOPO da pilha, para nao fechar varios paineis com um Esc.
+  // O drawer vem ANTES do modo foco porque agora ele pode abrir por cima dele:
+  // sair do foco primeiro deixaria o drawer aberto para tras.
   // O menu "/" do editor ja trata o proprio Esc com preventDefault, entao o
   // guard de defaultPrevented no topo evita conflito com a Fase 2.
   useEffect(() => {
@@ -1347,15 +1400,15 @@ export function NotebookPanel({
 
       const topPanel = panels[panels.length - 1];
       if (topPanel?.id === panel.id) {
-        if (isFocusMode) {
-          event.preventDefault();
-          exitFocusMode();
-          return;
-        }
-
         if (isDetailsPanelOpen) {
           event.preventDefault();
           setIsDetailsPanelOpen(false);
+          return;
+        }
+
+        if (isFocusMode) {
+          event.preventDefault();
+          exitFocusMode();
           return;
         }
 
@@ -1491,7 +1544,10 @@ export function NotebookPanel({
   const editorZoomScale = editorZoomPercent / 100;
   const activeSpacingMode = isFocusMode ? focusSpacingMode : normalSpacingMode;
   const activeContentInset = isFocusMode ? focusContentInset : contentInset;
-  const shouldShowDetailsPanel = isDetailsPanelOpen && !isFocusMode;
+  // O drawer de Detalhes tambem abre no modo foco: ele fica FORA do foco (nao
+  // apaga, por nao ser uma .notebook-focus-bar), e o resto do painel continua
+  // no modo foco normalmente.
+  const shouldShowDetailsPanel = isDetailsPanelOpen;
   // Zoom com botoes - / + (passo pelos degraus discretos de editorZoomOptions),
   // no lugar do antigo dropdown — mesmo padrao do rodape da referencia.
   const currentZoomIndex = Math.max(0, editorZoomOptions.findIndex((option) => option === editorZoomPercent));
@@ -1556,9 +1612,9 @@ export function NotebookPanel({
       onResize={setPanelSize}
       renderHeader={(startDragging) => (
         <div
-          className={`flex h-10 shrink-0 items-center gap-2 border-b border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] px-4 ${
-            isMaximized ? "" : "cursor-move"
-          }`}
+          className={`flex h-10 shrink-0 items-center gap-2 border-b border-[var(--floating-header-border)] px-4 ${
+            isFocusMode ? "notebook-focus-bar bg-[var(--notebook-focus-bar-bg)]" : "bg-[var(--floating-header-bg)]"
+          } ${isMaximized ? "" : "cursor-move"}`}
           onMouseDown={isMaximized ? undefined : startDragging}
         >
           {/* Status de salvamento a esquerda (ponto colorido + rotulo), como na
@@ -1583,13 +1639,7 @@ export function NotebookPanel({
               className={`rounded-md p-1.5 transition hover:bg-[var(--floating-header-hover-bg)] ${
                 shouldShowDetailsPanel ? "text-[var(--floating-header-text)]" : "text-[var(--floating-header-control)]"
               }`}
-              onClick={() => {
-                if (isFocusMode) {
-                  exitFocusMode();
-                  return;
-                }
-                setIsDetailsPanelOpen((current) => !current);
-              }}
+              onClick={() => setIsDetailsPanelOpen((current) => !current)}
             >
               <InfoIcon />
             </button>
@@ -1654,14 +1704,16 @@ export function NotebookPanel({
               os titulos. shrink-0 + largura fixa => o editor (flex-1) reflui de
               verdade quando expande, ao contrario do drawer de Detalhes. Fora
               do modo foco ele esta sempre presente (recolhido, nao escondido). */}
-          {!isFocusMode ? (
           <aside
             ref={pagesRailRef}
             style={{ width: isPagesRailExpanded ? notebookPagesRailExpandedWidth : notebookPagesRailCollapsedWidth }}
-            className="flex shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200"
+            className={`flex shrink-0 flex-col overflow-hidden border-r border-sidebar-border transition-[width] duration-200 ${
+              isFocusMode ? "notebook-focus-bar bg-[var(--notebook-focus-rail-bg)]" : "bg-sidebar"
+            }`}
           >
-            {/* Cabecalho: icone de pilha de paginas SEMPRE visivel; alterna
-                colapsado/expandido. O rotulo "Páginas" aparece so no expandido. */}
+            {/* Cabecalho: seta SEMPRE visivel (mesmo colapsado), apontando para
+                onde o trilho vai — ">" abre, "<" recolhe. O rotulo "Páginas"
+                aparece so no expandido. */}
             <div className="flex h-[52px] shrink-0 items-center gap-3 px-3">
               <button
                 type="button"
@@ -1671,7 +1723,7 @@ export function NotebookPanel({
                 onClick={() => setIsPagesRailExpanded((current) => !current)}
                 className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg text-sidebar-muted transition hover:bg-sidebar-raised hover:text-sidebar-text"
               >
-                <PagesStackIcon />
+                <ChevronRightIcon size={18} className={`transition-transform duration-200 ${isPagesRailExpanded ? "rotate-180" : ""}`} />
               </button>
               <span
                 aria-hidden={!isPagesRailExpanded}
@@ -1742,7 +1794,6 @@ export function NotebookPanel({
               </button>
             </div>
           </aside>
-          ) : null}
 
           {/* ================= COLUNA 2: EDITOR ================= */}
           <div className="flex min-w-0 flex-1 flex-col">
@@ -1768,6 +1819,7 @@ export function NotebookPanel({
                   draftTitleRef.current = event.target.value;
                   isDirtyRef.current = true;
                   setSaveStatus("dirty");
+                  scheduleAutosave();
                 }}
                 onBlur={() => void saveActivePage()}
                 placeholder={`Página sem título ${activePage.position}`}
@@ -1796,19 +1848,20 @@ export function NotebookPanel({
                 setEditorStats(getEditorStatsFromHtml(html));
                 isDirtyRef.current = true;
                 setSaveStatus("dirty");
+                scheduleAutosave();
               }}
               onBlur={() => void saveActivePage()}
             />
 
-            <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-t border-border-subtle bg-[var(--card)] px-4 text-xs text-text-secondary">
+            <div
+              className={`flex h-10 shrink-0 items-center justify-between gap-3 border-t border-border-subtle px-4 text-xs text-text-secondary ${
+                isFocusMode ? "notebook-focus-bar bg-[var(--notebook-focus-bar-bg)]" : "bg-[var(--card)]"
+              }`}
+            >
               {isFocusMode ? (
                 <>
+                  {/* Sem status de salvamento aqui: ele vive so no header. */}
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="inline-flex items-center gap-1">
-                      {saveStatusText}
-                      {saveStatus === "saved" ? <SavedIcon /> : null}
-                    </span>
-                    <span className="text-text-subtle" aria-hidden="true">·</span>
                     <span>{formatCount(editorStats.words)} palavras</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
@@ -1908,6 +1961,7 @@ export function NotebookPanel({
                               infoDraftReadingStatusRef.current = option.value;
                               isInfoDirtyRef.current = true;
                               setSaveStatus("dirty");
+                              scheduleAutosave();
                               setIsReadingStatusDropdownOpen(false);
                               void saveNotebookInfoDraft();
                             }}
@@ -1941,6 +1995,7 @@ export function NotebookPanel({
                       infoDraftAuthorDisciplineRef.current = event.target.value;
                       isInfoDirtyRef.current = true;
                       setSaveStatus("dirty");
+                      scheduleAutosave();
                     }}
                     onBlur={() => void saveNotebookInfoDraft()}
                     placeholder="Disciplina ou autor..."
@@ -2028,6 +2083,7 @@ export function NotebookPanel({
                     infoDraftTitleRef.current = event.target.value;
                     isInfoDirtyRef.current = true;
                     setSaveStatus("dirty");
+                    scheduleAutosave();
                   }}
                   onBlur={() => void saveNotebookInfoDraft()}
                   placeholder="Caderno sem título"
@@ -2069,6 +2125,7 @@ export function NotebookPanel({
                     infoDraftDescriptionRef.current = event.target.value;
                     isInfoDirtyRef.current = true;
                     setSaveStatus("dirty");
+                    scheduleAutosave();
                   }}
                   onBlur={() => void saveNotebookInfoDraft()}
                   placeholder="Descreva seu caderno..."
