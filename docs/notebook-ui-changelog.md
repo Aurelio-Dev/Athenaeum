@@ -1,5 +1,53 @@
 # Changelog da UI do Caderno
 
+## 16/07/2026 — Enter sai de callout/código, scroll do menu "/" e placeholder
+
+Três ajustes pontuais no editor, sem migrations.
+
+Correção de Enter em blocos multi-linha (callout e "bloco de código"):
+
+- Dentro do callout e do bloco de código, o Enter nunca saía do bloco: o
+  callout sempre inseria uma quebra de linha, e o bloco de código (um
+  `<code>` inline com `white-space:pre`, não um bloco estrutural) não tinha
+  handler de Enter nenhum. Passaram a seguir a convenção de "Enter duplo sai"
+  (Notion/Obsidian): Enter numa linha com texto quebra normalmente; Enter numa
+  linha já vazia sai do bloco para uma nova linha depois dele. Shift+Enter
+  sempre quebra a linha, nunca sai.
+- A detecção de "linha vazia" precisou lidar com dois modelos de quebra que o
+  Chromium usa dentro do contentEditable: elementos `<br>` (callout) e
+  caracteres `\n` dentro de um nó de texto (o bloco de código, por causa do
+  `white-space:pre`) — e com o fato de que, ao abrir uma linha em branco, o
+  Chromium insere uma quebra duplicada (dois `<br>`, ou `"\n\n"`) com o caret
+  posicionado *antes* da segunda, não depois — um detalhe que não é visível
+  olhando o HTML, só via inspeção do `Range` da seleção.
+- Clicar fora do bloco (numa área vazia abaixo dele) já funcionava nativamente
+  para callout, código e equação, graças ao parágrafo em branco que a
+  inserção sempre deixa depois do bloco — não precisou de código novo.
+
+Menu "/":
+
+- O item selecionado por seta (↑/↓) podia passar da área visível do menu sem
+  o scroll acompanhar. Agora o item ativo usa `scrollIntoView({ block:
+  "nearest" })`, que rola só o necessário.
+
+Callout:
+
+- "Escreva uma observação importante..." virou placeholder de CSS
+  (`:empty::before`), que some sozinho ao começar a digitar. Callouts novos
+  nascem com o corpo vazio; callouts antigos que gravaram a frase como
+  conteúdo real continuam mostrando-a como texto comum (editável e apagável),
+  sem migration.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- Verificação manual via CDP: Enter duplo saindo do callout e do bloco de
+  código (com o corpo limpo, sem linha em branco sobrando), clique fora
+  confirmado nos dois, scroll do menu "/" acompanhando a seleção (screenshot),
+  placeholder do callout sumindo ao digitar.
+
 ## 16/07/2026 — Modo foco recuado, autosave real e Ctrl+S
 
 As barras do modo foco deixaram de sumir e passaram a recuar, e o salvamento

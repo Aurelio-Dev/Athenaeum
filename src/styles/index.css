@@ -672,6 +672,16 @@ select {
   color: var(--color-text-secondary);
 }
 
+/* Placeholder do corpo do callout: some sozinho ao digitar, porque some a
+   condicao :empty. O texto nunca e persistido — callouts novos nascem com o
+   corpo vazio. Callouts antigos gravaram esta frase como conteudo real e
+   seguem exibindo-a como texto comum (apagavel), sem migration. */
+.notebook-editor [data-callout-content="true"] > div:empty::before {
+  content: "Escreva uma observação importante...";
+  color: var(--color-text-subtle);
+  font-style: italic;
+}
+
 .notebook-editor [data-athenaeum-block="figure"] {
   border: 1px solid var(--color-border-subtle);
   border-radius: 8px;

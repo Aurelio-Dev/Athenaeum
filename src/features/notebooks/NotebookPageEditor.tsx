@@ -544,6 +544,98 @@ function placeCursorAtEnd(container: HTMLElement) {
   return range;
 }
 
+// Achata o conteudo de um no em texto puro, tratando <br> como "\n" — os dois
+// modelos de quebra de linha que o Chromium usa dentro de contentEditable:
+// elementos <br> (callout) ou caracteres "\n" reais dentro de um no de texto
+// (blocos com white-space:pre, como o de codigo — ali o navegador usa \n em
+// vez de <br>). Precisa tratar os dois porque Range.toString() ignora <br>
+// silenciosamente, e teria juntado linhas inteiras sem separador.
+function flattenLineBreaks(node: Node): string {
+  if (node instanceof HTMLBRElement) {
+    return "\n";
+  }
+
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  return Array.from(node.childNodes).map(flattenLineBreaks).join("");
+}
+
+// O caret esta no fim de `root` E a "linha atual" (o trecho depois da ultima
+// quebra, ou o conteudo inteiro se nao houver nenhuma) esta vazia?
+//
+// Usado pelos blocos multi-linha (callout, "codigo") para decidir Enter
+// simples: se a ultima linha ja esta vazia, o Enter sai do bloco em vez de
+// abrir mais uma quebra — a mesma convencao de "Enter duplo sai" de editores
+// como Notion/Obsidian, que preserva Enter normal para digitar varias linhas
+// e ainda da uma saida sem exigir Shift+Enter para tudo.
+function isCaretOnEmptyTrailingLine(root: HTMLElement): boolean {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+    return false;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (range.startContainer !== root && !root.contains(range.startContainer)) {
+    return false;
+  }
+
+  const beforeCaretRange = document.createRange();
+  beforeCaretRange.selectNodeContents(root);
+  beforeCaretRange.setEnd(range.startContainer, range.startOffset);
+
+  const textBeforeCaret = flattenLineBreaks(beforeCaretRange.cloneContents());
+  const fullText = flattenLineBreaks(root);
+
+  // O Chromium abre uma linha em branco com uma quebra DUPLICADA (dois <br>,
+  // ou "\n\n" no modelo de texto): a quebra real e um "filler" logo depois so
+  // para dar altura a linha vazia — com o caret posicionado ANTES do filler,
+  // nao depois. Por isso o "fim logico" do conteudo ignora uma unica quebra
+  // final, se houver, e o caret pode estar tanto ali quanto no fim bruto.
+  const logicalEnd = fullText.endsWith("\n") ? fullText.slice(0, -1) : fullText;
+
+  if (textBeforeCaret !== fullText && textBeforeCaret !== logicalEnd) {
+    return false;
+  }
+
+  const lastLine = logicalEnd.slice(logicalEnd.lastIndexOf("\n") + 1);
+  return lastLine.length === 0;
+}
+
+// Remove a quebra que abriu a linha em branco — e o "filler" que o Chromium
+// insere logo depois dela so para dar altura a linha vazia (mesmo par que
+// isCaretOnEmptyTrailingLine ja considera "fim logico" do conteudo) — chamado
+// so quando essa linha vai virar a saida do bloco. Sem isso, sair deixaria uma
+// linha extra em branco dentro do callout/codigo. Cobre os dois modelos:
+// <br> como elementos (callout) ou "\n" dentro de um no de texto (codigo,
+// white-space:pre). Assume que a quebra de texto vive num unico no de texto
+// no final — o caso observado na pratica; um bloco de codigo fragmentado em
+// varios nos de texto por outra via ficaria fora deste alcance.
+function trimTrailingBlankLine(root: HTMLElement) {
+  const children = Array.from(root.childNodes);
+  const lastChild = children[children.length - 1];
+
+  if (lastChild instanceof HTMLBRElement) {
+    let lastBreakIndex = -1;
+    for (let index = children.length - 2; index >= 0; index -= 1) {
+      if (children[index] instanceof HTMLBRElement) {
+        lastBreakIndex = index;
+        break;
+      }
+    }
+
+    children.slice(lastBreakIndex < 0 ? children.length - 1 : lastBreakIndex).forEach((node) => node.remove());
+    return;
+  }
+
+  if (lastChild?.nodeType === Node.TEXT_NODE && (lastChild.textContent ?? "").endsWith("\n")) {
+    const withoutFiller = (lastChild.textContent ?? "").slice(0, -1);
+    const lastBreakIndex = withoutFiller.lastIndexOf("\n");
+    lastChild.textContent = lastBreakIndex >= 0 ? withoutFiller.slice(0, lastBreakIndex) : "";
+  }
+}
+
 function isBlockAction(action: EditorAction): action is BlockAction {
   return (blockActions as readonly string[]).includes(action);
 }
@@ -626,6 +718,7 @@ export function NotebookPageEditor({
   // Menu "/" de insercao inline de blocos.
   const [slashMenu, setSlashMenu] = useState<SlashMenuControls | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  const slashSelectedItemRef = useRef<HTMLButtonElement | null>(null);
   // Posicao do caractere "/" que abriu o menu. A flag pendente existe porque
   // o keydown valida o contexto ANTES de o caractere existir no DOM — o menu
   // so abre no input seguinte, depois de confirmar que o "/" foi inserido.
@@ -1244,8 +1337,71 @@ export function NotebookPageEditor({
     syncActiveActions();
   }
 
+  // Sobe do no ate o filho direto do editor (o "bloco de topo" daquele ponto).
+  function getTopLevelBlock(node: Node, editor: HTMLElement) {
+    let current = node instanceof Element ? node : node.parentElement;
+
+    while (current && current.parentElement && current.parentElement !== editor) {
+      current = current.parentElement;
+    }
+
+    return current && current.parentElement === editor && current instanceof HTMLElement ? current : null;
+  }
+
+  // Garante que o bloco novo nasca numa LINHA PROPRIA, filha do editor.
+  //
+  // Dois modos de falha que isto cobre:
+  //  1. Cursor dentro de outro bloco (input da equacao, corpo do callout,
+  //     celula): sem sair de la, o execCommand insere o bloco novo DENTRO do
+  //     anterior. Aqui o cursor pula para a linha depois do bloco inteiro.
+  //  2. Bloco de topo vazio: o menu "/" apaga o gatilho e deixa <div></div>
+  //     sem <br>. O execCommand nao consegue escopar num bloco vazio e funde o
+  //     conteudo com o bloco anterior — a mesma causa que impede o formatBlock
+  //     de aplicar titulo pelo "/". O <br> devolve altura ao bloco e o escopo.
+  function prepareBlockInsertionPoint() {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+
+    if (!editor || !selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const container = selection.getRangeAt(0).startContainer;
+    const element = container instanceof Element ? container : container.parentElement;
+
+    if (!element || !editor.contains(element)) {
+      return;
+    }
+
+    const enclosingBlock = element.closest("[data-athenaeum-block]");
+    if (enclosingBlock instanceof HTMLElement && editor.contains(enclosingBlock)) {
+      const topBlock = getTopLevelBlock(enclosingBlock, editor);
+      if (topBlock) {
+        const { block } = getOrCreateEditableBlockAfter(topBlock);
+        savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
+        return;
+      }
+    }
+
+    const topBlock = getTopLevelBlock(element, editor);
+    if (!topBlock || topBlock.tagName.toLowerCase() !== "div") {
+      return;
+    }
+
+    // Vazio "de verdade": apagar o gatilho deixa um no de texto vazio para
+    // tras, entao childNodes.length nao serve como teste.
+    const isEmpty = (topBlock.textContent ?? "").length === 0 && topBlock.firstElementChild === null;
+    if (!isEmpty) {
+      return;
+    }
+
+    topBlock.replaceChildren(document.createElement("br"));
+    savedRangeRef.current = placeCursorAtEnd(topBlock)?.cloneRange() ?? null;
+  }
+
   function insertBlockHtml(html: string) {
     restoreSavedRangeOrEditorEnd();
+    prepareBlockInsertionPoint();
     insertHtml(html, { placeCursorInTrailingBlock: true });
     setIsTextMenuOpen(false);
     setIsListMenuOpen(false);
@@ -1275,7 +1431,7 @@ export function NotebookPageEditor({
         <div data-callout-icon="true">${calloutIcons.info}</div>
         <div data-callout-content="true">
           <strong>Destaque</strong>
-          <div>Escreva uma observação importante...</div>
+          <div></div>
         </div>
       </aside>
       <div><br></div>
@@ -1834,6 +1990,29 @@ export function NotebookPageEditor({
     }
 
     event.preventDefault();
+
+    // "Linha atual" = o filho direto de [data-callout-content] que contem o
+    // caret (o corpo do callout, onde o texto realmente vive — "Destaque" e
+    // um <strong> a parte). Enter simples na ultima linha vazia sai do
+    // callout; em qualquer outro caso (linha com texto, ou Shift+Enter),
+    // insere uma quebra normal, preservando o corpo multi-linha.
+    const content = callout.querySelector<HTMLElement>('[data-callout-content="true"]');
+    const caretNode = window.getSelection()?.anchorNode ?? null;
+    const currentLine = content && caretNode ? getTopLevelBlock(caretNode, content) : null;
+
+    if (!event.shiftKey && currentLine && isCaretOnEmptyTrailingLine(currentLine)) {
+      trimTrailingBlankLine(currentLine);
+      const { block, created } = getOrCreateEditableBlockAfter(callout);
+      savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
+
+      if (created) {
+        emitChange();
+      }
+
+      syncActiveActions();
+      return true;
+    }
+
     document.execCommand("insertLineBreak", false);
     emitChange();
     syncActiveActions();
@@ -2481,6 +2660,11 @@ export function NotebookPageEditor({
   // ultimo ArrowDown e o proximo render.
   const slashSelectedIndex = slashMenu ? Math.min(slashMenu.selectedIndex, Math.max(0, filteredSlashMenuItems.length - 1)) : 0;
 
+  // Mantem o item selecionado visivel quando as setas passam da area do menu.
+  useEffect(() => {
+    slashSelectedItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [slashSelectedIndex, slashMenu]);
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     // Menu "/" aberto consome as teclas de navegacao ANTES dos handlers de
     // Enter/Delete de tabela/callout/diagrama/equacao — sem isso, Enter
@@ -2571,7 +2755,14 @@ export function NotebookPageEditor({
       return;
     }
 
-    if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+    // "Bloco de codigo" e um <code> inline (display:block via CSS), nao um
+    // data-athenaeum-block estrutural — por isso fica fora dos handlers
+    // acima. Sem interceptar o Enter aqui, o WebView2 pode fragmentar o
+    // elemento em <code>s irmaos por linha (ver comentario em
+    // richTextShared.ts); interceptamos os dois (Enter e Shift+Enter) para
+    // ambos ficarem como <br> dentro do MESMO <code>, com a mesma saida por
+    // linha vazia dos demais blocos multi-linha.
+    if (event.key !== "Enter" || event.ctrlKey || event.metaKey || event.altKey) {
       return;
     }
 
@@ -2588,6 +2779,25 @@ export function NotebookPageEditor({
     }
 
     event.preventDefault();
+
+    if (!event.shiftKey && isCaretOnEmptyTrailingLine(anchorCode)) {
+      trimTrailingBlankLine(anchorCode);
+      // O <code> e inline, filho do paragrafo <div> que o envolveu (nao um
+      // bloco de topo como o callout): a saida cria a linha nova depois do
+      // PARAGRAFO inteiro, nao depois do <code> em si — sen isso o novo
+      // "bloco" nasceria aninhado dentro do proprio paragrafo.
+      const paragraph = getTopLevelBlock(anchorCode, editor) ?? anchorCode;
+      const { block, created } = getOrCreateEditableBlockAfter(paragraph);
+      savedRangeRef.current = placeCursorAtEnd(block)?.cloneRange() ?? null;
+
+      if (created) {
+        emitChange();
+      }
+
+      syncActiveActions();
+      return;
+    }
+
     document.execCommand("insertLineBreak", false);
     emitChange();
     syncActiveActions();
@@ -3221,6 +3431,10 @@ export function NotebookPageEditor({
                   key={item.id}
                   type="button"
                   role="menuitem"
+                  // O menu rola sozinho atras da selecao do teclado: as setas
+                  // podem passar da area visivel. "nearest" so rola o
+                  // necessario, e nunca a pagina atras do menu.
+                  ref={index === slashSelectedIndex ? slashSelectedItemRef : undefined}
                   className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs font-semibold transition ${
                     index === slashSelectedIndex ? activeMenuItemClassName : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
                   }`}
