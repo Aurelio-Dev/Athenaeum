@@ -7,7 +7,9 @@ import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
 import { TrashIcon } from "../../components/ui/SharedIcons";
 import { SectionLabel } from "../../components/ui/SectionLabel";
 import { CompactDocumentCard } from "../../components/CompactDocumentCard";
+import { ProgressBar } from "../../components/ProgressBar";
 import { TagBadge } from "../../components/TagBadge";
+import { statusTokens } from "../../styles/designTokens";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { useFloatingPanels, type FloatingPanel } from "../../components/floating/FloatingPanelsContext";
 import {
@@ -322,6 +324,14 @@ function PlusIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function MinusIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <line x1="5" x2="19" y1="12" y2="12" />
+    </svg>
+  );
+}
+
 function AttachIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -527,14 +537,14 @@ function getNotebookOptionsMenuPosition(rect: DOMRect, placement: "header" | "fo
   return { left, top };
 }
 
-// Wrapper generico (rotulo + conteudo) para os campos da coluna de Detalhes.
-// Definido aqui (Parte 2) mas so ganha uso real na Parte 3, quando os campos
-// de Colecao/Tags/PDFs vinculados/Descricao forem implementados de verdade.
+// Wrapper generico (rotulo + conteudo) para as secoes do drawer de Detalhes.
+// O rotulo segue o estilo do protótipo: uppercase pequeno com tracking, igual
+// aos rotulos de secao do painel de Detalhes do Reader.
 function NotebookInfoField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mt-5">
-      <p className="text-xs font-bold text-text-secondary">{label}</p>
-      <div className="mt-2">{children}</div>
+    <div className="mt-6 first:mt-5">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-subtle">{label}</p>
+      <div className="mt-2.5">{children}</div>
     </div>
   );
 }
@@ -583,7 +593,6 @@ export function NotebookPanel({
   const [draftTitle, setDraftTitle] = useState("");
   const [editorStats, setEditorStats] = useState<EditorStats>({ words: 0, characters: 0 });
   const [editorZoomPercent, setEditorZoomPercent] = useState(100);
-  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<NotebookSaveStatus>("saved");
   const [isStatsDialogOpen, setIsStatsDialogOpen] = useState(false);
@@ -643,6 +652,9 @@ export function NotebookPanel({
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
+  // Dropdown para trocar o status de leitura (a pílula do topo do drawer abre).
+  const [isReadingStatusDropdownOpen, setIsReadingStatusDropdownOpen] = useState(false);
+  const readingStatusDropdownRef = useRef<HTMLDivElement | null>(null);
   const notebookOptionsContextMenu = useContextMenu();
   const detailsColumnRef = useRef<HTMLElement | null>(null);
   const detailsToggleButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -654,7 +666,6 @@ export function NotebookPanel({
   const pendingTitleFocusRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const notebookTagDropdownRef = useRef<HTMLDivElement | null>(null);
-  const zoomMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Rascunho corrente fora do estado React: o conteudo muda a cada tecla e
   // re-renderizar o painel inteiro por tecla seria desperdicio — o autosave
@@ -1242,7 +1253,6 @@ export function NotebookPanel({
 
   const enterFocusMode = useCallback(() => {
     setIsTagDropdownOpen(false);
-    setIsZoomMenuOpen(false);
     setIsFocusMode(true);
   }, []);
 
@@ -1456,19 +1466,19 @@ export function NotebookPanel({
   }, [isTagDropdownOpen]);
 
   useEffect(() => {
-    if (!isZoomMenuOpen) {
+    if (!isReadingStatusDropdownOpen) {
       return;
     }
 
     function handlePointerDown(event: MouseEvent) {
-      if (event.target instanceof Node && zoomMenuRef.current && !zoomMenuRef.current.contains(event.target)) {
-        setIsZoomMenuOpen(false);
+      if (event.target instanceof Node && readingStatusDropdownRef.current && !readingStatusDropdownRef.current.contains(event.target)) {
+        setIsReadingStatusDropdownOpen(false);
       }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isZoomMenuOpen]);
+  }, [isReadingStatusDropdownOpen]);
 
   const activePage = pages.find((page) => page.id === activePageId) ?? null;
   const exportCurrentPageTitle = activePage ? pageDisplayTitle(activePage) : "Página atual";
@@ -1482,43 +1492,55 @@ export function NotebookPanel({
   const activeSpacingMode = isFocusMode ? focusSpacingMode : normalSpacingMode;
   const activeContentInset = isFocusMode ? focusContentInset : contentInset;
   const shouldShowDetailsPanel = isDetailsPanelOpen && !isFocusMode;
+  // Zoom com botoes - / + (passo pelos degraus discretos de editorZoomOptions),
+  // no lugar do antigo dropdown — mesmo padrao do rodape da referencia.
+  const currentZoomIndex = Math.max(0, editorZoomOptions.findIndex((option) => option === editorZoomPercent));
   const zoomControl = (
-    <div className="relative" ref={zoomMenuRef}>
+    <div className="inline-flex items-center gap-0.5">
       <button
         type="button"
-        aria-haspopup="menu"
-        aria-expanded={isZoomMenuOpen}
-        title="Zoom do editor"
-        className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-        onClick={() => setIsZoomMenuOpen((current) => !current)}
+        title="Reduzir zoom"
+        aria-label="Reduzir zoom"
+        disabled={currentZoomIndex <= 0}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        onClick={() => setEditorZoomPercent(editorZoomOptions[Math.max(0, currentZoomIndex - 1)])}
       >
-        {editorZoomPercent}%
-        <ChevronDownIcon />
+        <MinusIcon />
       </button>
+      <span className="min-w-10 text-center font-semibold tabular-nums text-text-primary">{editorZoomPercent}%</span>
+      <button
+        type="button"
+        title="Ampliar zoom"
+        aria-label="Ampliar zoom"
+        disabled={currentZoomIndex >= editorZoomOptions.length - 1}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        onClick={() => setEditorZoomPercent(editorZoomOptions[Math.min(editorZoomOptions.length - 1, currentZoomIndex + 1)])}
+      >
+        <PlusIcon size={13} />
+      </button>
+    </div>
+  );
 
-      {isZoomMenuOpen ? (
-        <div className="absolute bottom-full right-0 z-30 mb-2 min-w-24 rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg">
-          {editorZoomOptions.map((zoomOption) => (
-            <button
-              key={zoomOption}
-              type="button"
-              role="menuitemradio"
-              aria-checked={editorZoomPercent === zoomOption}
-              className={`block w-full rounded-md px-3 py-1.5 text-left text-xs font-semibold transition ${
-                editorZoomPercent === zoomOption
-                  ? "bg-primary-soft text-primary"
-                  : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-              }`}
-              onClick={() => {
-                setEditorZoomPercent(zoomOption);
-                setIsZoomMenuOpen(false);
-              }}
-            >
-              {zoomOption}%
-            </button>
-          ))}
-        </div>
-      ) : null}
+  // Segmentado de espacamento (Compacto/Normal/Confortável/Amplo) no rodape,
+  // reaproveitando o estado ja existente. O segmento ativo ganha fundo de card.
+  const spacingControl = (
+    <div className="inline-flex items-center rounded-full bg-surface-muted p-0.5">
+      {notebookSpacingOptions.map((option) => {
+        const isActive = activeSpacingMode === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={isActive}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+              isActive ? "bg-[var(--card)] text-text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"
+            }`}
+            onClick={() => handleSpacingModeChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -1534,25 +1556,23 @@ export function NotebookPanel({
       onResize={setPanelSize}
       renderHeader={(startDragging) => (
         <div
-          className={`grid h-10 shrink-0 grid-cols-[minmax(120px,1fr)_minmax(0,1.4fr)_minmax(160px,1fr)] items-center border-b border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] px-4 ${
+          className={`flex h-10 shrink-0 items-center gap-2 border-b border-[var(--floating-header-border)] bg-[var(--floating-header-bg)] px-4 ${
             isMaximized ? "" : "cursor-move"
           }`}
           onMouseDown={isMaximized ? undefined : startDragging}
         >
-          {/* Celula esquerda do grid do header mantida vazia (o toggle de
-              paginas agora vive no proprio trilho) so para o breadcrumb
-              central continuar centralizado entre as tres colunas. */}
-          <div aria-hidden="true" />
-          <nav
-            aria-label="Localização do caderno"
-            className="flex min-w-0 items-center justify-center gap-2 text-xs font-semibold text-[var(--floating-header-muted)]"
-          >
-            <span className="truncate">Minha Biblioteca</span>
-            <BreadcrumbChevronIcon />
-            <span className="truncate">{currentCollectionName}</span>
-            <BreadcrumbChevronIcon />
-            <span className="truncate font-bold text-[var(--floating-header-text)]">{notebookTitle || "Caderno"}</span>
-          </nav>
+          {/* Status de salvamento a esquerda (ponto colorido + rotulo), como na
+              referencia; o breadcrumb agora vive acima do titulo, no conteudo. */}
+          <span className="inline-flex min-w-0 items-center gap-2 text-xs font-medium text-[var(--floating-header-muted)]">
+            <span
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                saveStatus === "saved" ? "bg-status-green-text" : saveStatus === "error" ? "bg-status-red-text" : "bg-text-subtle"
+              }`}
+            />
+            <span className="truncate">{saveStatusText}</span>
+          </span>
+          <span className="flex-1" aria-hidden="true" />
           <div className="flex items-center justify-end gap-1" onMouseDown={(event) => event.stopPropagation()}>
             <button
               ref={detailsToggleButtonRef}
@@ -1722,7 +1742,21 @@ export function NotebookPanel({
 
           {/* ================= COLUNA 2: EDITOR ================= */}
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className={`flex shrink-0 items-start ${activeContentInset}`}>
+            <div className={`flex shrink-0 flex-col ${activeContentInset}`}>
+              {/* Breadcrumb no conteudo (acima do titulo), como na referencia —
+                  saiu do header, que agora mostra so o status de salvamento. */}
+              {!isFocusMode ? (
+                <nav
+                  aria-label="Localização do caderno"
+                  className="flex min-w-0 items-center gap-1.5 pr-5 pt-7 text-xs font-medium text-text-subtle"
+                >
+                  <span className="truncate">Minha Biblioteca</span>
+                  <BreadcrumbChevronIcon />
+                  <span className="truncate">{currentCollectionName}</span>
+                  <BreadcrumbChevronIcon />
+                  <span className="truncate font-semibold text-text-secondary">{notebookTitle || "Caderno"}</span>
+                </nav>
+              ) : null}
               <input
                 value={draftTitle}
                 onChange={(event) => {
@@ -1735,14 +1769,10 @@ export function NotebookPanel({
                 placeholder={`Página sem título ${activePage.position}`}
                 aria-label="Título da página"
                 style={{ fontSize: `${28 * editorZoomScale}px` }}
-                className="min-w-0 flex-1 border-0 bg-transparent pb-2 pr-5 pt-7 font-serif text-[28px] font-medium leading-tight text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+                className={`min-w-0 border-0 bg-transparent pb-2 pr-5 font-serif text-[28px] font-medium leading-tight text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] ${
+                  isFocusMode ? "pt-7" : "pt-2"
+                }`}
               />
-              {!isFocusMode ? (
-                <span className="mt-8 hidden shrink-0 items-center gap-1 text-xs font-medium text-text-subtle md:inline-flex">
-                  {saveStatusText}
-                  {saveStatus === "saved" ? <SavedIcon /> : null}
-                </span>
-              ) : null}
             </div>
 
             <NotebookPageEditor
@@ -1766,7 +1796,7 @@ export function NotebookPanel({
               onBlur={() => void saveActivePage()}
             />
 
-            <div className="flex h-9 shrink-0 items-center justify-between border-t border-border-subtle bg-[var(--card)] px-4 text-xs text-text-secondary">
+            <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-t border-border-subtle bg-[var(--card)] px-4 text-xs text-text-secondary">
               {isFocusMode ? (
                 <>
                   <div className="flex min-w-0 items-center gap-2">
@@ -1780,34 +1810,39 @@ export function NotebookPanel({
                   <div className="flex shrink-0 items-center gap-3">
                     <button
                       type="button"
-                      className="inline-flex items-center rounded-md px-2 py-1 font-medium text-primary transition hover:bg-primary-soft"
+                      className="inline-flex items-center rounded-full px-3 py-1 font-semibold text-primary transition hover:bg-primary-soft"
                       onClick={exitFocusMode}
                     >
                       Sair do foco · Esc
                     </button>
+                    <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
+                    {spacingControl}
                     <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
                     {zoomControl}
                   </div>
                 </>
               ) : (
                 <>
-              <div className="flex min-w-0 items-center gap-4">
-                <span>{formatCount(editorStats.words)} palavras</span>
-                <span>{formatCount(editorStats.characters)} caracteres</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <button
-                  type="button"
-                  onClick={enterFocusMode}
-                  title="Entrar no modo foco"
-                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
-                >
-                  <FocusModeIcon />
-                  Foco
-                </button>
-                <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
-                {zoomControl}
-              </div>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span>{formatCount(editorStats.words)} {editorStats.words === 1 ? "palavra" : "palavras"}</span>
+                    <span className="text-text-subtle" aria-hidden="true">·</span>
+                    <span>{pages.length} {pages.length === 1 ? "página" : "páginas"}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={enterFocusMode}
+                      title="Entrar no modo foco"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
+                    >
+                      <FocusModeIcon />
+                      Foco
+                    </button>
+                    <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
+                    {spacingControl}
+                    <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
+                    {zoomControl}
+                  </div>
                 </>
               )}
             </div>
@@ -1835,6 +1870,151 @@ export function NotebookPanel({
                 </button>
               </div>
 
+              {/* 1. Status de leitura — sempre no topo. Pílula (statusTokens)
+                  abre um dropdown para trocar o status; barra reaproveita o
+                  ProgressBar compartilhado do Reader. */}
+              <NotebookInfoField label="Status de leitura">
+                <div className="rounded-lg border border-border-subtle bg-surface-app px-3.5 py-3.5">
+                  <div className="relative" ref={readingStatusDropdownRef}>
+                    <button
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={isReadingStatusDropdownOpen}
+                      onClick={() => setIsReadingStatusDropdownOpen((current) => !current)}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold ${statusTokens[infoDraftReadingStatus].className}`}
+                    >
+                      <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusTokens[infoDraftReadingStatus].dotClassName}`} />
+                      {statusTokens[infoDraftReadingStatus].label}
+                      <ChevronDownIcon />
+                    </button>
+
+                    {isReadingStatusDropdownOpen ? (
+                      <div role="menu" className="absolute left-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border border-border-muted bg-surface-panel p-1 shadow-lg">
+                        {notebookReadingStatusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={infoDraftReadingStatus === option.value}
+                            className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
+                              infoDraftReadingStatus === option.value ? "bg-primary-soft text-primary" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                            }`}
+                            onClick={() => {
+                              setInfoDraftReadingStatus(option.value);
+                              infoDraftReadingStatusRef.current = option.value;
+                              isInfoDirtyRef.current = true;
+                              setSaveStatus("dirty");
+                              setIsReadingStatusDropdownOpen(false);
+                              void saveNotebookInfoDraft();
+                            }}
+                          >
+                            <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusTokens[option.value].dotClassName}`} />
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-3">
+                    <ProgressBar value={readingStatusPercent} showValue={false} />
+                    <span className="min-w-9 shrink-0 text-right text-xs font-semibold tabular-nums text-text-secondary">{readingStatusPercent}%</span>
+                  </div>
+                </div>
+              </NotebookInfoField>
+
+              {/* 2. Disciplina — campo author_discipline, com a disciplina como
+                  rótulo principal. */}
+              <NotebookInfoField label="Disciplina">
+                <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 text-text-secondary focus-within:border-primary">
+                  <span className="shrink-0 text-text-subtle">
+                    <OpenBookIcon />
+                  </span>
+                  <input
+                    value={infoDraftAuthorDiscipline}
+                    onChange={(event) => {
+                      setInfoDraftAuthorDiscipline(event.target.value);
+                      infoDraftAuthorDisciplineRef.current = event.target.value;
+                      isInfoDirtyRef.current = true;
+                      setSaveStatus("dirty");
+                    }}
+                    onBlur={() => void saveNotebookInfoDraft()}
+                    placeholder="Disciplina ou autor..."
+                    className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-sm font-medium text-text-primary outline-none placeholder:text-text-subtle"
+                  />
+                </div>
+              </NotebookInfoField>
+
+              {/* 3. Tags — pílulas de fill sólido (TagBadge), remoção embutida. */}
+              <NotebookInfoField label="Tags">
+                <div className="relative" ref={notebookTagDropdownRef}>
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                    {notebookTags.map((tag) => (
+                      <TagBadge key={tag} tag={tag} onRemove={() => void handleTagsChange(notebookTags.filter((currentTag) => currentTag !== tag))} />
+                    ))}
+
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full border border-dashed border-border-subtle px-2.5 py-0.5 text-[11px] font-medium text-text-secondary transition hover:border-primary hover:text-text-primary"
+                      onClick={() => setIsTagDropdownOpen((current) => !current)}
+                    >
+                      + Tag
+                    </button>
+                  </div>
+
+                  {isTagDropdownOpen ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
+                      <TagSelector
+                        availableTags={availableTags}
+                        selectedTags={notebookTags}
+                        onAvailableTagsChange={onAvailableTagsChange}
+                        onSelectedTagsChange={(tags) => void handleTagsChange(tags)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </NotebookInfoField>
+
+              {/* 4. PDFs vinculados — cada um como CompactDocumentCard. */}
+              <NotebookInfoField label="PDFs vinculados">
+                {linkedDocuments.length === 0 ? (
+                  <p className="text-sm text-text-secondary">Nenhum PDF vinculado</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {linkedDocuments.map((document) => (
+                      <li key={document.id}>
+                        <CompactDocumentCard
+                          title={document.title}
+                          authors={document.authors}
+                          year={document.year}
+                          trailingAction={
+                            <button
+                              type="button"
+                              aria-label={`Desvincular ${document.title}`}
+                              title="Desvincular"
+                              className="rounded-md p-1 text-text-subtle opacity-0 transition hover:bg-surface-muted hover:text-status-red-text focus-visible:opacity-100 group-hover:opacity-100"
+                              onClick={() => void handleUnlinkDocument(document.id)}
+                            >
+                              <CloseIcon />
+                            </button>
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsPickerOpen(true)}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary"
+                >
+                  <AttachIcon size={13} />
+                  Vincular PDF
+                </button>
+              </NotebookInfoField>
+
+              {/* 5. Caderno — título, coleção e descrição continuam editáveis,
+                  agrupados aqui (fora do topo, que agora é o status). */}
               <NotebookInfoField label="Caderno">
                 <input
                   ref={titleInputRef}
@@ -1877,124 +2057,6 @@ export function NotebookPanel({
                 </div>
               </NotebookInfoField>
 
-              <NotebookInfoField label="Tags">
-                <div className="relative" ref={notebookTagDropdownRef}>
-                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                    {notebookTags.map((tag) => (
-                      <span key={tag} className="group relative inline-flex min-w-0 max-w-full">
-                        <button type="button" className="min-w-0 max-w-full rounded-full text-left" title={tag}>
-                          <TagBadge tag={tag} size="compact" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Remover tag ${tag}`}
-                          title={`Remover tag ${tag}`}
-                          className="absolute -right-1.5 -top-1.5 hidden h-[14px] w-[14px] items-center justify-center rounded-full bg-status-red text-[10px] font-bold leading-none text-status-red-text shadow-sm group-hover:flex"
-                          onClick={() => void handleTagsChange(notebookTags.filter((currentTag) => currentTag !== tag))}
-                        >
-                          <span aria-hidden="true">×</span>
-                        </button>
-                      </span>
-                    ))}
-
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-full border border-dashed border-[#D6C8BB] bg-[#E8DDD4] px-2 py-0.5 text-[11px] font-medium text-text-secondary transition hover:brightness-95 dark:border-[#4A3A2F] dark:bg-[#332820]"
-                      onClick={() => setIsTagDropdownOpen((current) => !current)}
-                    >
-                      + Tag
-                    </button>
-                  </div>
-
-                  {isTagDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
-                      <TagSelector
-                        availableTags={availableTags}
-                        selectedTags={notebookTags}
-                        onAvailableTagsChange={onAvailableTagsChange}
-                        onSelectedTagsChange={(tags) => void handleTagsChange(tags)}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              </NotebookInfoField>
-
-              <NotebookInfoField label="PDFs vinculados">
-                {linkedDocuments.length === 0 ? (
-                  <p className="text-sm text-text-secondary">Nenhum PDF vinculado</p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {linkedDocuments.map((document) => (
-                      <li key={document.id}>
-                        <CompactDocumentCard
-                          title={document.title}
-                          authors={document.authors}
-                          year={document.year}
-                          trailingAction={
-                            <button
-                              type="button"
-                              aria-label={`Desvincular ${document.title}`}
-                              title="Desvincular"
-                              className="rounded-md p-1 text-text-subtle opacity-0 transition hover:bg-surface-muted hover:text-status-red-text focus-visible:opacity-100 group-hover:opacity-100"
-                              onClick={() => void handleUnlinkDocument(document.id)}
-                            >
-                              <CloseIcon />
-                            </button>
-                          }
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsPickerOpen(true)}
-                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary"
-                >
-                  <AttachIcon size={13} />
-                  Vincular PDF
-                </button>
-              </NotebookInfoField>
-
-              <NotebookInfoField label="Reading Status">
-                <div className="rounded-md border border-border-subtle bg-[var(--card)] p-2">
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-text-secondary">
-                      <OpenBookIcon />
-                    </span>
-                    <div className="relative min-w-0 flex-1">
-                      <select
-                        value={infoDraftReadingStatus}
-                        onChange={(event) => {
-                          const nextStatus = event.target.value as NotebookReadingStatus;
-                          setInfoDraftReadingStatus(nextStatus);
-                          infoDraftReadingStatusRef.current = nextStatus;
-                          isInfoDirtyRef.current = true;
-                          setSaveStatus("dirty");
-                          void saveNotebookInfoDraft();
-                        }}
-                        className="w-full appearance-none border-0 bg-transparent py-1 pr-6 text-sm font-medium text-text-primary outline-none"
-                      >
-                        {notebookReadingStatusOptions.map((option) => (
-                          <option key={option.value} value={option.value} className={notebookSelectOptionClassName} style={notebookSelectOptionStyle}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-text-subtle">
-                        <ChevronDownIcon />
-                      </span>
-                    </div>
-                    <span className="shrink-0 rounded-md bg-surface-app px-2 py-1 text-xs font-semibold text-text-secondary">
-                      {readingStatusPercent}%
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-sm bg-surface-app">
-                    <div className="h-full rounded-sm bg-primary" style={{ width: `${readingStatusPercent}%` }} />
-                  </div>
-                </div>
-              </NotebookInfoField>
-
               <NotebookInfoField label="Descrição">
                 <textarea
                   value={infoDraftDescription}
@@ -2010,21 +2072,7 @@ export function NotebookPanel({
                 />
               </NotebookInfoField>
 
-              <NotebookInfoField label="Autor / disciplina">
-                <input
-                  value={infoDraftAuthorDiscipline}
-                  onChange={(event) => {
-                    setInfoDraftAuthorDiscipline(event.target.value);
-                    infoDraftAuthorDisciplineRef.current = event.target.value;
-                    isInfoDirtyRef.current = true;
-                    setSaveStatus("dirty");
-                  }}
-                  onBlur={() => void saveNotebookInfoDraft()}
-                  placeholder="Autor ou disciplina..."
-                  className="h-10 w-full rounded-md border border-border-subtle bg-[var(--card)] px-3 text-sm font-medium text-text-primary outline-none placeholder:text-text-subtle focus:border-primary"
-                />
-              </NotebookInfoField>
-
+              {/* 6. Datas — só criado/atualizado, no final. */}
               <div className="mt-6 border-t border-dashed border-border-subtle pt-5">
                 <dl className="grid gap-3 text-xs">
                   <div className="grid grid-cols-[1fr_auto] gap-3">
@@ -2039,28 +2087,10 @@ export function NotebookPanel({
                       {notebookInfo ? formatNotebookDate(notebookInfo.updatedAt) : "--"}
                     </dd>
                   </div>
-                  <div className="grid grid-cols-[1fr_auto] gap-3">
-                    <dt className="font-bold text-text-secondary">Última abertura</dt>
-                    <dd className="text-right font-medium text-text-primary">{formatNotebookDate(openedAt)}</dd>
-                  </div>
                 </dl>
               </div>
 
               </div>
-
-              <footer className="shrink-0 border-t border-border-subtle bg-[var(--card)] px-5 py-4">
-                <button
-                  type="button"
-                  aria-haspopup="menu"
-                  aria-expanded={notebookOptionsContextMenu.isOpen}
-                  className="grid w-full grid-cols-[16px_1fr_16px] items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-text-secondary transition hover:border-primary hover:text-text-primary"
-                  onClick={(event) => openNotebookOptionsMenu(event, "footer")}
-                >
-                  <span aria-hidden="true" />
-                  <span>Mais opções</span>
-                  <MoreVerticalIcon />
-                </button>
-              </footer>
             </aside>
           ) : null}
 

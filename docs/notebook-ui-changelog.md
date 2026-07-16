@@ -1,5 +1,42 @@
 # Changelog da UI do Caderno
 
+## 16/07/2026 — Rodapé, header e toolbar flutuante
+
+Esta fase aproximou o editor da referência visual, sem migrations e sem novos
+tokens de cor.
+
+Principais alterações:
+
+- Rodapé reescrito: contador passou a mostrar `N palavras · N páginas`; `Foco`
+  virou pílula; o dropdown de espaçamento virou um segmentado inline
+  (`Compacto`/`Normal`/`Confortável`/`Amplo`); o dropdown de zoom virou botões
+  `−`/`+` com o percentual entre eles.
+- Header simplificado: status de salvamento (`• Salvo`/`• Alterações não
+  salvas`/`• Erro`) com ponto colorido à esquerda; breadcrumb saiu do header e
+  passou a aparecer acima do título da página, no conteúdo.
+- A toolbar fixa de formatação foi removida. Ao selecionar texto, uma barra
+  flutuante ancorada acima da seleção aparece com `Texto`, `Negrito`,
+  `Itálico`, `Listas` e `Mais opções` (compacto, com citação em bloco, código,
+  citar, link, anexo, PDF, inserir blocos, alinhamento e manutenção).
+- `H1`/`H2`/`H3` foram removidos do menu `/`: `execCommand("formatBlock")` não
+  consegue escopar corretamente em um bloco deixado vazio após o gatilho ser
+  apagado, mesclando o título com o parágrafo anterior mesmo com conteúdo
+  bem-formado. Títulos continuam disponíveis via seleção de texto, no chip
+  `Texto` da barra flutuante, onde o comportamento foi verificado correto.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm test`
+- Verificação manual via CDP (claro e escuro): menu `/` sem títulos, barra
+  flutuante dentro da viewport, popover de link mantendo a barra visível,
+  título via seleção aplicado corretamente.
+
+Observação sobre tokens:
+
+Não houve alteração nos tokens de cor, na paleta de tags, nos temas claro/escuro
+ou na tipografia global nesta fase.
+
 ## 07/07/2026 — Refinos da toolbar compacta
 
 Esta fase ajustou detalhes visuais da toolbar compacta do editor.
