@@ -189,7 +189,23 @@ Sem esses arquivos, o app roda normalmente e cai no fallback do CSS
 (Inter, IBM Plex Sans, `system-ui`) — a UI funciona, só visualmente
 diferente do Figma. Em Linux/macOS, onde a Segoe UI não existe, o
 fallback é o comportamento esperado. Não adicione arquivos `.ttf` ao
-repositório.
+repositório, com a exceção descrita abaixo.
+
+A serifa é a Lora, usada nos títulos e no corpo do editor do Caderno. Ela
+é OFL (licença em `src/assets/fonts/OFL.txt`), então **pode** ser
+redistribuída e é a única fonte versionada — o `.gitignore` a libera por
+exceção nominal:
+
+| Arquivo (`src/assets/fonts/`) | O que cobre |
+| --- | --- |
+| `Lora-Variable.ttf` | Eixo `wght` 400–700, estilo normal |
+| `Lora-Italic-Variable.ttf` | Eixo `wght` 400–700, itálico |
+
+São fontes variáveis: dois arquivos cobrem Regular, Medium e Bold, além
+do itálico real que o corpo serifado do editor exige. Ao trocá-las,
+regenere `src/features/notebooks/notebookExportLoraFontCss.generated.ts`,
+que embute a Lora em base64 para a exportação autocontida, e atualize as
+exceções do `.gitignore`.
 
 ## Scripts e validações
 

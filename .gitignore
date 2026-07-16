@@ -34,5 +34,5 @@ Athenaeum/
 # A Lora e' OFL (licenca em src/assets/fonts/OFL.txt) e PODE ser versionada,
 # por isso as excecoes abaixo.
 src/assets/fonts/*.ttf
-!src/assets/fonts/Lora-Medium.ttf
-!src/assets/fonts/Lora-Bold.ttf
+!src/assets/fonts/Lora-Variable.ttf
+!src/assets/fonts/Lora-Italic-Variable.ttf

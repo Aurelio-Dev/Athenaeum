@@ -1096,51 +1096,71 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
       background: var(--ax-surface-muted);
       font-weight: 700;
     }
+    /* Espelha o callout do editor (src/styles/index.css): superficie unica,
+       accent so na faixa/icone/rotulo e circulo contornado. */
     .athenaeum-export [data-athenaeum-block="callout"] {
-      --ax-callout-accent: #2563eb;
-      --ax-callout-bg: #eef3fd;
-      --ax-callout-border: #c9d8f6;
+      --ax-callout-accent: var(--ax-accent);
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       gap: 0.75em;
+      align-items: start;
       margin: 1.6em 0;
       padding: 0.9em 1.05em;
-      border: 1px solid var(--ax-callout-border);
-      border-left: 4px solid var(--ax-callout-accent);
-      border-radius: 8px;
-      background: var(--ax-callout-bg);
+      border: 1px solid var(--ax-border);
+      border-left: 3px solid var(--ax-callout-accent);
+      border-radius: 10px;
+      background: var(--ax-paper);
     }
     .athenaeum-export [data-athenaeum-block="callout"][data-callout-type="tip"] {
       --ax-callout-accent: #0f766e;
-      --ax-callout-bg: #e7f1ef;
-      --ax-callout-border: #c0dad6;
     }
     .athenaeum-export [data-athenaeum-block="callout"][data-callout-type="warning"] {
       --ax-callout-accent: #a16207;
-      --ax-callout-bg: #f6eedf;
-      --ax-callout-border: #e4d2ae;
     }
     .athenaeum-export [data-athenaeum-block="callout"][data-callout-type="danger"] {
       --ax-callout-accent: #b91c1c;
-      --ax-callout-bg: #f7e9e7;
-      --ax-callout-border: #eac4bf;
     }
     .athenaeum-export [data-callout-icon="true"] {
       display: inline-flex;
-      width: 1.7em;
-      height: 1.7em;
+      width: 1.35em;
+      height: 1.35em;
       align-items: center;
       justify-content: center;
+      border: 1.5px solid var(--ax-callout-accent);
       border-radius: 999px;
-      background: var(--ax-callout-accent);
-      color: #ffffff;
+      background: transparent;
+      color: var(--ax-callout-accent);
       font-family: var(--ax-mono);
       font-size: 0.82em;
-      font-weight: 800;
+      font-weight: 700;
       line-height: 1;
+      margin-top: 0.15em;
     }
     .athenaeum-export [data-callout-content="true"] {
       min-width: 0;
+    }
+    /* Rotulo do tipo: copias literais de calloutLabels (notebookEditorUtils.ts),
+       iguais as de src/styles/index.css. */
+    .athenaeum-export [data-callout-content="true"]::before {
+      content: "Info";
+      display: block;
+      margin-bottom: 0.25em;
+      color: var(--ax-callout-accent);
+      font-family: var(--ax-sans);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .athenaeum-export [data-callout-type="tip"] [data-callout-content="true"]::before {
+      content: "Dica";
+    }
+    .athenaeum-export [data-callout-type="warning"] [data-callout-content="true"]::before {
+      content: "Atenção";
+    }
+    .athenaeum-export [data-callout-type="danger"] [data-callout-content="true"]::before {
+      content: "Perigo";
     }
     .athenaeum-export [data-callout-content="true"] > strong:first-child {
       display: block;

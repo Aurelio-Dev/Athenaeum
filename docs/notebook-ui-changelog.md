@@ -1,5 +1,62 @@
 # Changelog da UI do Caderno
 
+## 16/07/2026 — Superfície, tipografia serifada, callouts e modo limpo
+
+Esta fase aproximou o corpo do Caderno da referência visual e corrigiu um bug
+destrutivo de desfazer nas tabelas. Sem migrations e sem novos tokens de cor.
+
+Principais alterações:
+
+- Superfície de escrita passou a usar `--background` (`#F5EDE4` no claro) em vez
+  do `--card` quase branco. Foi usado o token, não o hex literal, para o tema
+  escuro continuar em `#1A1410`. Como callout e tabela ficam em `--card`, eles
+  passaram a se destacar sobre a página.
+- O corpo do editor passou a ser serifado (Lora). O cartão de anexo continua na
+  sans por ser cromo de UI; fonte de diagrama/equação e código já tinham fonte
+  própria.
+- `--font-body` passou a existir: era referenciado em duas regras de placeholder
+  e nunca havia sido definido.
+- Placeholder do editor virou `Escreva, ou tecle "/" para inserir um bloco...`.
+- Callout redesenhado: superfície `--card` única (o fundo não é mais tingido por
+  tipo), borda fina com faixa de 3px à esquerda, ícone em círculo contornado e
+  rótulo do tipo em caixa-alta. O accent virou o único sinal do tipo, com `info`
+  em `--primary`. Os quatro tipos foram mantidos. O rótulo é desenhado por
+  `::before` de propósito: dentro do contentEditable um nó real seria editável,
+  apagável e viraria HTML persistido. Rótulo em `--font-body` peso 700; corpo
+  herda a serifa.
+- Tabelas ganharam modo limpo por bloco (sem grade nem fundo de célula, só a
+  régua do cabeçalho), seguindo o padrão da equação: classe de runtime, nunca
+  persistida.
+- O CSS de callout do exportador foi espelhado, senão o HTML exportado
+  divergiria do editor.
+
+Correção de desfazer (Ctrl+Z) nas tabelas:
+
+- As operações de linha/coluna mutavam o DOM direto, o que é invisível para o
+  histórico do contentEditable. O Ctrl+Z seguinte revertia a entrada anterior —
+  a inserção da tabela — e destruía o bloco inteiro (medido: 2 linhas → `+
+  linha` → 3 → Ctrl+Z → **0**).
+- Agora a mutação roda num clone e a tabela é reinserida via `execCommand`, o
+  que grava a operação como um passo desfazível.
+- Ctrl+Z/Ctrl+Y de digitação e de formatação já funcionavam e não foram
+  alterados.
+- Fora do escopo desta fase: redimensionar imagem e outras operações que ainda
+  alteram o DOM direto continuam fora da pilha nativa.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- Verificação manual via CDP (claro e escuro), incluindo o round-trip de
+  persistência do modo limpo (salva com o modo ligado, reabre com as bordas) e
+  os cenários de Ctrl+Z/Ctrl+Y das operações de tabela.
+
+Observação sobre tokens:
+
+Não houve alteração nos tokens de cor, na paleta de tags, nos temas claro/escuro
+ou na tipografia global desta fase além da fonte do corpo do editor.
+
 ## 16/07/2026 — Rodapé, header e toolbar flutuante
 
 Esta fase aproximou o editor da referência visual, sem migrations e sem novos

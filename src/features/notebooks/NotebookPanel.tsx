@@ -1644,7 +1644,11 @@ export function NotebookPanel({
           Não foi possível carregar o caderno.
         </div>
       ) : (
-        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[var(--card)]">
+        // Superficie de escrita usa --background (#F5EDE4 no claro), nao o
+        // --card quase branco: blocos como callout/tabela ficam em --card e
+        // passam a se destacar sobre a pagina. O trilho tem bg-sidebar e o
+        // rodape/drawer definem o proprio fundo, entao nao sao afetados.
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-app">
           {/* ================= COLUNA 1: TRILHO DE PAGINAS ================= */}
           {/* Trilho colapsavel: nasce estreito (so os dots) e expande revelando
               os titulos. shrink-0 + largura fixa => o editor (flex-1) reflui de

@@ -121,6 +121,15 @@ type ActiveTableCellControls = {
   left: number;
   canRemoveRow: boolean;
   canRemoveColumn: boolean;
+  isCleanMode: boolean;
+};
+
+// Onde o cursor deve parar depois que a tabela e reinserida por
+// applyTableStructureChange (a tabela vira nós novos, entao a posicao e por
+// indice, nao por referencia de no).
+type TableCaretTarget = {
+  rowIndex: number;
+  columnIndex: number;
 };
 
 type ActiveCalloutControls = {
@@ -264,6 +273,7 @@ export function serializeNotebookEditorHtml(editor: HTMLElement) {
   const clone = editor.cloneNode(true) as HTMLElement;
 
   clearEquationRuntimeClasses(clone);
+  clearTableRuntimeClasses(clone);
   normalizeDiagrams(clone);
   // O HTML salvo carrega apenas data-diagram-scale: nenhuma variável CSS
   // runtime, transform, dimensão medida ou handle sobrevive à serialização.
@@ -418,6 +428,17 @@ function initialNotebookContentIsEmpty(content: string) {
     (template.content.textContent ?? "").trim().length === 0 &&
     template.content.querySelector(notebookRichContentSelector) === null
   );
+}
+
+// Modo limpo da tabela: classe de RUNTIME, igual a da equacao. Nunca e
+// persistida — serializeNotebookEditorHtml a remove do clone e a carga inicial
+// a limpa do editor, entao alternar o modo nao suja o HTML salvo nem o export.
+export const notebookTableCleanModeClassName = "notebook-table--clean-mode";
+
+export function clearTableRuntimeClasses(root: ParentNode) {
+  root.querySelectorAll<HTMLElement>('[data-athenaeum-block="table"]').forEach((table) => {
+    table.classList.remove(notebookTableCleanModeClassName);
+  });
 }
 
 function findClosestTableCell(node: Node | null, editor: HTMLElement): HTMLTableCellElement | null {
@@ -726,6 +747,7 @@ export function NotebookPageEditor({
         left: Math.min(Math.max(8, tableRect.left - shellRect.left), maxLeft),
         canRemoveRow: tableCellInfo.rowCount > 1,
         canRemoveColumn: tableCellInfo.columnCount > 1,
+        isCleanMode: tableCellInfo.table.classList.contains(notebookTableCleanModeClassName),
       });
     } else {
       setActiveTableCell(null);
@@ -796,6 +818,7 @@ export function NotebookPageEditor({
     if (editor) {
       editor.innerHTML = initialContent;
       clearEquationRuntimeClasses(editor);
+      clearTableRuntimeClasses(editor);
       normalizeCallouts(editor);
       normalizeDiagrams(editor);
       normalizeEquations(editor);
@@ -1580,19 +1603,71 @@ export function NotebookPageEditor({
     return true;
   }
 
-  function addTableRowBelow() {
+  // Aplica uma mudanca estrutural de tabela PELA pilha de desfazer nativa.
+  //
+  // Mutar a tabela direto no DOM (row.after, cell.remove, ...) e invisivel para
+  // o historico do contentEditable: o Ctrl+Z seguinte reverte a entrada
+  // anterior — a insercao da tabela — e destroi o bloco inteiro. Por isso a
+  // mutacao roda num clone e a tabela e reinserida com execCommand, que grava
+  // a operacao como um passo desfazivel.
+  //
+  // mutateClone recebe o clone e a posicao do cursor, e devolve onde o cursor
+  // deve ficar depois da reinsercao (ou null para abortar).
+  function applyTableStructureChange(
+    mutateClone: (table: HTMLTableElement, rowIndex: number, columnIndex: number) => TableCaretTarget | null,
+  ) {
+    const editor = editorRef.current;
     const info = getCurrentTableCellInfo();
-    if (!info) {
+    const selection = window.getSelection();
+
+    if (!editor || !info || !selection) {
       return;
     }
 
-    const newRow = createEmptyTableRow(info.columnCount);
-    info.row.after(newRow);
-    const targetCell = newRow.cells.item(Math.min(info.columnIndex, newRow.cells.length - 1));
+    const clone = info.table.cloneNode(true) as HTMLTableElement;
+    const target = mutateClone(clone, info.rowIndex, info.columnIndex);
+    if (!target) {
+      return;
+    }
+
+    // A reinsercao troca a tabela no lugar, entao a posicao dela entre as
+    // tabelas do editor nao muda — e assim que a reencontramos depois.
+    const tables = Array.from(editor.querySelectorAll<HTMLTableElement>('table[data-athenaeum-block="table"]'));
+    const tableIndex = tables.indexOf(info.table);
+
+    const range = document.createRange();
+    range.selectNode(info.table);
+    editor.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand("insertHTML", false, clone.outerHTML);
+
+    const insertedTables = Array.from(editor.querySelectorAll<HTMLTableElement>('table[data-athenaeum-block="table"]'));
+    const insertedTable = tableIndex >= 0 ? insertedTables[tableIndex] : undefined;
+    const targetCell = insertedTable?.rows.item(target.rowIndex)?.cells.item(target.columnIndex);
 
     if (targetCell instanceof HTMLTableCellElement) {
       commitTableMutation(targetCell);
+      return;
     }
+
+    emitChange();
+    syncActiveActions();
+  }
+
+  function addTableRowBelow() {
+    applyTableStructureChange((table, rowIndex, columnIndex) => {
+      const row = table.rows.item(rowIndex);
+      if (!row) {
+        return null;
+      }
+
+      const columnCount = Math.max(...Array.from(table.rows).map((currentRow) => currentRow.cells.length), 0);
+      const newRow = createEmptyTableRow(columnCount);
+      row.after(newRow);
+
+      return { rowIndex: rowIndex + 1, columnIndex: Math.min(columnIndex, Math.max(0, newRow.cells.length - 1)) };
+    });
   }
 
   function removeCurrentTableRow() {
@@ -1601,43 +1676,41 @@ export function NotebookPageEditor({
       return;
     }
 
-    const targetRowIndex = info.rowIndex < info.rowCount - 1 ? info.rowIndex + 1 : info.rowIndex - 1;
-    const targetRowBeforeRemoval = info.table.rows.item(targetRowIndex);
-    info.row.remove();
-    const targetRow = targetRowBeforeRemoval?.isConnected
-      ? targetRowBeforeRemoval
-      : info.table.rows.item(Math.min(targetRowIndex, info.table.rows.length - 1));
-    const targetCell = targetRow?.cells.item(Math.min(info.columnIndex, Math.max(0, targetRow.cells.length - 1)));
+    applyTableStructureChange((table, rowIndex, columnIndex) => {
+      const row = table.rows.item(rowIndex);
+      if (!row || table.rows.length <= 1) {
+        return null;
+      }
 
-    if (targetCell instanceof HTMLTableCellElement) {
-      commitTableMutation(targetCell);
-    } else {
-      emitChange();
-      syncActiveActions();
-    }
+      row.remove();
+
+      // O cursor cai na linha que ocupou o lugar; se a removida era a ultima,
+      // na anterior.
+      const nextRowIndex = Math.min(rowIndex, table.rows.length - 1);
+      const nextRow = table.rows.item(nextRowIndex);
+      if (!nextRow) {
+        return null;
+      }
+
+      return { rowIndex: nextRowIndex, columnIndex: Math.min(columnIndex, Math.max(0, nextRow.cells.length - 1)) };
+    });
   }
 
   function addTableColumnRight() {
-    const info = getCurrentTableCellInfo();
-    if (!info) {
-      return;
-    }
+    applyTableStructureChange((table, rowIndex, columnIndex) => {
+      Array.from(table.rows).forEach((row) => {
+        const newCell = createEmptyTableCell();
+        const referenceCell = row.cells.item(columnIndex);
 
-    Array.from(info.table.rows).forEach((row) => {
-      const newCell = createEmptyTableCell();
-      const referenceCell = row.cells.item(info.columnIndex);
+        if (referenceCell) {
+          referenceCell.after(newCell);
+        } else {
+          row.appendChild(newCell);
+        }
+      });
 
-      if (referenceCell) {
-        referenceCell.after(newCell);
-      } else {
-        row.appendChild(newCell);
-      }
+      return { rowIndex, columnIndex: columnIndex + 1 };
     });
-
-    const targetCell = info.row.cells.item(info.columnIndex + 1);
-    if (targetCell instanceof HTMLTableCellElement) {
-      commitTableMutation(targetCell);
-    }
   }
 
   function removeCurrentTableColumn() {
@@ -1646,17 +1719,31 @@ export function NotebookPageEditor({
       return;
     }
 
-    Array.from(info.table.rows).forEach((row) => {
-      row.cells.item(info.columnIndex)?.remove();
-    });
+    applyTableStructureChange((table, rowIndex, columnIndex) => {
+      Array.from(table.rows).forEach((row) => {
+        row.cells.item(columnIndex)?.remove();
+      });
 
-    const targetCell = info.row.cells.item(Math.min(info.columnIndex, Math.max(0, info.row.cells.length - 1)));
-    if (targetCell instanceof HTMLTableCellElement) {
-      commitTableMutation(targetCell);
-    } else {
-      emitChange();
-      syncActiveActions();
+      const row = table.rows.item(rowIndex);
+      if (!row) {
+        return null;
+      }
+
+      return { rowIndex, columnIndex: Math.min(columnIndex, Math.max(0, row.cells.length - 1)) };
+    });
+  }
+
+  // Alterna so a tabela sob o cursor (nao todas), como no modo limpo da
+  // equacao — o do diagrama e global porque vale para o editor inteiro.
+  function toggleCurrentTableCleanMode() {
+    const info = getCurrentTableCellInfo();
+    if (!info) {
+      return;
     }
+
+    const shouldEnable = !info.table.classList.contains(notebookTableCleanModeClassName);
+    info.table.classList.toggle(notebookTableCleanModeClassName, shouldEnable);
+    syncActiveActions();
   }
 
   function getCurrentCallout() {
@@ -2993,6 +3080,20 @@ export function NotebookPageEditor({
             >
               - coluna
             </button>
+            <span className="h-4 w-px bg-border-subtle" aria-hidden="true" />
+            <button
+              type="button"
+              title={activeTableCell.isCleanMode ? "Mostrar as bordas da tabela" : "Ocultar bordas e fundos das células"}
+              aria-label={activeTableCell.isCleanMode ? "Mostrar as bordas da tabela" : "Ativar modo limpo da tabela"}
+              aria-pressed={activeTableCell.isCleanMode}
+              className={`rounded-md px-2 py-1 transition ${
+                activeTableCell.isCleanMode ? "bg-primary-soft text-primary" : "hover:bg-surface-muted hover:text-text-primary"
+              }`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={toggleCurrentTableCleanMode}
+            >
+              {activeTableCell.isCleanMode ? "Mostrar bordas" : "Modo limpo"}
+            </button>
           </div>
         ) : null}
         {activeCallout ? (
@@ -3139,9 +3240,9 @@ export function NotebookPageEditor({
           <div className="pointer-events-none absolute inset-x-0 top-0">
             <span
               style={editorStyle}
-              className={`block py-4 pr-5 text-sm leading-7 text-[var(--muted-foreground)] ${contentInsetClassName}`}
+              className={`block py-4 pr-5 font-serif text-sm leading-7 text-[var(--muted-foreground)] ${contentInsetClassName}`}
             >
-            Escreva suas anotações...
+              Escreva, ou tecle &quot;/&quot; para inserir um bloco...
             </span>
           </div>
         ) : null}

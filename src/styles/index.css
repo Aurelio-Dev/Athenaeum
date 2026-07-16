@@ -54,22 +54,25 @@
   font-display: swap;
 }
 
-/* Lora (serif de titulos) — bundlada em dois pesos apenas, Medium e Bold.
-   Licenca OFL em src/assets/fonts/OFL.txt; diferente da Segoe UI, pode ser
-   redistribuida e por isso e versionada no repo. */
+/* Lora (serif de titulos e do corpo do Caderno) — fontes variaveis, eixo wght
+   400-700, cobrindo Regular/Medium/Bold em um arquivo por estilo. Substituiram
+   as estaticas Medium/Bold quando o corpo do editor passou a ser serifado: ele
+   precisa de 400 e de italico real (sem a face italica o navegador sintetiza a
+   inclinacao). Licenca OFL em src/assets/fonts/OFL.txt; diferente da Segoe UI,
+   pode ser redistribuida e por isso e versionada no repo. */
 @font-face {
   font-family: "Lora";
-  src: url("../assets/fonts/Lora-Medium.ttf") format("truetype");
-  font-weight: 500;
+  src: url("../assets/fonts/Lora-Variable.ttf") format("truetype-variations");
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: "Lora";
-  src: url("../assets/fonts/Lora-Bold.ttf") format("truetype");
-  font-weight: 700;
-  font-style: normal;
+  src: url("../assets/fonts/Lora-Italic-Variable.ttf") format("truetype-variations");
+  font-weight: 400 700;
+  font-style: italic;
   font-display: swap;
 }
 
@@ -78,6 +81,10 @@
      o resto da UI. Mesmos valores do fontFamily do tailwind.config. */
   --font-serif: "Lora", serif;
   --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  /* Fonte da UI auxiliar dentro do editor (placeholders de fonte/preview,
+     rotulos de callout). Existe separada de --font-sans porque o corpo do
+     editor e serifado: sem ela esses textos herdariam a serifa do conteudo. */
+  --font-body: var(--font-sans);
 
   /* Backgrounds */
   --background: #F5EDE4;
@@ -464,6 +471,13 @@ select {
    estilo real para a formatacao ser visivel (e o HTML salvo renderiza igual
    ao recarregar, pois estas regras valem sempre que o conteudo estiver num
    .notebook-editor). */
+
+/* O corpo do Caderno e serifado (Lora). Vale para o texto digitado; os
+   controles auxiliares dentro do editor pedem --font-body explicitamente. */
+.notebook-editor {
+  font-family: var(--font-serif);
+}
+
 .notebook-editor h1 {
   font-size: 1.6em;
   font-weight: 700;
@@ -541,58 +555,105 @@ select {
   outline-offset: -2px;
 }
 
+/* Modo limpo da tabela (classe de runtime, ver notebookTableCleanModeClassName):
+   tira a grade e o fundo das celulas, deixando so a regua sob o cabecalho. O
+   :focus-within acima continua valendo, entao a celula em edicao segue visivel
+   mesmo sem bordas. */
+.notebook-editor [data-athenaeum-block="table"].notebook-table--clean-mode td,
+.notebook-editor [data-athenaeum-block="table"].notebook-table--clean-mode th {
+  border: 0;
+  background: transparent;
+  padding-left: 0;
+}
+
+.notebook-editor [data-athenaeum-block="table"].notebook-table--clean-mode tr:first-child th,
+.notebook-editor [data-athenaeum-block="table"].notebook-table--clean-mode tr:first-child td {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+/* Callout: fundo --card sobre a pagina --background, borda fina e faixa de
+   accent a esquerda. O accent (faixa, icone e rotulo) e o unico sinal do tipo
+   — o fundo NAO e mais tingido, entao os quatro tipos usam a mesma superficie.
+   info usa --primary; os demais mantem suas cores semanticas. */
 .notebook-editor [data-athenaeum-block="callout"] {
-  --callout-accent: #2563EB;
-  --callout-bg: color-mix(in srgb, #2563EB 8%, var(--color-surface-card));
-  --callout-border: color-mix(in srgb, #2563EB 34%, var(--color-border-subtle));
+  --callout-accent: var(--primary);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.75em;
-  border: 1px solid var(--callout-border);
-  border-left: 4px solid var(--callout-accent);
-  border-radius: 8px;
-  background: var(--callout-bg);
+  align-items: start;
+  border: 1px solid var(--color-border-subtle);
+  border-left: 3px solid var(--callout-accent);
+  border-radius: 10px;
+  background: var(--color-surface-card);
   padding: 0.85em 1em;
   margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.6) 0;
 }
 
 .notebook-editor [data-athenaeum-block="callout"][data-callout-type="tip"] {
   --callout-accent: #0F766E;
-  --callout-bg: color-mix(in srgb, #0F766E 9%, var(--color-surface-card));
-  --callout-border: color-mix(in srgb, #0F766E 34%, var(--color-border-subtle));
 }
 
 .notebook-editor [data-athenaeum-block="callout"][data-callout-type="warning"] {
   --callout-accent: #A16207;
-  --callout-bg: color-mix(in srgb, #A16207 10%, var(--color-surface-card));
-  --callout-border: color-mix(in srgb, #A16207 38%, var(--color-border-subtle));
 }
 
 .notebook-editor [data-athenaeum-block="callout"][data-callout-type="danger"] {
   --callout-accent: #B91C1C;
-  --callout-bg: color-mix(in srgb, #B91C1C 9%, var(--color-surface-card));
-  --callout-border: color-mix(in srgb, #B91C1C 38%, var(--color-border-subtle));
 }
 
+/* Circulo contornado (nao preenchido), como na referencia. O glifo continua
+   sendo o textContent gravado por notebookEditorCalloutDom. */
 .notebook-editor [data-callout-icon="true"] {
   display: inline-flex;
-  width: 1.7em;
-  height: 1.7em;
+  width: 1.35em;
+  height: 1.35em;
   align-items: center;
   justify-content: center;
+  border: 1.5px solid var(--callout-accent);
   border-radius: 999px;
-  background: var(--callout-accent);
-  color: white;
+  background: transparent;
+  color: var(--callout-accent);
   font-family: "IBM Plex Mono", Consolas, monospace;
   font-size: 0.82em;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
+  margin-top: 0.15em;
 }
 
 .notebook-editor [data-callout-content="true"] {
   min-width: 0;
 }
 
+/* Rotulo do tipo. Vem por ::before de proposito: dentro do contentEditable,
+   um no real seria editavel, apagavel e viraria HTML persistido. As strings
+   devem permanecer identicas a calloutLabels em notebookEditorUtils.ts;
+   text-transform cuida do caixa-alta, entao o texto aqui casa com o do menu. */
+.notebook-editor [data-callout-content="true"]::before {
+  content: "Info";
+  display: block;
+  margin-bottom: 0.25em;
+  color: var(--callout-accent);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.notebook-editor [data-callout-type="tip"] [data-callout-content="true"]::before {
+  content: "Dica";
+}
+
+.notebook-editor [data-callout-type="warning"] [data-callout-content="true"]::before {
+  content: "Atenção";
+}
+
+.notebook-editor [data-callout-type="danger"] [data-callout-content="true"]::before {
+  content: "Perigo";
+}
+
+/* Corpo do callout: herda a serifa (Lora) do editor, como a prosa. */
 .notebook-editor [data-callout-content="true"] > strong:first-child {
   display: block;
   margin-bottom: 0.2em;
@@ -1286,10 +1347,13 @@ select {
   margin: calc(var(--notebook-editor-paragraph-gap, 1.4rem) * 0.65) 0;
 }
 
+/* Cartao de anexo e cromo de UI, nao prosa: fica na sans mesmo com o corpo
+   do editor serifado. */
 .notebook-editor [data-file-attachment-card="true"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.25em;
+  font-family: var(--font-body);
   border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
   background: color-mix(in srgb, var(--color-surface-muted) 74%, var(--color-surface-card));

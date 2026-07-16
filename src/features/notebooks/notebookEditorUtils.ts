@@ -34,6 +34,10 @@ export const diagramEmptyPreviews: Record<DiagramKind, string> = {
   flowchart: "Descreva as etapas do fluxo.",
 };
 
+// Rotulos dos tipos de callout. Alem do menu de tipo, sao desenhados como
+// rotulo do proprio bloco via ::before — as copias literais em
+// src/styles/index.css e no CSS do exportador devem casar com estes valores
+// (o caixa-alta e feito por text-transform, nao aqui).
 export const calloutLabels: Record<CalloutType, string> = {
   info: "Info",
   tip: "Dica",

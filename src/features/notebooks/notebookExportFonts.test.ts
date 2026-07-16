@@ -18,11 +18,14 @@ describe("loadNotebookExportLoraFontFaceCss", () => {
     expect(css).not.toMatch(/@import/i);
   });
 
-  it("declares the Medium (500) and Bold (700) weights used by the export typography", async () => {
+  it("declares the 400-700 weight range in both normal and italic styles", async () => {
     const css = await loadNotebookExportLoraFontFaceCss();
 
-    expect(css).toContain("font-weight:500");
-    expect(css).toContain("font-weight:700");
+    // Fontes variaveis: um arquivo por estilo cobre todo o eixo wght, entao a
+    // exportacao ganha Regular/Medium/Bold e o italico real do corpo serifado.
+    expect(css).toContain("font-weight:400 700");
+    expect(css).toContain("font-style:normal");
+    expect(css).toContain("font-style:italic");
     expect(css.match(/@font-face/g)?.length).toBe(2);
   });
 
