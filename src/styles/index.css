@@ -474,6 +474,12 @@ select {
   border-color: var(--color-sidebar);
 }
 
+/* Fora do modo foco, a barra do editor responde somente ao ponteiro sobre o
+   proprio thumb, sem alterar a aparencia quando o cursor percorre o texto. */
+.notebook-editor:not(.notebook-editor--focus)::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subtle);
+}
+
 /* Editor de paginas de caderno: o preflight do Tailwind zera a aparencia de
    h1-h3, listas e blockquote; dentro do contentEditable eles precisam de
    estilo real para a formatacao ser visivel (e o HTML salvo renderiza igual
@@ -1610,13 +1616,14 @@ select {
 }
 
 .notebook-editor--focus::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  background: color-mix(in srgb, var(--color-border-subtle) 60%, transparent);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
 }
 
-.notebook-editor--focus:hover::-webkit-scrollbar-thumb {
+.notebook-editor--focus::-webkit-scrollbar-thumb:hover,
+.notebook-editor--focus.notebook-editor--scrolling::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--color-text-subtle) 52%, transparent);
   border: 2px solid transparent;
   background-clip: content-box;

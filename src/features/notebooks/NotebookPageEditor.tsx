@@ -709,6 +709,8 @@ export function NotebookPageEditor({
   const [isDiagramCleanMode, setIsDiagramCleanMode] = useState(false);
   const [activeEquation, setActiveEquation] = useState<ActiveEquationControls | null>(null);
   const [isEmpty, setIsEmpty] = useState(initialNotebookContentIsEmpty(initialContent));
+  const [isScrollbarScrolling, setIsScrollbarScrolling] = useState(false);
+  const scrollbarScrollEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Toolbar flutuante de formatacao: aparece ancorada acima da selecao de
   // texto (nao ha mais barra fixa). Guardamos o retangulo da selecao em
@@ -724,6 +726,14 @@ export function NotebookPageEditor({
   // so abre no input seguinte, depois de confirmar que o "/" foi inserido.
   const slashAnchorRef = useRef<{ node: Text; offset: number } | null>(null);
   const pendingSlashTriggerRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (scrollbarScrollEndTimeoutRef.current !== null) {
+        clearTimeout(scrollbarScrollEndTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setIsTextMenuOpen(false);
@@ -904,6 +914,23 @@ export function NotebookPageEditor({
 
     setActiveActions(nextActive);
   }, []);
+
+  function handleEditorScroll() {
+    if (scrollbarScrollEndTimeoutRef.current !== null) {
+      clearTimeout(scrollbarScrollEndTimeoutRef.current);
+    }
+
+    setIsScrollbarScrolling(true);
+    scrollbarScrollEndTimeoutRef.current = setTimeout(() => {
+      scrollbarScrollEndTimeoutRef.current = null;
+      setIsScrollbarScrolling(false);
+    }, 700);
+
+    // Menu "/" e ancorado na posicao de abertura; rolagem fecha em vez de
+    // reposicionar.
+    closeSlashMenu();
+    syncActiveActions();
+  }
 
   // Conteudo inicial carregado uma unica vez — ver comentario nas props.
   useEffect(() => {
@@ -3475,14 +3502,9 @@ export function NotebookPageEditor({
           onClick={handleEditorClick}
           onPaste={handlePaste}
           onKeyDown={handleKeyDown}
-          onScroll={() => {
-            // Menu "/" e ancorado na posicao de abertura; rolagem fecha em
-            // vez de reposicionar.
-            closeSlashMenu();
-            syncActiveActions();
-          }}
+          onScroll={handleEditorScroll}
           style={editorStyle}
-          className={`notebook-editor notebook-editor--spaced ${isFocusMode ? "notebook-editor--focus" : ""} ${isCtrlPressed ? "notebook-editor--link-nav" : ""} ${isDiagramCleanMode ? "notebook-editor--diagram-clean-mode" : ""} h-full w-full overflow-y-auto break-words border-0 bg-transparent py-4 pr-5 text-sm leading-7 text-[var(--foreground)] outline-none ${contentInsetClassName}`}
+          className={`notebook-editor notebook-editor--spaced ${isFocusMode ? "notebook-editor--focus" : ""} ${isScrollbarScrolling ? "notebook-editor--scrolling" : ""} ${isCtrlPressed ? "notebook-editor--link-nav" : ""} ${isDiagramCleanMode ? "notebook-editor--diagram-clean-mode" : ""} h-full w-full overflow-y-auto break-words border-0 bg-transparent py-4 pr-5 text-sm leading-7 text-[var(--foreground)] outline-none ${contentInsetClassName}`}
         />
       </div>
     </div>
