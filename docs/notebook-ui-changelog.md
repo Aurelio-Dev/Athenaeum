@@ -1,5 +1,28 @@
 # Changelog da UI do Caderno
 
+## 16/07/2026 — Ajustes visuais da impressão nativa
+
+O PDF gerado pelo diálogo nativo deixou de reservar a área de cabeçalho e
+rodapé do Chromium/WebView2. A regra `@page` de impressão agora usa margem
+zero; o respiro anterior foi migrado para `padding: 16mm 18mm` em cada página
+do Caderno, mantendo o conteúdo afastado das bordas físicas.
+
+- A superfície geral do PDF passou a ser branco puro (`#FFFFFF`), apenas no
+  escopo de impressão. Nenhum token global, tema da interface ou HTML
+  persistido foi alterado.
+- Fundos próprios de código, callouts, figuras, tabelas e equações são
+  preservados. Diagramas, grafos e fluxogramas continuam no modo limpo, com os
+  preenchimentos visuais do SVG intactos.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm run build`
+- `git diff --check`
+- verificação manual confirmada: PDF sem data/hora, título, URL
+  `tauri.localhost` ou paginação do navegador; fundo geral branco e conteúdo
+  com o espaçamento esperado.
+
 ## 16/07/2026 — Impressão nativa de páginas selecionadas
 
 O menu `...` do Caderno passou a habilitar `Imprimir`, usando o diálogo

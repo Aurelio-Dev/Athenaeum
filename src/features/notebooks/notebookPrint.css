@@ -30,18 +30,19 @@
   line-height: 1.65;
 }
 
-@page {
-  margin: 16mm 18mm;
-}
-
 @media print {
+  @page {
+    margin: 0;
+  }
+
   body.notebook-print-active > :not(.notebook-print-root) {
     display: none !important;
   }
 
-  body.notebook-print-active {
+  body.notebook-print-active,
+  .notebook-print-root {
     margin: 0;
-    background: var(--color-surface-panel);
+    background: #FFFFFF !important;
   }
 
   .notebook-print-root {
@@ -54,6 +55,7 @@
   }
 
   .notebook-print-page {
+    padding: 16mm 18mm;
     break-after: page;
     page-break-after: always;
   }
