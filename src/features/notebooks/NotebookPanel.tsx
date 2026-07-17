@@ -47,7 +47,14 @@ import { TagSelector } from "../library/TagSelector";
 import { getNotebookExportDefaultFileName } from "./notebookExportFileName";
 import { buildNotebookExportHtml, type NotebookExportScope, type NotebookExportWarning } from "./notebookExportHtml";
 import { estimateNotebookExportSizeBytes, shouldGateNotebookExportSize } from "./notebookExportSizeEstimate";
+import { NotebookPrintModal } from "./NotebookPrintModal";
 import { NotebookPageEditor, notebookSpacingOptions, type NotebookSpacingMode } from "./NotebookPageEditor";
+import { PrintableNotebookView } from "./PrintableNotebookView";
+import {
+  beginNotebookPrintSession,
+  buildNotebookPrintDocumentTitle,
+  notebookPrintReadyTimeoutMs,
+} from "./notebookPrintSession";
 import {
   notebookDetailsColumnWidth,
   notebookPagesRailCollapsedWidth,
@@ -98,6 +105,11 @@ type NotebookExportPreparation = {
   // limiar de 100MB OU estimativa desconhecida (null). Ver
   // shouldGateNotebookExportSize.
   isAboveSizeThreshold: boolean;
+};
+
+type NotebookPrintJob = {
+  pages: NotebookPage[];
+  documentTitle: string;
 };
 
 const editorZoomOptions = [75, 90, 100, 110, 125, 150] as const;
@@ -207,6 +219,14 @@ function getNotebookExportWriteErrorMessage(error: unknown) {
   }
 
   return "Não foi possível gravar o arquivo de exportação.";
+}
+
+function getNotebookPrintErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Não foi possível preparar o caderno para impressão.";
 }
 
 function formatExportFileSize(bytes: number) {
@@ -581,6 +601,10 @@ export function NotebookPanel({
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<NotebookSaveStatus>("saved");
   const [isStatsDialogOpen, setIsStatsDialogOpen] = useState(false);
+  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [printJob, setPrintJob] = useState<NotebookPrintJob | null>(null);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportScope, setExportScope] = useState<NotebookExportScope>("full-notebook");
   const [isPreparingExport, setIsPreparingExport] = useState(false);
@@ -661,6 +685,9 @@ export function NotebookPanel({
   const isDirtyRef = useRef(false);
   const saveQueueTailRef = useRef<Promise<void>>(Promise.resolve());
   const autosaveTimerRef = useRef<number | null>(null);
+  const printHasStartedRef = useRef(false);
+  const printSessionCompletedRef = useRef(false);
+  const printSessionRestoreRef = useRef<(() => void) | null>(null);
   const onNotebookChangedRef = useRef(onNotebookChanged);
   onNotebookChangedRef.current = onNotebookChanged;
 
@@ -1076,6 +1103,119 @@ export function NotebookPanel({
     setExportError(null);
   }
 
+  function openNotebookPrintDialog() {
+    notebookOptionsContextMenu.close();
+    printHasStartedRef.current = false;
+    printSessionCompletedRef.current = false;
+    setPrintJob(null);
+    setPrintError(null);
+    setIsPreparingPrint(false);
+    setIsPrintDialogOpen(true);
+  }
+
+  function closeNotebookPrintDialog() {
+    if (isPreparingPrint || printJob) {
+      return;
+    }
+
+    setIsPrintDialogOpen(false);
+    setPrintError(null);
+  }
+
+  const finishNotebookPrint = useCallback(() => {
+    printSessionCompletedRef.current = true;
+    printSessionRestoreRef.current = null;
+    printHasStartedRef.current = false;
+    setPrintJob(null);
+    setPrintError(null);
+    setIsPreparingPrint(false);
+    setIsPrintDialogOpen(false);
+  }, []);
+
+  const triggerNotebookPrint = useCallback(() => {
+    if (!printJob || printHasStartedRef.current) {
+      return;
+    }
+
+    printHasStartedRef.current = true;
+    printSessionCompletedRef.current = false;
+
+    try {
+      const session = beginNotebookPrintSession({
+        title: printJob.documentTitle,
+        onAfterPrint: finishNotebookPrint,
+      });
+      if (!printSessionCompletedRef.current) {
+        printSessionRestoreRef.current = session.restore;
+      }
+    } catch (error) {
+      console.warn("Nao foi possivel abrir o dialogo nativo de impressao.", error);
+      printHasStartedRef.current = false;
+      setPrintJob(null);
+      setIsPreparingPrint(false);
+      setPrintError(getNotebookPrintErrorMessage(error));
+    }
+  }, [finishNotebookPrint, printJob]);
+
+  async function prepareNotebookPrint(pageIds: number[]) {
+    if (pageIds.length === 0 || isPreparingPrint) {
+      return;
+    }
+
+    setPrintError(null);
+    setIsPreparingPrint(true);
+
+    try {
+      await saveNotebookInfoDraft();
+      if (isInfoDirtyRef.current) {
+        throw new Error("Não foi possível salvar as informações mais recentes do caderno.");
+      }
+
+      // Usa a mesma fila serializada do autosave antes de reler as páginas.
+      await saveActivePage();
+
+      const persistedPages = await listNotebookPages(notebookId);
+      const selectedPageIds = new Set(pageIds);
+      const selectedPages = persistedPages.filter((page) => selectedPageIds.has(page.id));
+      if (selectedPages.length !== selectedPageIds.size) {
+        throw new Error("Não foi possível carregar todas as páginas selecionadas para impressão.");
+      }
+
+      const currentNotebookTitle =
+        infoDraftTitleRef.current.trim() || notebookTitle || notebookInfo?.title || "Caderno sem título";
+      printHasStartedRef.current = false;
+      printSessionCompletedRef.current = false;
+      setPrintJob({
+        pages: selectedPages,
+        documentTitle: buildNotebookPrintDocumentTitle(currentNotebookTitle, selectedPages),
+      });
+    } catch (error) {
+      console.warn("Nao foi possivel preparar a impressao do caderno.", error);
+      setIsPreparingPrint(false);
+      setPrintError(getNotebookPrintErrorMessage(error));
+    }
+  }
+
+  useEffect(() => {
+    if (!printJob) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      console.warn("A impressao do caderno atingiu o limite de espera; abrindo o dialogo com o conteudo disponivel.");
+      triggerNotebookPrint();
+    }, notebookPrintReadyTimeoutMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [printJob, triggerNotebookPrint]);
+
+  useEffect(() => {
+    return () => {
+      printSessionRestoreRef.current?.();
+      printSessionRestoreRef.current = null;
+    };
+  }, []);
+
   async function prepareNotebookExport() {
     setExportError(null);
     setPreparedExport(null);
@@ -1400,6 +1540,14 @@ export function NotebookPanel({
 
       const topPanel = panels[panels.length - 1];
       if (topPanel?.id === panel.id) {
+        if (isPrintDialogOpen) {
+          event.preventDefault();
+          if (!isPreparingPrint) {
+            closeNotebookPrintDialog();
+          }
+          return;
+        }
+
         if (isDetailsPanelOpen) {
           event.preventDefault();
           setIsDetailsPanelOpen(false);
@@ -1424,7 +1572,17 @@ export function NotebookPanel({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [panels, panel.id, handleClose, isFocusMode, exitFocusMode, isDetailsPanelOpen, isPagesRailExpanded]);
+  }, [
+    panels,
+    panel.id,
+    handleClose,
+    isFocusMode,
+    exitFocusMode,
+    isDetailsPanelOpen,
+    isPagesRailExpanded,
+    isPreparingPrint,
+    isPrintDialogOpen,
+  ]);
 
   // Colapsa o trilho de Paginas ao clicar fora dele — mesmo padrao do
   // clique-fora do drawer de Detalhes logo abaixo.
@@ -2179,7 +2337,7 @@ export function NotebookPanel({
             <ContextMenuItem icon={<MenuGlyph name="pin" />} label="Fixar nos favoritos" onSelect={() => void pinNotebookFavorite()} disabled={Boolean(notebookInfo?.favorite)} />
             <ContextMenuDivider />
             <ContextMenuItem icon={<MenuGlyph name="export" />} label="Exportar" onSelect={openNotebookExportDialog} />
-            <ContextMenuItem icon={<MenuGlyph name="print" />} label="Imprimir" onSelect={() => undefined} disabled />
+            <ContextMenuItem icon={<MenuGlyph name="print" />} label="Imprimir" onSelect={openNotebookPrintDialog} />
             <ContextMenuItem icon={<MenuGlyph name="link" />} label="Copiar link interno" onSelect={() => undefined} disabled />
             <ContextMenuDivider />
             <ContextMenuItem icon={<MenuGlyph name="history" />} label="Histórico de alterações" onSelect={() => undefined} disabled />
@@ -2234,6 +2392,19 @@ export function NotebookPanel({
           </section>
         </div>
       ) : null}
+
+      {isPrintDialogOpen ? (
+        <NotebookPrintModal
+          pages={pages}
+          currentPageId={activePageIdRef.current}
+          isPreparing={isPreparingPrint}
+          error={printError}
+          onCancel={closeNotebookPrintDialog}
+          onConfirm={(pageIds) => void prepareNotebookPrint(pageIds)}
+        />
+      ) : null}
+
+      {printJob ? <PrintableNotebookView pages={printJob.pages} onReady={triggerNotebookPrint} /> : null}
 
       {isExportDialogOpen ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={closeNotebookExportDialog}>

@@ -1,4 +1,4 @@
-import { createElement, type ReactElement } from "react";
+import { createElement, useEffect, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { NotebookDiagramPreview } from "./NotebookDiagramPreview";
@@ -29,10 +29,23 @@ type DiagramPreviewRoot = {
   root: Root;
 };
 
+type DiagramReadySignalProps = {
+  children?: ReactElement;
+  onReady?: () => void;
+};
+
 const visualPreviewRoots = new WeakMap<HTMLElement, DiagramPreviewRoot>();
 const diagramEmptyPreviewMessage = "Digite relações no formato: Entrada -> Processamento";
 const diagramInvalidPreviewMessage = "Nenhuma relação válida encontrada. Use o formato: A -> B";
 const diagramSyntaxExample = "Entrada -> Processamento\nProcessamento -> Saída";
+
+function DiagramReadySignal({ children, onReady }: DiagramReadySignalProps) {
+  useEffect(() => {
+    onReady?.();
+  }, [onReady]);
+
+  return children ?? null;
+}
 
 export function getDiagramKind(diagram: HTMLElement): DiagramKind {
   return isDiagramKind(diagram.dataset.diagramKind) ? diagram.dataset.diagramKind : "diagram";
@@ -197,7 +210,12 @@ function renderDiagramGuidancePreview(preview: HTMLElement, labelText: string, m
   preview.replaceChildren(label, message, example);
 }
 
-function renderReactDiagramPreview(preview: HTMLElement, labelText: string, visualElement: ReactElement) {
+function renderReactDiagramPreview(
+  preview: HTMLElement,
+  labelText: string,
+  visualElement: ReactElement,
+  onReady?: () => void,
+) {
   if (!document.body.contains(preview)) {
     return false;
   }
@@ -216,40 +234,44 @@ function renderReactDiagramPreview(preview: HTMLElement, labelText: string, visu
   }
 
   preview.replaceChildren(label, host);
-  root.render(visualElement);
+  root.render(createElement(DiagramReadySignal, { onReady }, visualElement));
   return true;
 }
 
-function renderVisualDiagramPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+function renderVisualDiagramPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram, onReady?: () => void) {
   return renderReactDiagramPreview(
     preview,
     diagramKindLabels.diagram,
     createElement(NotebookDiagramPreview, { diagram: parsedDiagram }),
+    onReady,
   );
 }
 
-function renderVisualFlowchartPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram) {
+function renderVisualFlowchartPreview(preview: HTMLElement, parsedDiagram: ParsedDiagram, onReady?: () => void) {
   return renderReactDiagramPreview(
     preview,
     diagramKindLabels.flowchart,
     createElement(NotebookFlowchartPreview, { flowchart: parsedDiagram }),
+    onReady,
   );
 }
 
-function renderVisualGraphPreview(preview: HTMLElement, parsedGraph: ParsedGraph) {
+function renderVisualGraphPreview(preview: HTMLElement, parsedGraph: ParsedGraph, onReady?: () => void) {
   return renderReactDiagramPreview(
     preview,
     diagramKindLabels.graph,
     createElement(NotebookGraphPreview, { graph: parsedGraph }),
+    onReady,
   );
 }
 
-export function renderDiagramPreview(diagram: HTMLElement) {
+export function renderDiagramPreview(diagram: HTMLElement, onReady?: () => void) {
   const kind = getDiagramKind(diagram);
   const sources = getDirectDiagramSources(diagram);
   const preview = diagram.querySelector<HTMLElement>('[data-diagram-preview="true"]');
 
   if (sources.length === 0 || !preview) {
+    onReady?.();
     return;
   }
 
@@ -260,11 +282,12 @@ export function renderDiagramPreview(diagram: HTMLElement) {
     const parsedDiagram = parseDiagramSource(sourceText);
 
     if (parsedDiagram.edges.length > 0) {
-      if (renderVisualDiagramPreview(preview, parsedDiagram)) {
+      if (renderVisualDiagramPreview(preview, parsedDiagram, onReady)) {
         return;
       }
 
       renderTextDiagramPreview(preview, diagramKindLabels.diagram, sourceText);
+      onReady?.();
       return;
     }
 
@@ -273,6 +296,7 @@ export function renderDiagramPreview(diagram: HTMLElement) {
       diagramKindLabels.diagram,
       sourceText.length === 0 ? diagramEmptyPreviewMessage : diagramInvalidPreviewMessage,
     );
+    onReady?.();
     return;
   }
 
@@ -280,15 +304,17 @@ export function renderDiagramPreview(diagram: HTMLElement) {
     const parsedGraph = parseGraphSource(sourceText);
 
     if (parsedGraph.edges.length > 0) {
-      if (renderVisualGraphPreview(preview, parsedGraph)) {
+      if (renderVisualGraphPreview(preview, parsedGraph, onReady)) {
         return;
       }
 
       renderTextDiagramPreview(preview, diagramKindLabels.graph, sourceText);
+      onReady?.();
       return;
     }
 
     renderTextDiagramPreview(preview, diagramKindLabels.graph, sourceText || diagramEmptyPreviews.graph);
+    onReady?.();
     return;
   }
 
@@ -296,24 +322,34 @@ export function renderDiagramPreview(diagram: HTMLElement) {
     const parsedDiagram = parseDiagramSource(sourceText);
 
     if (parsedDiagram.edges.length > 0) {
-      if (renderVisualFlowchartPreview(preview, parsedDiagram)) {
+      if (renderVisualFlowchartPreview(preview, parsedDiagram, onReady)) {
         return;
       }
 
       renderTextDiagramPreview(preview, diagramKindLabels.flowchart, sourceText);
+      onReady?.();
       return;
     }
 
     renderTextDiagramPreview(preview, diagramKindLabels.flowchart, sourceText || diagramEmptyPreviews.flowchart);
+    onReady?.();
     return;
   }
 
   renderTextDiagramPreview(preview, diagramKindLabels[kind], sourceText || diagramEmptyPreviews[kind]);
+  onReady?.();
 }
 
 export function setDiagramKind(diagram: HTMLElement, kind: DiagramKind) {
   diagram.dataset.diagramKind = kind;
   renderDiagramPreview(diagram);
+}
+
+export function clearDiagramPreviews(editor: HTMLElement) {
+  editor.querySelectorAll<HTMLElement>('[data-diagram-preview="true"]').forEach((preview) => {
+    unmountVisualPreview(preview);
+    preview.replaceChildren();
+  });
 }
 
 // Escala manual: valida data-diagram-scale (inválidos e 100 são removidos) e
@@ -358,7 +394,7 @@ function normalizeLegacyDiagramFigures(editor: HTMLElement) {
   });
 }
 
-export function normalizeDiagrams(editor: HTMLElement) {
+export function normalizeDiagrams(editor: HTMLElement, onPreviewReady?: (diagram: HTMLElement) => void) {
   normalizeLegacyDiagramFigures(editor);
 
   editor.querySelectorAll<HTMLElement>('[data-athenaeum-block="diagram"]').forEach((diagram) => {
@@ -369,7 +405,7 @@ export function normalizeDiagrams(editor: HTMLElement) {
       nextDiagram.dataset.diagramKind = "diagram";
       nextDiagram.append(createDiagramPreviewElement(), createDiagramSourceElement(sourceText || diagramDefaultSources.diagram));
       diagram.replaceWith(nextDiagram);
-      renderDiagramPreview(nextDiagram);
+      renderDiagramPreview(nextDiagram, () => onPreviewReady?.(nextDiagram));
       return;
     }
 
@@ -387,6 +423,6 @@ export function normalizeDiagrams(editor: HTMLElement) {
 
     normalizeDiagramSourceElements(diagram);
 
-    renderDiagramPreview(diagram);
+    renderDiagramPreview(diagram, () => onPreviewReady?.(diagram));
   });
 }

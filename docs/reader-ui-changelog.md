@@ -1,5 +1,26 @@
 # Changelog da UI do Leitor
 
+## 16/07/2026 — Motor compartilhado de sanitização para Notas
+
+O sanitizador das Notas foi extraído para um motor HTML compartilhado, sem
+alterar a saída da superfície de Notas. A política das Notas mantém as doze
+tags inline permitidas, remove todos os atributos e faz `unwrap` de elementos
+desconhecidos para nunca perder o texto do usuário junto com sua formatação.
+
+- O motor continua usando `DOMParser` isolado, restringe nós ao namespace HTML
+  e limita a profundidade a 256 níveis.
+- A decisão entre `unwrap` e descarte passou a ser configurável por política.
+  Isso permite à impressão do Caderno descartar apenas subárvores intencionais
+  (como anexos e controles de runtime), sem duplicar a lógica sensível de
+  parsing e reconstrução segura.
+- Os payloads originais de XSS das Notas seguem cobertos pela suíte existente.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm test` — 27 arquivos e 327 testes aprovados
+- testes focados do motor e do sanitizador das Notas — 56 testes aprovados
+
 ## 15/07/2026 — Reader 1C: visualização, zoom e foco de leitura
 
 Esta fase consolida o Reader no layout 1C e amplia os controles de leitura

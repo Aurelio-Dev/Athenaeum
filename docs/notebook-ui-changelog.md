@@ -1,5 +1,42 @@
 # Changelog da UI do Caderno
 
+## 16/07/2026 — Impressão nativa de páginas selecionadas
+
+O menu `...` do Caderno passou a habilitar `Imprimir`, usando o diálogo
+nativo do WebView via `window.print()`. Não há comando Rust, migration,
+plugin externo nem mudança na exportação HTML.
+
+- O modal lista as páginas na ordem do trilho, permite seleção arbitrária e
+  traz os atalhos `Selecionar todas` e `Só a página atual`. A confirmação só
+  fica disponível com ao menos uma página marcada; cancelar não grava nem
+  altera o Caderno.
+- A área imprimível é montada temporariamente num portal, a partir do HTML
+  persistido sanitizado e dos mesmos normalizadores de callout, código,
+  imagem, diagrama e equação do editor. Anexos de arquivo são omitidos.
+- Assets são carregados com concorrência limitada a duas páginas. Diagramas
+  SVG e equações KaTeX sinalizam sua prontidão individualmente; antes de abrir
+  o diálogo a impressão também aguarda fontes, frames de layout e imagens. Um
+  timeout defensivo de 10 segundos evita espera indefinida.
+- O título temporário do documento descreve o Caderno e a seleção e é
+  restaurado no evento `afterprint` (com cleanup defensivo no unmount).
+- O CSS de impressão esconde o chrome do app, separa as páginas do Caderno e
+  evita quebra interna de tabelas, callouts, diagramas, equações e figuras.
+  Diagramas, grafos e fluxogramas sempre usam o modo limpo no PDF, sem copiar
+  o estado momentâneo do editor.
+
+Validação executada:
+
+- `npm run typecheck`
+- `npm test` — 27 arquivos e 327 testes aprovados
+- `npm run build`
+- testes focados para sanitização, prontidão dos previews, título de impressão
+  e conteúdo imprimível
+- `git diff --check`
+
+Pendente de validação manual no diálogo nativo: salvar um PDF com diagrama,
+KaTeX e tabela grande para conferir o resultado final do motor de impressão do
+WebView em cada sistema operacional.
+
 ## 16/07/2026 — Enter sai de callout/código, scroll do menu "/" e placeholder
 
 Três ajustes pontuais no editor, sem migrations.

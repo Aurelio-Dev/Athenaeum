@@ -54,11 +54,18 @@ mudar sem aviso.
 - Tags, metadados e vinculação de PDFs ao caderno
 - Modo foco, zoom e opções de espaçamento
 - Exportação da página atual ou do caderno completo para HTML autocontido
+- Impressão de páginas selecionadas pelo diálogo nativo do sistema, inclusive
+  `Salvar como PDF` quando oferecido pelo sistema operacional
 
 A exportação HTML roda pelo lado Rust com escrita segura (arquivo
 temporário + rename atômico, com backup em caso de falha) e pode
 incorporar fontes e o CSS do KaTeX no próprio arquivo, para abrir offline
 sem depender do app.
+
+A impressão do Caderno é uma operação temporária de frontend: reconstrói as
+páginas selecionadas no WebView e abre o diálogo nativo com `window.print()`.
+Ela não altera o banco, não cria arquivos por conta própria e não substitui a
+exportação HTML.
 
 ### Quadros
 

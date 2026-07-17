@@ -62,9 +62,10 @@ function unmountEquationPreview(preview: HTMLElement) {
   equationPreviewRoots.delete(preview);
 }
 
-function renderReactEquationPreview(preview: HTMLElement, sourceText: string) {
+function renderReactEquationPreview(preview: HTMLElement, sourceText: string, onReady?: () => void) {
   if (!document.body.contains(preview)) {
     preview.textContent = sourceText;
+    onReady?.();
     return;
   }
 
@@ -79,14 +80,15 @@ function renderReactEquationPreview(preview: HTMLElement, sourceText: string) {
   }
 
   preview.replaceChildren(host);
-  root.render(createElement(NotebookEquationPreview, { source: sourceText }));
+  root.render(createElement(NotebookEquationPreview, { source: sourceText, onReady }));
 }
 
-export function renderEquationPreview(equation: HTMLElement) {
+export function renderEquationPreview(equation: HTMLElement, onReady?: () => void) {
   const source = getEquationSource(equation);
   const preview = equation.querySelector<HTMLElement>('[data-equation-preview="true"]');
 
   if (!source || !preview) {
+    onReady?.();
     return;
   }
 
@@ -96,10 +98,11 @@ export function renderEquationPreview(equation: HTMLElement) {
   if (!sourceText) {
     unmountEquationPreview(preview);
     preview.replaceChildren();
+    onReady?.();
     return;
   }
 
-  renderReactEquationPreview(preview, sourceText);
+  renderReactEquationPreview(preview, sourceText, onReady);
 }
 
 export function clearEquationPreviews(editor: HTMLElement) {
@@ -114,7 +117,7 @@ function normalizeEquationScale(equation: HTMLElement) {
   applyEquationScale(equation, parseEquationScale(equation.dataset.equationScale));
 }
 
-export function normalizeEquations(editor: HTMLElement) {
+export function normalizeEquations(editor: HTMLElement, onPreviewReady?: (equation: HTMLElement) => void) {
   editor.querySelectorAll<HTMLElement>('[data-athenaeum-block="equation"]').forEach((equation) => {
     if (equation.tagName.toLowerCase() !== "figure") {
       const sourceText = equation.textContent ?? "";
@@ -122,7 +125,7 @@ export function normalizeEquations(editor: HTMLElement) {
       nextEquation.dataset.athenaeumBlock = "equation";
       nextEquation.append(createEquationPreviewElement(), createEquationSourceElement(sourceText));
       equation.replaceWith(nextEquation);
-      renderEquationPreview(nextEquation);
+      renderEquationPreview(nextEquation, () => onPreviewReady?.(nextEquation));
       return;
     }
 
@@ -147,6 +150,6 @@ export function normalizeEquations(editor: HTMLElement) {
       source.textContent = source.textContent ?? "";
     }
 
-    renderEquationPreview(equation);
+    renderEquationPreview(equation, () => onPreviewReady?.(equation));
   });
 }

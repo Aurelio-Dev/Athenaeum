@@ -6,9 +6,10 @@ import { applyEquationScale, parseEquationScale } from "./notebookDiagramScale";
 
 type NotebookEquationPreviewProps = {
   source: string;
+  onReady?: () => void;
 };
 
-export function NotebookEquationPreview({ source }: NotebookEquationPreviewProps) {
+export function NotebookEquationPreview({ source, onReady }: NotebookEquationPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -28,10 +29,12 @@ export function NotebookEquationPreview({ source }: NotebookEquationPreviewProps
       host.textContent = source;
     }
 
+    onReady?.();
+
     return () => {
       host.replaceChildren();
     };
-  }, [source]);
+  }, [onReady, source]);
 
   return (
     <NotebookResizableFrame

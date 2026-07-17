@@ -1,0 +1,88 @@
+.notebook-print-root {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  width: 180mm;
+  opacity: 0;
+  pointer-events: none;
+  background: var(--color-surface-panel);
+  color: var(--color-text-primary);
+}
+
+.notebook-print-page {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.notebook-print-page-title {
+  margin: 0 0 1.4rem;
+  color: var(--color-text-primary);
+  font-family: var(--font-serif);
+  font-size: 24pt;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.notebook-print-page-content {
+  --notebook-editor-paragraph-gap: 1.4rem;
+  color: var(--color-text-primary);
+  font-size: 11pt;
+  line-height: 1.65;
+}
+
+@page {
+  margin: 16mm 18mm;
+}
+
+@media print {
+  body.notebook-print-active > :not(.notebook-print-root) {
+    display: none !important;
+  }
+
+  body.notebook-print-active {
+    margin: 0;
+    background: var(--color-surface-panel);
+  }
+
+  .notebook-print-root {
+    position: static;
+    width: auto;
+    opacity: 1;
+    pointer-events: auto;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .notebook-print-page {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .notebook-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .notebook-print-page-content :is(
+      table[data-athenaeum-block="table"],
+      [data-athenaeum-block="callout"],
+      [data-athenaeum-block="diagram"],
+      [data-athenaeum-block="equation"],
+      [data-athenaeum-block="figure"]
+    ) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .notebook-print-page-content [data-diagram-source="true"],
+  .notebook-print-page-content [data-equation-source="true"],
+  .notebook-print-page-content [data-athenaeum-block="file-attachment"],
+  .notebook-print-page-content .notebook-diagram-resize-handle,
+  .notebook-print-page-content .notebook-image-resize-handle {
+    display: none !important;
+  }
+
+  .notebook-print-page-content [data-athenaeum-block="figure"][data-figure-subtype="image"] > figcaption:empty {
+    display: none;
+  }
+}
