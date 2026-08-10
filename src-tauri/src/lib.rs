@@ -125,8 +125,11 @@ fn validate_document_id(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+// async de proposito, mesmo remedio do open_notebook_window: no Windows,
+// criar WebviewWindow dentro de comando SINCRONO deadlocka o IPC do app
+// inteiro (limitacao documentada do tauri, webview_window.rs "Known issues").
 #[tauri::command]
-fn open_reader_panel_window<R: tauri::Runtime>(
+async fn open_reader_panel_window<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     document_id: String,
     document_title: String,
