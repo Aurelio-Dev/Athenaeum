@@ -1853,12 +1853,16 @@ export async function setDocumentNote(documentId: string, note: string, source: 
   await emitReaderInvalidation(READER_NOTES_CHANGED_EVENT, documentId);
 }
 
-export async function incrementDocumentReadingTime(documentId: string, seconds: number) {
+export async function incrementDocumentReadingTime(
+  documentId: string,
+  seconds: number,
+  source: DatabaseHandleSource = "loaded",
+) {
   if (seconds <= 0) {
     return;
   }
 
-  const database = await getDatabase();
+  const database = await getDatabase(source);
   await database.execute("UPDATE documents SET time_spent_seconds = time_spent_seconds + $1 WHERE id = $2", [Math.floor(seconds), documentId]);
 }
 
@@ -1897,8 +1901,11 @@ export async function removeDocumentTag(documentId: string, tag: SubjectTag, sou
   await emitReaderInvalidation(READER_DETAILS_CHANGED_EVENT, documentId);
 }
 
-export async function setDocumentReadingStarted(documentId: string) {
-  const database = await getDatabase();
+export async function setDocumentReadingStarted(
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   await database.execute(
     `UPDATE documents
      SET
@@ -1910,8 +1917,12 @@ export async function setDocumentReadingStarted(documentId: string) {
   );
 }
 
-export async function setDocumentReadingLocation(document: LibraryDocument, readingLocation: ReadingLocation) {
-  const database = await getDatabase();
+export async function setDocumentReadingLocation(
+  document: LibraryDocument,
+  readingLocation: ReadingLocation,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   const measuredProgress = Math.round(readingLocation.scrollRatio * 100);
   const progress = readingLocation.canMeasure ? Math.max(document.progress, measuredProgress) : document.progress;
 
@@ -2138,11 +2149,14 @@ export async function setSetting(key: string, value: string, source: DatabaseHan
 // usuario no botao maximizar/restaurar.
 const READER_MAXIMIZED_SETTING_KEY = "reader.maximized";
 
-export async function getReaderOpensMaximized(): Promise<boolean> {
-  const value = await getSetting(READER_MAXIMIZED_SETTING_KEY);
+export async function getReaderOpensMaximized(source: DatabaseHandleSource = "loaded"): Promise<boolean> {
+  const value = await getSetting(READER_MAXIMIZED_SETTING_KEY, source);
   return value !== "false";
 }
 
-export async function setReaderOpensMaximized(maximized: boolean): Promise<void> {
-  await setSetting(READER_MAXIMIZED_SETTING_KEY, maximized ? "true" : "false");
+export async function setReaderOpensMaximized(
+  maximized: boolean,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(READER_MAXIMIZED_SETTING_KEY, maximized ? "true" : "false", source);
 }
