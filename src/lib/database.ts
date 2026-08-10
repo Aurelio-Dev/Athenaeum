@@ -855,8 +855,11 @@ export type NotebookInfo = {
 
 export type NotebookReadingStatus = "not-started" | "in-progress" | "completed";
 
-export async function listNotebooks(collectionId: string): Promise<Notebook[]> {
-  const database = await getDatabase();
+export async function listNotebooks(
+  collectionId: string,
+  source: DatabaseHandleSource = "loaded",
+): Promise<Notebook[]> {
+  const database = await getDatabase(source);
 
   // page_count e last_edited_at sao agregados das paginas. O CASE cobre o
   // "Editado ha X" do card: vale a edicao mais recente entre as paginas e o
@@ -895,8 +898,12 @@ export async function listNotebooks(collectionId: string): Promise<Notebook[]> {
   }));
 }
 
-export async function createNotebook(collectionId: string, title = "Caderno sem título"): Promise<Notebook> {
-  const database = await getDatabase();
+export async function createNotebook(
+  collectionId: string,
+  title = "Caderno sem título",
+  source: DatabaseHandleSource = "loaded",
+): Promise<Notebook> {
+  const database = await getDatabase(source);
 
   const insertResult = await database.execute("INSERT INTO notebooks (collection_id, title) VALUES ($1, $2)", [
     collectionId,
@@ -928,24 +935,36 @@ export async function createNotebook(collectionId: string, title = "Caderno sem 
   };
 }
 
-export async function renameNotebook(notebookId: number, title: string) {
-  const database = await getDatabase();
+export async function renameNotebook(
+  notebookId: number,
+  title: string,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   const nextTitle = title.trim() || "Caderno sem título";
   await database.execute("UPDATE notebooks SET title = $1 WHERE id = $2 AND deleted_at IS NULL", [nextTitle, notebookId]);
 }
 
-export async function setNotebookFavorite(notebookId: number, favorite: boolean) {
-  const database = await getDatabase();
+export async function setNotebookFavorite(
+  notebookId: number,
+  favorite: boolean,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   await database.execute("UPDATE notebooks SET favorite = $1 WHERE id = $2 AND deleted_at IS NULL", [favorite ? 1 : 0, notebookId]);
 }
 
-export async function moveNotebookToCollection(notebookId: number, collectionId: string) {
-  const database = await getDatabase();
+export async function moveNotebookToCollection(
+  notebookId: number,
+  collectionId: string,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   await database.execute("UPDATE notebooks SET collection_id = $1 WHERE id = $2 AND deleted_at IS NULL", [collectionId, notebookId]);
 }
 
-export async function moveNotebookToTrash(notebookId: number) {
-  const database = await getDatabase();
+export async function moveNotebookToTrash(notebookId: number, source: DatabaseHandleSource = "loaded") {
+  const database = await getDatabase(source);
   await database.execute("UPDATE notebooks SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1", [notebookId]);
 }
 
@@ -971,8 +990,11 @@ function mapNotebookPageRow(row: NotebookPageRow): NotebookPage {
   };
 }
 
-export async function getNotebookTitle(notebookId: number): Promise<string> {
-  const database = await getDatabase();
+export async function getNotebookTitle(
+  notebookId: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<string> {
+  const database = await getDatabase(source);
   const [row] = await database.select<Array<{ title: string }>>("SELECT title FROM notebooks WHERE id = $1", [notebookId]);
 
   if (!row) {
@@ -982,8 +1004,11 @@ export async function getNotebookTitle(notebookId: number): Promise<string> {
   return row.title;
 }
 
-export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo> {
-  const database = await getDatabase();
+export async function getNotebookInfo(
+  notebookId: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<NotebookInfo> {
+  const database = await getDatabase(source);
   const [row] = await database.select<
     Array<{
       id: number;
@@ -1042,8 +1067,9 @@ export async function getNotebookInfo(notebookId: number): Promise<NotebookInfo>
 export async function updateNotebookInfo(
   notebookId: number,
   updates: { title: string; description: string; collectionId: string; readingStatus: NotebookReadingStatus; authorDiscipline: string },
+  source: DatabaseHandleSource = "loaded",
 ): Promise<NotebookInfo> {
-  const database = await getDatabase();
+  const database = await getDatabase(source);
   const title = updates.title.trim() || "Caderno sem título";
   const description = updates.description;
 
@@ -1055,11 +1081,14 @@ export async function updateNotebookInfo(
     updates.authorDiscipline,
     notebookId,
   ]);
-  return getNotebookInfo(notebookId);
+  return getNotebookInfo(notebookId, source);
 }
 
-export async function listNotebookPages(notebookId: number): Promise<NotebookPage[]> {
-  const database = await getDatabase();
+export async function listNotebookPages(
+  notebookId: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<NotebookPage[]> {
+  const database = await getDatabase(source);
   const rows = await database.select<NotebookPageRow[]>(
     "SELECT id, notebook_id, title, content, position, created_at, updated_at FROM notebook_pages WHERE notebook_id = $1 ORDER BY position ASC",
     [notebookId],
@@ -1068,8 +1097,11 @@ export async function listNotebookPages(notebookId: number): Promise<NotebookPag
   return rows.map(mapNotebookPageRow);
 }
 
-export async function createNotebookPage(notebookId: number): Promise<NotebookPage> {
-  const database = await getDatabase();
+export async function createNotebookPage(
+  notebookId: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<NotebookPage> {
+  const database = await getDatabase(source);
 
   // position = maior atual + 1, calculado no proprio INSERT (a query agregada
   // sempre devolve exatamente uma linha, mesmo sem paginas: MAX = NULL -> 1).
@@ -1091,8 +1123,12 @@ export async function createNotebookPage(notebookId: number): Promise<NotebookPa
   return mapNotebookPageRow(row);
 }
 
-export async function deleteNotebookPage(notebookId: number, pageId: number) {
-  const database = await getDatabase();
+export async function deleteNotebookPage(
+  notebookId: number,
+  pageId: number,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   const [page] = await database.select<Array<{ position: number }>>(
     "SELECT position FROM notebook_pages WHERE id = $1 AND notebook_id = $2",
     [pageId, notebookId],
@@ -1112,8 +1148,12 @@ export async function deleteNotebookPage(notebookId: number, pageId: number) {
 
 // Autosave do editor de caderno (blur/troca de pagina/fechar painel). O
 // trigger notebook_pages_touch_updated_at cuida do updated_at.
-export async function saveNotebookPage(pageId: number, updates: { title: string | null; content: string }) {
-  const database = await getDatabase();
+export async function saveNotebookPage(
+  pageId: number,
+  updates: { title: string | null; content: string },
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
   await database.execute("UPDATE notebook_pages SET title = $1, content = $2 WHERE id = $3", [
     updates.title,
     updates.content,
@@ -1127,8 +1167,11 @@ export async function saveNotebookPage(pageId: number, updates: { title: string 
 // setDocumentTags: registra o tom de cada tag no runtime e persiste o vinculo.
 // ---------------------------------------------------------------------------
 
-export async function listNotebookTags(notebookId: number): Promise<SubjectTag[]> {
-  const database = await getDatabase();
+export async function listNotebookTags(
+  notebookId: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<SubjectTag[]> {
+  const database = await getDatabase(source);
   const rows = await database.select<TagRow[]>(
     `SELECT tags.name AS name, tags.color_token AS colorToken
      FROM notebook_tags
@@ -1140,8 +1183,12 @@ export async function listNotebookTags(notebookId: number): Promise<SubjectTag[]
   return registerTagRows(rows);
 }
 
-export async function saveNotebookTags(notebookId: number, tags: SubjectTag[]) {
-  const database = await getDatabase();
+export async function saveNotebookTags(
+  notebookId: number,
+  tags: SubjectTag[],
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
 
   // Garante que toda tag existe na tabela tags ANTES do insert em notebook_tags
   // (a FK exige o tag_id). upsertTag e idempotente para as ja existentes.
@@ -1203,8 +1250,11 @@ type RelatedDocumentRow = Omit<RelatedDocument, "authors"> & {
   authors: string | null;
 };
 
-export async function listNotebookLinkedDocuments(notebookId: number): Promise<LinkedDocument[]> {
-  const database = await getDatabase();
+export async function listNotebookLinkedDocuments(
+  notebookId: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<LinkedDocument[]> {
+  const database = await getDatabase(source);
   // Ignora documentos na lixeira (deleted_at): o vinculo permanece no banco
   // (so o purge definitivo aciona o cascade), mas um PDF na lixeira nao e um
   // documento "ativo" para exibir na lista. Restaurar da lixeira faz o vinculo
@@ -1653,14 +1703,17 @@ export async function writeNotebookExport(request: WriteNotebookExportRequest): 
 // o parametro no tipo que casa exatamente com a coluna (string para a de TEXT,
 // number para a de INTEGER), sem depender da coercao de afinidade do SQLite
 // entre tipos diferentes. COALESCE garante 0 quando nao ha linhas.
-export async function sumNotebookExportResourceBytes(pageIds: number[]): Promise<number> {
+export async function sumNotebookExportResourceBytes(
+  pageIds: number[],
+  source: DatabaseHandleSource = "loaded",
+): Promise<number> {
   // Sem paginas nao ha o que somar; alem disso um `IN ()` vazio seria erro de
   // sintaxe no SQLite.
   if (pageIds.length === 0) {
     return 0;
   }
 
-  const database = await getDatabase();
+  const database = await getDatabase(source);
   const placeholders = pageIds.map((_, index) => `$${index + 1}`).join(", ");
 
   const [assetsRow] = await database.select<Array<{ total: number }>>(
