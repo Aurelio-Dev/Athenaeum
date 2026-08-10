@@ -237,7 +237,9 @@ export function LibraryView() {
 
   const collectionsQuery = useQuery({
     queryKey: libraryQueryKeys.collections(),
-    queryFn: listCollections,
+    // Arrow de proposito: passado por referencia, o queryFn receberia o
+    // QueryFunctionContext da react-query como `source`.
+    queryFn: () => listCollections(),
   });
   const availableTagsQuery = useQuery({
     queryKey: libraryQueryKeys.tags(),

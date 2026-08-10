@@ -31,6 +31,7 @@ import {
   unlinkDocumentFromNotebook,
   updateNotebookInfo,
   writeNotebookExport,
+  type DatabaseHandleSource,
   type LinkedDocument,
   type NotebookExportWriteResult,
   type NotebookExportWriteWarning,
@@ -223,9 +224,9 @@ function formatExportFileSize(bytes: number) {
 // abortar a preparacao — a estimativa e uma conveniencia, nunca deve impedir o
 // export. O HTML e medido em BYTES UTF-8 (TextEncoder), nao no length da string
 // em JS, para nao subestimar conteudo com acentos e simbolos.
-async function estimateExportSizeBytes(pageIds: number[], html: string): Promise<number | null> {
+async function estimateExportSizeBytes(pageIds: number[], html: string, source: DatabaseHandleSource): Promise<number | null> {
   try {
-    const resourceBytes = await sumNotebookExportResourceBytes(pageIds);
+    const resourceBytes = await sumNotebookExportResourceBytes(pageIds, source);
     const htmlByteLength = new TextEncoder().encode(html).length;
     return estimateNotebookExportSizeBytes({ htmlByteLength, resourceBytes });
   } catch (error) {
@@ -512,6 +513,10 @@ function NotebookInfoField({ label, children }: { label: string; children: React
 type NotebookContentRenderArgs = {
   renderHeader: (startDragging?: (event: ReactMouseEvent<HTMLElement>) => void) => ReactNode;
   body: ReactNode;
+  // Fecha com flush: grava rascunhos pendentes e so entao chama onClose. E o
+  // mesmo caminho do botao Fechar do header — exposto para a moldura poder
+  // interceptar um fechamento externo (ex.: X nativo do SO) sem perder dados.
+  requestClose: () => Promise<void>;
 };
 
 type NotebookContentProps = {
@@ -540,6 +545,17 @@ type NotebookContentProps = {
   // e overlays (modais, menus de contexto) continuam montados. Moldura sem
   // minimizar (janela nativa) omite.
   isCollapsed?: boolean;
+  // De onde vem o handle do SQLite (ver getDatabase): "loaded" na janela
+  // principal (que estabelece seed/purge); "preloaded" em janelas secundarias,
+  // que reutilizam o pool criado pelo preload do Rust sem recria-lo — mesmo
+  // padrao do databaseSource do DetailsTab/ReaderPanelPopout.
+  databaseSource?: DatabaseHandleSource;
+  // Ultimo degrau do Esc: com nada aberto por cima (drawer/foco/trilho/print),
+  // Esc fecha o Caderno. Correto no painel flutuante (Esc fecha o painel do
+  // topo, como sempre); na janela nativa a moldura passa false — perder a
+  // janela num Esc reflexo nao e convencao de SO. Os degraus anteriores
+  // (fechar drawer, sair do foco, etc.) valem em ambos os contextos.
+  closeOnEscape?: boolean;
   children: (args: NotebookContentRenderArgs) => ReactNode;
 };
 
@@ -555,6 +571,8 @@ export function NotebookContent({
   isActiveForShortcuts,
   frameHeaderActions,
   isCollapsed = false,
+  databaseSource = "loaded",
+  closeOnEscape = true,
   children,
 }: NotebookContentProps) {
   const [notebookTitle, setNotebookTitle] = useState("");
@@ -671,14 +689,14 @@ export function NotebookContent({
     (async () => {
       try {
         const [info, loadedPages, loadedTags, loadedLinkedDocs] = await Promise.all([
-          getNotebookInfo(notebookId),
-          listNotebookPages(notebookId),
-          listNotebookTags(notebookId),
-          listNotebookLinkedDocuments(notebookId),
+          getNotebookInfo(notebookId, databaseSource),
+          listNotebookPages(notebookId, databaseSource),
+          listNotebookTags(notebookId, databaseSource),
+          listNotebookLinkedDocuments(notebookId, databaseSource),
         ]);
         // Caderno sem paginas (so possivel se o INSERT da primeira pagina
         // falhou na criacao): cria uma na hora para o editor ter onde focar.
-        const ensuredPages = loadedPages.length > 0 ? loadedPages : [await createNotebookPage(notebookId)];
+        const ensuredPages = loadedPages.length > 0 ? loadedPages : [await createNotebookPage(notebookId, databaseSource)];
 
         if (cancelled) {
           return;
@@ -719,7 +737,7 @@ export function NotebookContent({
     // Intencional: o painel carrega o caderno uma vez; trocar de caderno
     // significa outro painel (outra key na lista do LibraryView).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebookId]);
+  }, [notebookId, databaseSource]);
 
   // Um vínculo criado ou removido no Reader também precisa aparecer em um
   // Caderno que já esteja aberto na pilha de painéis.
@@ -732,7 +750,7 @@ export function NotebookContent({
         return;
       }
 
-      void listNotebookLinkedDocuments(notebookId)
+      void listNotebookLinkedDocuments(notebookId, databaseSource)
         .then((loadedDocuments) => {
           if (!disposed) {
             setLinkedDocuments(loadedDocuments);
@@ -758,7 +776,7 @@ export function NotebookContent({
       disposed = true;
       unlisten?.();
     };
-  }, [notebookId]);
+  }, [notebookId, databaseSource]);
 
   useEffect(() => {
     let cancelled = false;
@@ -766,8 +784,8 @@ export function NotebookContent({
     (async () => {
       try {
         const [normalSpacing, focusSpacing] = await Promise.all([
-          getSetting(notebookNormalSpacingSettingKey),
-          getSetting(notebookFocusSpacingSettingKey),
+          getSetting(notebookNormalSpacingSettingKey, databaseSource),
+          getSetting(notebookFocusSpacingSettingKey, databaseSource),
         ]);
 
         if (cancelled) {
@@ -784,7 +802,7 @@ export function NotebookContent({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [databaseSource]);
 
   const saveActivePage = useCallback(() => {
     const runQueuedSave = async () => {
@@ -802,7 +820,7 @@ export function NotebookContent({
       setSaveStatus("saving");
 
       try {
-        await saveNotebookPage(pageId, { title, content });
+        await saveNotebookPage(pageId, { title, content }, databaseSource);
         setPages((currentPages) => currentPages.map((page) => (page.id === pageId ? { ...page, title, content } : page)));
         setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: new Date().toISOString() } : currentInfo));
         setSaveStatus(isDirtyRef.current ? "dirty" : "saved");
@@ -818,7 +836,7 @@ export function NotebookContent({
     const publicPromise = saveQueueTailRef.current.then(runQueuedSave);
     saveQueueTailRef.current = publicPromise.catch(() => undefined);
     return publicPromise;
-  }, []);
+  }, [databaseSource]);
 
   const saveNotebookInfoDraft = useCallback(async () => {
     if (!isInfoDirtyRef.current) {
@@ -845,7 +863,7 @@ export function NotebookContent({
         collectionId: nextCollectionId,
         readingStatus: nextReadingStatus,
         authorDiscipline: nextAuthorDiscipline,
-      });
+      }, databaseSource);
       setNotebookInfo(updatedInfo);
       setNotebookTitle(updatedInfo.title);
       setInfoDraftTitle(updatedInfo.title);
@@ -865,7 +883,7 @@ export function NotebookContent({
       isInfoDirtyRef.current = true;
       setSaveStatus("error");
     }
-  }, [collections, notebookId, notebookInfo?.collectionId]);
+  }, [collections, databaseSource, notebookId, notebookInfo?.collectionId]);
 
   // Salva sozinho depois de uma pausa na digitacao. Cada chamada reinicia a
   // contagem, entao digitar sem parar nao grava a cada tecla — grava quando o
@@ -931,14 +949,14 @@ export function NotebookContent({
       setNotebookTags(nextTags); // otimista: a UI reflete na hora
       setSaveStatus("saving");
       try {
-        await saveNotebookTags(notebookId, nextTags);
+        await saveNotebookTags(notebookId, nextTags, databaseSource);
         setSaveStatus("saved");
       } catch (error) {
         console.warn("Nao foi possivel salvar as tags do caderno.", error);
         setSaveStatus("error");
       }
     },
-    [notebookId],
+    [databaseSource, notebookId],
   );
 
   const handleAttachDocument = useCallback(
@@ -960,7 +978,7 @@ export function NotebookContent({
 
       setSaveStatus("saving");
       try {
-        await linkDocumentToNotebook(notebookId, documentId);
+        await linkDocumentToNotebook(notebookId, documentId, databaseSource);
         setSaveStatus("saved");
       } catch (error) {
         console.warn("Nao foi possivel vincular o documento.", error);
@@ -968,7 +986,7 @@ export function NotebookContent({
         setSaveStatus("error");
       }
     },
-    [documents, linkedDocuments, notebookId],
+    [databaseSource, documents, linkedDocuments, notebookId],
   );
 
   const handleUnlinkDocument = useCallback(
@@ -977,7 +995,7 @@ export function NotebookContent({
       setSaveStatus("saving");
 
       try {
-        await unlinkDocumentFromNotebook(notebookId, documentId);
+        await unlinkDocumentFromNotebook(notebookId, documentId, databaseSource);
         setSaveStatus("saved");
       } catch (error) {
         console.warn("Nao foi possivel desvincular o documento.", error);
@@ -985,13 +1003,13 @@ export function NotebookContent({
         // Recarrega do banco para reconciliar (mais seguro que remontar o item
         // otimisticamente removido a partir de um estado ja defasado).
         try {
-          setLinkedDocuments(await listNotebookLinkedDocuments(notebookId));
+          setLinkedDocuments(await listNotebookLinkedDocuments(notebookId, databaseSource));
         } catch {
           // silencioso: se ate o reload falhar, a proxima abertura corrige.
         }
       }
     },
-    [notebookId],
+    [databaseSource, notebookId],
   );
 
   function focusNotebookTitle() {
@@ -1032,7 +1050,7 @@ export function NotebookContent({
 
     setSaveStatus("saving");
     try {
-      await setNotebookFavorite(notebookId, true);
+      await setNotebookFavorite(notebookId, true, databaseSource);
       setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, favorite: true } : currentInfo));
       setSaveStatus("saved");
       onNotebookChangedRef.current();
@@ -1137,7 +1155,7 @@ export function NotebookContent({
       // Usa a mesma fila serializada do autosave antes de reler as páginas.
       await saveActivePage();
 
-      const persistedPages = await listNotebookPages(notebookId);
+      const persistedPages = await listNotebookPages(notebookId, databaseSource);
       const selectedPageIds = new Set(pageIds);
       const selectedPages = persistedPages.filter((page) => selectedPageIds.has(page.id));
       if (selectedPages.length !== selectedPageIds.size) {
@@ -1194,7 +1212,7 @@ export function NotebookContent({
 
       await saveActivePage();
 
-      const persistedPages = await listNotebookPages(notebookId);
+      const persistedPages = await listNotebookPages(notebookId, databaseSource);
       const pageIds =
         exportScope === "current-page" ? (activePageIdRef.current === null ? [] : [activePageIdRef.current]) : persistedPages.map((page) => page.id);
       if (pageIds.length === 0) {
@@ -1224,7 +1242,7 @@ export function NotebookContent({
       // Estimativa de tamanho: bytes UTF-8 do HTML montado (fontes/CSS/SVG ja
       // embutidos) + os binarios de assets/anexos inflados por base64. A falha
       // do calculo NUNCA aborta o export — degrada para "indisponivel".
-      const estimatedSizeBytes = await estimateExportSizeBytes(pageIds, build.html);
+      const estimatedSizeBytes = await estimateExportSizeBytes(pageIds, build.html, databaseSource);
       // Fail-safe: estimativa desconhecida (null) ATIVA o gate, igual a uma
       // estimativa acima do limiar. Ver shouldGateNotebookExportSize.
       const isAboveSizeThreshold = shouldGateNotebookExportSize(estimatedSizeBytes);
@@ -1265,7 +1283,7 @@ export function NotebookContent({
       // autosave (saveQueueTailRef), entao nao concorre com um save pendente.
       await saveActivePage();
 
-      const persistedPages = await listNotebookPages(preparedExport.notebookId);
+      const persistedPages = await listNotebookPages(preparedExport.notebookId, databaseSource);
       const persistedPagesById = new Map(persistedPages.map((page) => [page.id, page]));
       const selectedPages = preparedExport.pageIds.map((pageId) => persistedPagesById.get(pageId)).filter((page): page is NotebookPage => Boolean(page));
       if (selectedPages.length !== preparedExport.pageIds.length) {
@@ -1311,7 +1329,7 @@ export function NotebookContent({
 
     setSaveStatus("saving");
     try {
-      await movePersistedNotebookToTrash(notebookId);
+      await movePersistedNotebookToTrash(notebookId, databaseSource);
       setSaveStatus("saved");
       onNotebookMovedToTrash?.();
       onNotebookChangedRef.current();
@@ -1341,7 +1359,7 @@ export function NotebookContent({
 
     try {
       setSaveStatus("saving");
-      const page = await createNotebookPage(notebookId);
+      const page = await createNotebookPage(notebookId, databaseSource);
       setPages((currentPages) => [...currentPages, page]);
       setNotebookInfo((currentInfo) => (currentInfo ? { ...currentInfo, updatedAt: page.createdAt } : currentInfo));
       setActivePageDrafts(page);
@@ -1369,11 +1387,11 @@ export function NotebookContent({
 
     try {
       setSaveStatus("saving");
-      await deleteNotebookPage(notebookId, page.id);
+      await deleteNotebookPage(notebookId, page.id, databaseSource);
 
-      let nextPages = await listNotebookPages(notebookId);
+      let nextPages = await listNotebookPages(notebookId, databaseSource);
       if (nextPages.length === 0) {
-        nextPages = [await createNotebookPage(notebookId)];
+        nextPages = [await createNotebookPage(notebookId, databaseSource)];
       }
 
       setPages(nextPages);
@@ -1424,11 +1442,11 @@ export function NotebookContent({
         setNormalSpacingMode(mode);
       }
 
-      void setSetting(settingKey, mode).catch((error) => {
+      void setSetting(settingKey, mode, databaseSource).catch((error) => {
         console.warn("Nao foi possivel salvar a preferencia de espacamento do caderno.", error);
       });
     },
-    [isFocusMode],
+    [databaseSource, isFocusMode],
   );
 
   // Esc fecha, nesta ordem, o que estiver "por cima": drawer de Detalhes,
@@ -1472,7 +1490,9 @@ export function NotebookContent({
           return;
         }
 
-        void handleClose();
+        if (closeOnEscape) {
+          void handleClose();
+        }
       }
     }
 
@@ -1480,6 +1500,7 @@ export function NotebookContent({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     isActiveForShortcuts,
+    closeOnEscape,
     handleClose,
     isFocusMode,
     exitFocusMode,
@@ -2528,5 +2549,5 @@ export function NotebookContent({
     </>
   );
 
-  return <>{children({ renderHeader, body })}</>;
+  return <>{children({ renderHeader, body, requestClose: handleClose })}</>;
 }

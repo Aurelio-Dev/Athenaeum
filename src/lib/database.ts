@@ -678,8 +678,8 @@ export async function loadLibrarySnapshot(options: ListDocumentsOptions): Promis
   };
 }
 
-export async function listCollections(): Promise<LibraryCollection[]> {
-  const database = await getDatabase();
+export async function listCollections(source: DatabaseHandleSource = "loaded"): Promise<LibraryCollection[]> {
+  const database = await getDatabase(source);
   return database.select<CollectionRow[]>("SELECT id, name, color, description FROM collections WHERE is_system = 0 ORDER BY created_at ASC, name ASC");
 }
 
@@ -709,8 +709,11 @@ export async function countTrashDocuments(): Promise<number> {
   return rows[0]?.count ?? 0;
 }
 
-export async function listLibraryDocuments(options: ListDocumentsOptions): Promise<LibraryDocument[]> {
-  const database = await getDatabase();
+export async function listLibraryDocuments(
+  options: ListDocumentsOptions,
+  source: DatabaseHandleSource = "loaded",
+): Promise<LibraryDocument[]> {
+  const database = await getDatabase(source);
   return listDocuments(database, options);
 }
 

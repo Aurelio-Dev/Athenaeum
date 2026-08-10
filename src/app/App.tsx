@@ -11,6 +11,11 @@ const LibraryView = lazy(async () => {
 const ReaderPanelPopout = lazy(() =>
   import("../features/reader/ReaderPanelPopout").then((module) => ({ default: module.ReaderPanelPopout })),
 );
+// KaTeX junto, como no LibraryView: o editor do Caderno renderiza equacoes.
+const NotebookWindowRoot = lazy(async () => {
+  const [, module] = await Promise.all([import("katex/dist/katex.min.css"), import("../features/notebooks/NotebookWindowRoot")]);
+  return { default: module.NotebookWindowRoot };
+});
 
 function LoadingScreen() {
   return (
@@ -30,6 +35,20 @@ export function App() {
       <ThemeProvider>
         <Suspense fallback={<LoadingScreen />}>
           <ReaderPanelPopout documentId={documentId} />
+        </Suspense>
+      </ThemeProvider>
+    );
+  }
+
+  // Janela nativa de Caderno: standalone, sem FloatingPanelsProvider nem o
+  // resto da arvore principal — mesmo modelo do branch da popout do Reader.
+  if (searchParams.get("notebookPanel") === "1") {
+    const notebookId = Number(searchParams.get("notebookId") ?? "");
+
+    return (
+      <ThemeProvider>
+        <Suspense fallback={<LoadingScreen />}>
+          <NotebookWindowRoot notebookId={notebookId} />
         </Suspense>
       </ThemeProvider>
     );

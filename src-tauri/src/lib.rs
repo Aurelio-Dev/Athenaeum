@@ -175,6 +175,63 @@ fn close_reader_panel_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Res
     Ok(())
 }
 
+// async de proposito: no Windows, criar WebviewWindow dentro de comando
+// SINCRONO deadlocka (limitacao documentada do proprio tauri, ver
+// webview_window.rs "Known issues" — a criacao do WebView2 precisa do message
+// loop da main thread, que estaria bloqueada no comando sync).
+#[tauri::command]
+async fn open_notebook_window<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    notebook_id: i64,
+    notebook_title: String,
+) -> Result<(), String> {
+    // IDs de caderno sao INTEGER AUTOINCREMENT (> 0). Alem de validar a
+    // fronteira IPC, garante que o label e a URL abaixo sao bem-formados.
+    if notebook_id <= 0 {
+        return Err("Identificador do caderno invalido.".to_string());
+    }
+
+    // Um label por caderno: reabrir o mesmo caderno foca a janela existente
+    // (nunca duplica); cadernos diferentes coexistem em janelas proprias.
+    let label = format!("notebook-{notebook_id}");
+    if let Some(window) = app.get_webview_window(&label) {
+        window.show().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    let url = format!("index.html?notebookPanel=1&notebookId={notebook_id}");
+    // Tamanho inicial: mesmos valores do painel flutuante interno
+    // (notebookPanelDimensions.ts) — o layout de 3 colunas do Caderno foi
+    // dimensionado para ~1680x760, e os minimos de 640x440 sao o piso em que
+    // ele ainda funciona. O SO clampa ao monitor se a tela for menor.
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title(notebook_title)
+        .decorations(true)
+        .resizable(true)
+        .inner_size(1680.0, 760.0)
+        .min_inner_size(640.0, 440.0)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn close_notebook_window<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    notebook_id: i64,
+) -> Result<(), String> {
+    // Mesmo racional do close_reader_panel_window: a janela intercepta
+    // CloseRequested para fazer flush; quando este comando roda, o flush ja
+    // terminou — destroy fecha sem reemitir o evento (sem recursao).
+    if let Some(window) = app.get_webview_window(&format!("notebook-{notebook_id}")) {
+        window.destroy().map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn select_notebook_export_destination(
     destinations: tauri::State<'_, NotebookExportDestinations>,
@@ -3421,6 +3478,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            close_notebook_window,
             close_reader_panel_window,
             import_document,
             delete_notebook_file_attachment,
@@ -3431,6 +3489,7 @@ pub fn run() {
             open_external_url,
             open_file_location,
             open_notebook_file_attachment,
+            open_notebook_window,
             open_reader_panel_window,
             read_pdf_file,
             reveal_notebook_file_attachment,

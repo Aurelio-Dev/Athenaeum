@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "notebook-window",
+  "description": "Permissões mínimas das janelas nativas de Caderno (uma por caderno, labels notebook-<id>)",
+  "windows": [
+    "notebook-*"
+  ],
+  "permissions": [
+    "core:default",
+    "sql:allow-select",
+    "sql:allow-execute"
+  ]
+}
