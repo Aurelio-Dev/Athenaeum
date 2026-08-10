@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 // futuro editor de quadros). Substitui o antigo `isFloating: boolean`, que so
 // suportava um painel por vez: aqui varios paineis coexistem, cada um com
 // posicao propria e ordem de empilhamento (zIndex).
-export type FloatingPanelType = "annotations" | "notebook" | "canvas" | "reader" | "settings";
+export type FloatingPanelType = "annotations" | "canvas" | "reader" | "settings";
 
 export interface FloatingPanel {
   // Deterministico (`${type}-${entityId}`): abrir a mesma entidade duas vezes
@@ -12,7 +12,7 @@ export interface FloatingPanel {
   id: string;
   type: FloatingPanelType;
   // String para cobrir os dois esquemas de id do banco: documents usa TEXT
-  // (uuid) e notebooks/canvases usam INTEGER (convertido com String()).
+  // (uuid) e canvases usam INTEGER (convertido com String()).
   entityId: string;
   position: { x: number; y: number };
   zIndex: number;

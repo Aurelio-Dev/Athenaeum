@@ -16,7 +16,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
-import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
@@ -28,7 +28,6 @@ import {
   getDocumentNotes,
   openDocumentExternally,
   isReaderDocumentPayload,
-  isReaderOpenNotebookPayload,
   isReaderInvalidationPayload,
   isReaderJumpToPagePayload,
   isReaderPopoutCloseRequestPayload,
@@ -37,7 +36,6 @@ import {
   READER_DETAILS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
   READER_NOTES_CHANGED_EVENT,
-  READER_OPEN_NOTEBOOK_EVENT,
   READER_PAGE_STATE_CHANGED_EVENT,
   READER_PAGE_STATE_REQUESTED_EVENT,
   READER_PANEL_WINDOW_LABEL,
@@ -80,7 +78,6 @@ import { ExternalLinkIcon } from "../reader/panels/readerPanelIcons";
 import { SelectionToolbar } from "../reader/SelectionToolbar";
 import { useReaderPersistence } from "../reader/useReaderPersistence";
 import { useReadingTimer } from "../reader/useReadingTimer";
-import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
 type PageSize = {
@@ -1387,16 +1384,6 @@ export function ReaderModal({
       }
 
       scrollToPage(payload.page);
-    });
-
-    registerListener<unknown>(READER_OPEN_NOTEBOOK_EVENT, (payload) => {
-      if (!isReaderOpenNotebookPayload(payload) || payload.documentId !== document.id) {
-        return;
-      }
-
-      const width = Math.min(notebookPanelWidth, window.innerWidth);
-      const height = Math.min(notebookPanelHeight, window.innerHeight);
-      openPanel("notebook", String(payload.notebookId), getCenteredPanelPosition(width, height));
     });
 
     registerListener<unknown>(READER_PAGE_STATE_REQUESTED_EVENT, (payload) => {

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, SVGProps } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { remove } from "@tauri-apps/plugin-fs";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -55,8 +56,6 @@ import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "..
 import { useContextMenu } from "../../hooks/useContextMenu";
 import { CanvasesGrid } from "../canvases/CanvasesGrid";
 import { canvasPanelHeight, canvasPanelWidth } from "../canvases/canvasPanelDimensions";
-import { NotebookPanel } from "../notebooks/NotebookPanel";
-import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 import { NotebooksGrid } from "../notebooks/NotebooksGrid";
 import { AddDocumentModal } from "./AddDocumentModal";
 import { CollectionTabs, type CollectionTab } from "./CollectionTabs";
@@ -225,7 +224,6 @@ export function LibraryView() {
   const [readerInitialMaximized, setReaderInitialMaximized] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
-  const [initialMaximizedNotebookIds, setInitialMaximizedNotebookIds] = useState<Set<number>>(() => new Set());
   const libraryAreaContextMenu = useContextMenu();
   const hasAutoSelectedFirstDocumentRef = useRef(false);
 
@@ -364,20 +362,16 @@ export function LibraryView() {
     }
 
     const notebook = await createPersistedNotebook(activeCollection.id);
-    setInitialMaximizedNotebookIds((currentIds) => new Set(currentIds).add(notebook.id));
     await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
-    // Centralizado (nao cascata): o layout de 3 colunas e bem mais largo
-    // (1680px) que o antigo painel de coluna unica — a cascata de canto
-    // abriria colado na borda esquerda na maioria das telas.
-    const initialNotebookWidth = Math.min(notebookPanelWidth, window.innerWidth);
-    const initialNotebookHeight = Math.min(notebookPanelHeight, window.innerHeight);
-    openFloatingPanel("notebook", String(notebook.id), getCenteredPanelPosition(initialNotebookWidth, initialNotebookHeight));
+    openNotebook(notebook);
   }
 
+  // Caderno abre como janela nativa do SO: open_notebook_window foca a janela
+  // existente do mesmo caderno ou cria uma nova (label notebook-<id>).
   function openNotebook(notebook: Notebook) {
-    const initialNotebookWidth = Math.min(notebookPanelWidth, window.innerWidth);
-    const initialNotebookHeight = Math.min(notebookPanelHeight, window.innerHeight);
-    openFloatingPanel("notebook", String(notebook.id), getCenteredPanelPosition(initialNotebookWidth, initialNotebookHeight));
+    void invoke("open_notebook_window", { notebookId: notebook.id, notebookTitle: notebook.title }).catch((error) => {
+      console.warn("Nao foi possivel abrir a janela do Caderno.", error);
+    });
   }
 
   async function toggleNotebookFavorite(notebook: Notebook) {
@@ -396,7 +390,10 @@ export function LibraryView() {
 
   async function moveNotebookToTrash(notebook: Notebook) {
     await movePersistedNotebookToTrash(notebook.id);
-    closeFloatingPanel(floatingPanelId("notebook", String(notebook.id)));
+    // Fecha a janela nativa do caderno, se aberta — equivalente ao antigo
+    // closeFloatingPanel do painel interno. destroy sem flush e aceitavel
+    // aqui: o caderno acabou de ir para a lixeira.
+    void invoke("close_notebook_window", { notebookId: notebook.id }).catch(() => undefined);
     await queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
     await queryClient.invalidateQueries({ queryKey: libraryQueryKeys.trashCount() });
   }
@@ -1006,35 +1003,6 @@ export function LibraryView() {
           />
         </Suspense>
       ) : null}
-
-      {/* Paineis flutuantes de caderno abertos (a pilha permite varios ao
-          mesmo tempo, inclusive junto do painel de anotacoes do leitor). */}
-      {floatingPanelsList
-        .filter((floatingPanel) => floatingPanel.type === "notebook")
-        .map((floatingPanel) => (
-          <NotebookPanel
-            key={floatingPanel.id}
-            panel={floatingPanel}
-            collections={collections}
-            documents={allDocuments}
-            availableTags={availableTags}
-            onAvailableTagsChange={updateAvailableTags}
-            initialMaximized={initialMaximizedNotebookIds.has(Number(floatingPanel.entityId))}
-            onClose={() => {
-              closeFloatingPanel(floatingPanel.id);
-              setInitialMaximizedNotebookIds((currentIds) => {
-                const nextIds = new Set(currentIds);
-                nextIds.delete(Number(floatingPanel.entityId));
-                return nextIds;
-              });
-            }}
-            onNotebookChanged={() => void queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] })}
-            onNotebookMovedToTrash={() => {
-              void queryClient.invalidateQueries({ queryKey: ["library", "notebooks"] });
-              void queryClient.invalidateQueries({ queryKey: libraryQueryKeys.trashCount() });
-            }}
-          />
-        ))}
 
       {/* Paineis de quadro: superficie Konva em lazy-load. */}
       {floatingPanelsList

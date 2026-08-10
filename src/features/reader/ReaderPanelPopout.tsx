@@ -17,7 +17,6 @@ import {
   READER_DETAILS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
   READER_NOTES_CHANGED_EVENT,
-  READER_OPEN_NOTEBOOK_EVENT,
   READER_PAGE_STATE_CHANGED_EVENT,
   READER_PAGE_STATE_REQUESTED_EVENT,
   READER_POPOUT_CLOSED_EVENT,
@@ -29,7 +28,7 @@ import {
   openDocumentExternally,
   updateAnnotationNote,
 } from "../../lib/database";
-import type { ReaderDocumentPayload, ReaderJumpToPagePayload, ReaderOpenNotebookPayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
+import type { ReaderDocumentPayload, ReaderJumpToPagePayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
@@ -356,11 +355,12 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     });
   }
 
-  // Abrir caderno acontece na janela principal (paineis flutuantes vivem la).
-  function requestOpenNotebook(notebookId: number) {
-    const payload: ReaderOpenNotebookPayload = { documentId, notebookId };
-    void emitTo("main", READER_OPEN_NOTEBOOK_EVENT, payload).catch((error) => {
-      console.warn("Nao foi possivel solicitar a abertura do Caderno.", error);
+  // Caderno abre como janela nativa direto daqui (open_notebook_window foca a
+  // existente ou cria uma nova) — sem saltar pela main, que nem precisa estar
+  // aberta.
+  function requestOpenNotebook(notebookId: number, notebookTitle: string) {
+    void invoke("open_notebook_window", { notebookId, notebookTitle }).catch((error) => {
+      console.warn("Nao foi possivel abrir a janela do Caderno.", error);
     });
   }
 

@@ -32,7 +32,9 @@ type AnnotationsTabProps = {
   onJumpToPage: (page: number) => void;
   onDelete: (annotationId: string) => void;
   onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
-  onOpenNotebook: (notebookId: number) => void;
+  // Titulo junto: o caderno abre como janela nativa (open_notebook_window
+  // exige o titulo pra barra da janela) e a lista de cadernos ja esta aqui.
+  onOpenNotebook: (notebookId: number, notebookTitle: string) => void;
   onTagsChanged?: () => void;
 };
 
@@ -420,7 +422,10 @@ export function AnnotationsTab({
             className="inline-flex min-w-0 items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => {
               if (linkedNotebookId !== null) {
-                onOpenNotebook(linkedNotebookId);
+                // listNotebookOptions cobre todos os cadernos vivos, entao o
+                // vinculado esta na lista; o fallback e so rede de seguranca.
+                const linkedTitle = notebooks.find((notebook) => notebook.id === linkedNotebookId)?.title ?? "Caderno";
+                onOpenNotebook(linkedNotebookId, linkedTitle);
               }
             }}
           >

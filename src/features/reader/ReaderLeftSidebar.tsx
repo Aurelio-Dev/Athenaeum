@@ -1,11 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import type * as pdfjsLib from "pdfjs-dist";
-import { getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { useInViewport } from "../../hooks/useInViewport";
 import { openDocumentExternally } from "../../lib/database";
 import type { LibraryDocument } from "../../types/library";
-import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 import { DetailsTab } from "./panels/DetailsTab";
 import { createDocumentTextSearcher, type DocumentSearchResult } from "./pdfTextSearch";
 
@@ -243,7 +242,6 @@ export function ReaderLeftSidebar({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const tabIdPrefix = useId();
-  const { openPanel } = useFloatingPanels();
   const queryClient = useQueryClient();
 
   const searcher = useMemo(() => (pdfDocument ? createDocumentTextSearcher(pdfDocument) : null), [pdfDocument]);
@@ -337,10 +335,12 @@ export function ReaderLeftSidebar({
     setActiveView(view);
   }
 
-  function openNotebookPanel(notebookId: number) {
-    const width = Math.min(notebookPanelWidth, window.innerWidth);
-    const height = Math.min(notebookPanelHeight, window.innerHeight);
-    openPanel("notebook", String(notebookId), getCenteredPanelPosition(width, height));
+  // Caderno abre como janela nativa do SO (open_notebook_window: foca a
+  // existente ou cria uma nova).
+  function openNotebookWindow(notebookId: number, notebookTitle: string) {
+    void invoke("open_notebook_window", { notebookId, notebookTitle }).catch((error) => {
+      console.warn("Nao foi possivel abrir a janela do Caderno.", error);
+    });
   }
 
   function handleTagsChanged() {
@@ -448,7 +448,7 @@ export function ReaderLeftSidebar({
       progress={progress}
       totalPages={totalPages}
       fileSizeBytes={fileSizeBytes}
-      onOpenNotebook={openNotebookPanel}
+      onOpenNotebook={openNotebookWindow}
       onToggleFavorite={onToggleFavorite}
       onOpenExternally={() => openDocumentExternally(document.id)}
       showFooterActions={false}

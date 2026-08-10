@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
-import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
+import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { openDocumentExternally } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
-import { notebookPanelHeight, notebookPanelWidth } from "../notebooks/notebookPanelDimensions";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
 import { DetailsTab } from "./panels/DetailsTab";
 
@@ -86,7 +86,7 @@ export function ReaderSidePanel({
   onClose,
 }: ReaderSidePanelProps) {
   const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "details");
-  const { panels, openPanel, minimizePanel, restorePanel } = useFloatingPanels();
+  const { panels, minimizePanel, restorePanel } = useFloatingPanels();
   const queryClient = useQueryClient();
   const annotationsPanelId = floatingPanelId("annotations", document.id);
 
@@ -121,11 +121,12 @@ export function ReaderSidePanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFloating, panels, annotationsPanelId, onClose]);
 
-  // Handlers compartilhados pelas duas abas.
-  function openNotebookPanel(notebookId: number) {
-    const width = Math.min(notebookPanelWidth, window.innerWidth);
-    const height = Math.min(notebookPanelHeight, window.innerHeight);
-    openPanel("notebook", String(notebookId), getCenteredPanelPosition(width, height));
+  // Handlers compartilhados pelas duas abas. Caderno abre como janela nativa
+  // do SO (open_notebook_window: foca a existente ou cria uma nova).
+  function openNotebookWindow(notebookId: number, notebookTitle: string) {
+    void invoke("open_notebook_window", { notebookId, notebookTitle }).catch((error) => {
+      console.warn("Nao foi possivel abrir a janela do Caderno.", error);
+    });
   }
 
   // Tags escritas direto no banco pelas abas: renova o snapshot da biblioteca
@@ -177,7 +178,7 @@ export function ReaderSidePanel({
             onJumpToPage={onJumpToPage}
             onDelete={onDeleteAnnotation}
             onUpdateNote={onUpdateAnnotationNote}
-            onOpenNotebook={openNotebookPanel}
+            onOpenNotebook={openNotebookWindow}
             onTagsChanged={handleTagsChanged}
           />
         ) : (
@@ -186,7 +187,7 @@ export function ReaderSidePanel({
             progress={progress}
             totalPages={totalPages}
             fileSizeBytes={fileSizeBytes}
-            onOpenNotebook={openNotebookPanel}
+            onOpenNotebook={openNotebookWindow}
             onToggleFavorite={onToggleFavorite}
             onOpenExternally={() => openDocumentExternally(document.id)}
             onTagsChanged={handleTagsChanged}

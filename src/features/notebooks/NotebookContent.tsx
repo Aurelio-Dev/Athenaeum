@@ -533,8 +533,8 @@ type NotebookContentProps = {
   onNotebookChanged: () => void;
   onNotebookMovedToTrash?: () => void;
   // Verdadeiro quando este Caderno deve responder a atalhos de janela
-  // (Ctrl+S/Esc). No painel flutuante, e "sou o topo da pilha" — decidido pelo
-  // NotebookPanel, para o conteudo nao depender do FloatingPanelsContext.
+  // (Ctrl+S/Esc). Decidido pela moldura que hospeda o conteudo — na janela
+  // nativa e sempre true, ja que nao ha pilha disputando o atalho.
   isActiveForShortcuts: boolean;
   // Controles de moldura prontos (minimizar/maximizar do painel flutuante),
   // injetados como no opaco entre o menu "..." e o Fechar. O conteudo nao sabe
@@ -906,8 +906,8 @@ export function NotebookContent({
   }, [flushSaves]);
 
   // Ctrl+S / Cmd+S: grava na hora e cancela o autosave agendado. So responde
-  // quando este e o Caderno ativo para atalhos (no painel flutuante: o topo da
-  // pilha, decidido pelo NotebookPanel), como o Esc.
+  // quando este e o Caderno ativo para atalhos (ver isActiveForShortcuts),
+  // como o Esc.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key.toLowerCase() !== "s" || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {

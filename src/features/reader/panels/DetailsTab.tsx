@@ -32,7 +32,9 @@ type DetailsTabProps = {
   totalPages: number | null;
   fileSizeBytes: number | null;
   databaseSource?: DatabaseHandleSource;
-  onOpenNotebook: (notebookId: number) => void;
+  // Titulo junto: o caderno abre como janela nativa (open_notebook_window
+  // exige o titulo pra barra da janela) e quem chama ja o tem carregado.
+  onOpenNotebook: (notebookId: number, notebookTitle: string) => void;
   onToggleFavorite: () => Promise<void>;
   onOpenExternally: () => Promise<void>;
   showFooterActions?: boolean;
@@ -387,7 +389,7 @@ export function DetailsTab({
               <button
                 type="button"
                 className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary"
-                onClick={() => onOpenNotebook(linkedNotebook.id)}
+                onClick={() => onOpenNotebook(linkedNotebook.id, linkedNotebook.title)}
               >
                 Abrir no Caderno
                 <BookOpenIcon size={13} />

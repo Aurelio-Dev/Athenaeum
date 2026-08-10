@@ -27,7 +27,6 @@ export const READER_ANNOTATIONS_CHANGED_EVENT = "reader:annotations-changed";
 export const READER_JUMP_TO_PAGE_EVENT = "reader:jump-to-page";
 export const READER_PAGE_STATE_CHANGED_EVENT = "reader:page-state-changed";
 export const READER_PAGE_STATE_REQUESTED_EVENT = "reader:page-state-requested";
-export const READER_OPEN_NOTEBOOK_EVENT = "reader:open-notebook";
 // Pedido de abertura de um documento no leitor da janela principal (usado
 // pelos PDFs relacionados; funciona da popout e da propria main via emitTo).
 export const READER_OPEN_DOCUMENT_EVENT = "reader:open-document";
@@ -52,11 +51,6 @@ export type ReaderPageStatePayload = ReaderJumpToPagePayload & {
   progress: number;
   totalPages: number | null;
   fileSizeBytes: number | null;
-};
-
-export type ReaderOpenNotebookPayload = {
-  documentId: string;
-  notebookId: number;
 };
 
 export type OpenDocumentExternallyError = {
@@ -138,15 +132,6 @@ export function isReaderPageStatePayload(payload: unknown): payload is ReaderPag
     hasValidTotalPages &&
     hasValidFileSize
   );
-}
-
-export function isReaderOpenNotebookPayload(payload: unknown): payload is ReaderOpenNotebookPayload {
-  if (!isReaderDocumentPayload(payload)) {
-    return false;
-  }
-
-  const notebookId = (payload as unknown as Record<string, unknown>).notebookId;
-  return typeof notebookId === "number" && Number.isInteger(notebookId) && notebookId > 0;
 }
 
 export function isOpenDocumentExternallyError(

@@ -201,10 +201,9 @@ async fn open_notebook_window<R: tauri::Runtime>(
     }
 
     let url = format!("index.html?notebookPanel=1&notebookId={notebook_id}");
-    // Tamanho inicial: mesmos valores do painel flutuante interno
-    // (notebookPanelDimensions.ts) — o layout de 3 colunas do Caderno foi
-    // dimensionado para ~1680x760, e os minimos de 640x440 sao o piso em que
-    // ele ainda funciona. O SO clampa ao monitor se a tela for menor.
+    // Tamanho inicial: o layout de 3 colunas do Caderno (paginas | editor |
+    // detalhes) foi dimensionado para ~1680x760, e 640x440 e o piso em que ele
+    // ainda funciona. O SO clampa ao monitor se a tela for menor.
     WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
         .title(notebook_title)
         .decorations(true)

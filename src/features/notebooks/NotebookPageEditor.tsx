@@ -2720,7 +2720,7 @@ export function NotebookPageEditor({
       }
 
       if (event.key === "Escape") {
-        // preventDefault: o NotebookPanel fecha painel/drawer no Escape
+        // preventDefault: o NotebookContent fecha drawer/foco/trilho no Escape
         // quando defaultPrevented e false — este Esc e so do menu.
         event.preventDefault();
         closeSlashMenu();

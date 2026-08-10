@@ -1,17 +1,9 @@
-// Dimensoes do painel de Caderno num modulo proprio, mesmo padrao de
-// canvasPanelDimensions.ts — aqui a motivacao e so organizacional (o
-// NotebookPanel nao e lazy-loaded como o CanvasPanel, entao nao ha risco de
-// puxar um chunk pesado sem querer); mantem os dois paineis consistentes e da
-// ao LibraryView um lugar unico para ler a largura sem importar o componente
-// inteiro.
+// Dimensoes internas do layout do Caderno, num modulo proprio (mesmo padrao de
+// canvasPanelDimensions.ts).
 //
-// O layout de 3 colunas (paginas | editor | detalhes) precisa de bem mais
-// espaco horizontal que o antigo layout de coluna unica — por isso o salto de
-// 520 para ~1680.
-export const notebookPanelWidth = 1680;
-export const notebookPanelHeight = 760;
-export const notebookPanelMinWidth = 640;
-export const notebookPanelMinHeight = 440;
+// O tamanho da JANELA nao mora mais aqui: o Caderno abre como janela nativa do
+// SO e quem define largura/altura/minimos e o comando Rust open_notebook_window
+// (src-tauri/src/lib.rs), no builder da WebviewWindow.
 
 // Trilho de Paginas (esquerda): nasce colapsado mostrando so os dots das
 // paginas e expande revelando os titulos ao lado. A largura muda com reflow
