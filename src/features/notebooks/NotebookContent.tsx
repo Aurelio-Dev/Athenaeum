@@ -1729,15 +1729,6 @@ export function NotebookContent({
           <MoreVerticalIcon />
         </button>
         {frameHeaderActions}
-        <button
-          type="button"
-          aria-label="Fechar painel"
-          title="Fechar painel"
-          className="rounded-md p-1.5 text-[var(--floating-header-control)] transition hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--floating-header-text)]"
-          onClick={() => void handleClose()}
-        >
-          <CloseIcon />
-        </button>
       </div>
     </div>
   );
