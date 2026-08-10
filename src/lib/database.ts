@@ -2131,14 +2131,14 @@ async function purgeExpiredTrash(database: Database) {
 // interface que precisam sobreviver entre sessoes reutilizam esta tabela.
 type AppSettingRow = { value: string };
 
-export async function getSetting(key: string): Promise<string | null> {
-  const database = await getDatabase();
+export async function getSetting(key: string, source: DatabaseHandleSource = "loaded"): Promise<string | null> {
+  const database = await getDatabase(source);
   const [row] = await database.select<AppSettingRow[]>("SELECT value FROM app_settings WHERE key = $1", [key]);
   return row?.value ?? null;
 }
 
-export async function setSetting(key: string, value: string): Promise<void> {
-  const database = await getDatabase();
+export async function setSetting(key: string, value: string, source: DatabaseHandleSource = "loaded"): Promise<void> {
+  const database = await getDatabase(source);
   await database.execute(
     "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
     [key, value],
