@@ -12,11 +12,10 @@
   "app": {
     "windows": [
       {
-        "title": "athenaeum",
-        "width": 800,
-        "height": 600,
-        "resizable": true,
-        "fullscreen": false
+        "title": "Athenaeum",
+        "maximized": true,
+        "width": 1280,
+        "height": 800
       }
     ],
     "security": {
