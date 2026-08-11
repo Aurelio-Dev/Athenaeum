@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
 import { openDocumentExternally } from "../../lib/database";
+import type { DatabaseHandleSource } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
@@ -39,6 +40,7 @@ type ReaderSidePanelProps = {
   onDeleteAnnotation: (annotationId: string) => void;
   onUpdateAnnotationNote: (annotationId: string, note: string) => Promise<void>;
   onToggleFavorite: () => Promise<void>;
+  databaseSource?: DatabaseHandleSource;
   onClose: () => void;
 };
 
@@ -99,6 +101,7 @@ export function ReaderSidePanel({
   onDeleteAnnotation,
   onUpdateAnnotationNote,
   onToggleFavorite,
+  databaseSource = "loaded",
   onClose,
 }: ReaderSidePanelProps) {
   const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "details");
@@ -188,6 +191,7 @@ export function ReaderSidePanel({
             annotations={annotations}
             currentPage={currentPage}
             progress={progress}
+            databaseSource={databaseSource}
             onJumpToPage={onJumpToPage}
             onDelete={onDeleteAnnotation}
             onUpdateNote={onUpdateAnnotationNote}
@@ -200,6 +204,7 @@ export function ReaderSidePanel({
             progress={progress}
             totalPages={totalPages}
             fileSizeBytes={fileSizeBytes}
+            databaseSource={databaseSource}
             onOpenNotebook={openNotebookWindow}
             onToggleFavorite={onToggleFavorite}
             onOpenExternally={() => openDocumentExternally(document.id)}

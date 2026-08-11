@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { incrementDocumentReadingTime } from "../../lib/database";
+import type { DatabaseHandleSource } from "../../lib/database";
 
 const minuteInMs = 60_000;
 
@@ -17,7 +18,11 @@ export function formatReadingTime(seconds: number) {
   return `${hours}h ${minutes}min`;
 }
 
-export function useReadingTimer(documentId: string, initialSeconds: number) {
+export function useReadingTimer(
+  documentId: string,
+  initialSeconds: number,
+  databaseSource: DatabaseHandleSource = "loaded",
+) {
   const [timeSpentSeconds, setTimeSpentSeconds] = useState(initialSeconds);
   const sessionStartRef = useRef<number | null>(Date.now());
   const elapsedRef = useRef(0);
@@ -41,7 +46,7 @@ export function useReadingTimer(documentId: string, initialSeconds: number) {
     isSavingRef.current = true;
 
     try {
-      await incrementDocumentReadingTime(documentId, seconds);
+      await incrementDocumentReadingTime(documentId, seconds, databaseSource);
       setTimeSpentSeconds((current) => current + seconds);
     } catch (error) {
       elapsedRef.current += seconds * 1000;
@@ -49,7 +54,7 @@ export function useReadingTimer(documentId: string, initialSeconds: number) {
     } finally {
       isSavingRef.current = false;
     }
-  }, [documentId]);
+  }, [databaseSource, documentId]);
 
   useEffect(() => {
     setTimeSpentSeconds(initialSeconds);

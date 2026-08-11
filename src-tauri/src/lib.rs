@@ -93,6 +93,7 @@ struct NotebookExportDestinations(std::sync::Mutex<HashSet<PathBuf>>);
 const MAX_AUTHORIZED_EXPORT_DESTINATIONS: usize = 32;
 
 const READER_PANEL_WINDOW_LABEL: &str = "reader-annotations-panel";
+const READER_WINDOW_LABEL: &str = "reader-window";
 const READER_SET_DOCUMENT_EVENT: &str = "reader:set-document";
 
 #[derive(Clone, Serialize)]
@@ -169,6 +170,54 @@ fn close_reader_panel_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Res
         // A popout intercepta CloseRequested para fazer flush. Quando este
         // comando e chamado, o flush ja terminou; destroy evita reemitir o
         // mesmo evento e entrar em recursao.
+        window.destroy().map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+// async de proposito, pelo mesmo motivo dos outros comandos open_*_window:
+// criar WebviewWindow num comando sincrono pode bloquear o message loop do
+// WebView2 no Windows.
+#[tauri::command]
+async fn open_reader_window<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    document_id: String,
+    document_title: String,
+) -> Result<(), String> {
+    validate_document_id(&document_id)?;
+
+    // Label fixo: existe no maximo um Reader nativo. Nesta fase, inclusive se
+    // o ID pedido for outro, apenas recuperamos/focamos a janela atual.
+    // TODO(Fase 2b): trocar o documento da janela existente via switchDocument.
+    if let Some(window) = app.get_webview_window(READER_WINDOW_LABEL) {
+        window.show().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    let url = format!("index.html?readerWindow=1&documentId={document_id}");
+    // O painel interno usa ate 1240x900 e tem piso funcional de 720x480. Na
+    // janela nativa essas dimensoes sao independentes da viewport da main; o
+    // gerenciador de janelas do SO faz o clamp se o monitor for menor.
+    WebviewWindowBuilder::new(&app, READER_WINDOW_LABEL, WebviewUrl::App(url.into()))
+        .title(document_title)
+        .decorations(true)
+        .resizable(true)
+        .inner_size(1240.0, 900.0)
+        .min_inner_size(720.0, 480.0)
+        .center()
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn close_reader_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(READER_WINDOW_LABEL) {
+        // O frontend intercepta CloseRequested e faz o flush antes de chamar
+        // este comando. destroy nao reemite o evento e evita recursao.
         window.destroy().map_err(|error| error.to_string())?;
     }
 
@@ -3479,6 +3528,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             close_notebook_window,
             close_reader_panel_window,
+            close_reader_window,
             import_document,
             delete_notebook_file_attachment,
             load_canvas_files,
@@ -3490,6 +3540,7 @@ pub fn run() {
             open_notebook_file_attachment,
             open_notebook_window,
             open_reader_panel_window,
+            open_reader_window,
             read_pdf_file,
             reveal_notebook_file_attachment,
             save_canvas_file,

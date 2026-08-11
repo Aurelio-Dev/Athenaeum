@@ -11,6 +11,9 @@ const LibraryView = lazy(async () => {
 const ReaderPanelPopout = lazy(() =>
   import("../features/reader/ReaderPanelPopout").then((module) => ({ default: module.ReaderPanelPopout })),
 );
+const ReaderWindowRoot = lazy(() =>
+  import("../features/reader/ReaderWindowRoot").then((module) => ({ default: module.ReaderWindowRoot })),
+);
 // KaTeX junto, como no LibraryView: o editor do Caderno renderiza equacoes.
 const NotebookWindowRoot = lazy(async () => {
   const [, module] = await Promise.all([import("katex/dist/katex.min.css"), import("../features/notebooks/NotebookWindowRoot")]);
@@ -27,6 +30,16 @@ function LoadingScreen() {
 
 export function App() {
   const searchParams = new URLSearchParams(window.location.search);
+
+  if (searchParams.get("readerWindow") === "1") {
+    const documentId = searchParams.get("documentId") ?? "";
+
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <ReaderWindowRoot documentId={documentId} />
+      </Suspense>
+    );
+  }
 
   if (searchParams.get("readerPanel") === "1") {
     const documentId = searchParams.get("documentId") ?? "";

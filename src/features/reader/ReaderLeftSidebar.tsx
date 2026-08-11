@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type * as pdfjsLib from "pdfjs-dist";
 import { useInViewport } from "../../hooks/useInViewport";
 import { openDocumentExternally } from "../../lib/database";
+import type { DatabaseHandleSource } from "../../lib/database";
 import type { LibraryDocument } from "../../types/library";
 import { DetailsTab } from "./panels/DetailsTab";
 import { createDocumentTextSearcher, type DocumentSearchResult } from "./pdfTextSearch";
@@ -32,6 +33,7 @@ type ReaderLeftSidebarProps = {
   // Incrementado pelo ReaderModal no Ctrl+F: foca o campo de busca mesmo que a
   // sidebar tenha acabado de ser aberta (sinal deterministico, sem timers).
   searchFocusSignal: number;
+  databaseSource?: DatabaseHandleSource;
   onJumpToPage: (page: number) => void;
   onToggleFavorite: () => Promise<void>;
 };
@@ -231,6 +233,7 @@ export function ReaderLeftSidebar({
   fileSizeBytes,
   progress,
   searchFocusSignal,
+  databaseSource = "loaded",
   onJumpToPage,
   onToggleFavorite,
 }: ReaderLeftSidebarProps) {
@@ -448,6 +451,7 @@ export function ReaderLeftSidebar({
       progress={progress}
       totalPages={totalPages}
       fileSizeBytes={fileSizeBytes}
+      databaseSource={databaseSource}
       onOpenNotebook={openNotebookWindow}
       onToggleFavorite={onToggleFavorite}
       onOpenExternally={() => openDocumentExternally(document.id)}

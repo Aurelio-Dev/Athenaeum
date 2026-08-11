@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "reader-window",
+  "description": "Permissoes minimas da janela nativa unica do Reader",
+  "windows": [
+    "reader-window"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-fullscreen",
+    "sql:allow-select",
+    "sql:allow-execute"
+  ]
+}

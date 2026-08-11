@@ -46,7 +46,12 @@ import {
   setSetting,
   updateAnnotationNote,
 } from "../../lib/database";
-import type { NewAnnotation, ReaderPageStatePayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
+import type {
+  DatabaseHandleSource,
+  NewAnnotation,
+  ReaderPageStatePayload,
+  ReaderPopoutCloseRequestPayload,
+} from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
 import type { LibraryDocument, ReadingLocation } from "../../types/library";
 import { useInViewport } from "../../hooks/useInViewport";
@@ -109,11 +114,12 @@ type ReaderContentRenderArgs = {
   renderHeader: (startDragging?: (event: ReactMouseEvent<HTMLElement>) => void) => ReactNode;
   body: ReactNode;
   effectiveNativeFullscreen: boolean;
+  requestClose: () => Promise<void>;
 };
 
 type ReaderContentProps = {
   document: LibraryDocument;
-  onClose: (readingLocation: ReadingLocation) => void;
+  onClose: (readingLocation: ReadingLocation) => void | Promise<void>;
   onSaveNotes: (documentId: string, notes: string) => Promise<void>;
   onNotesReloaded: (documentId: string, notes: string) => void;
   onToggleFavorite: (documentId: string) => Promise<void>;
@@ -127,6 +133,7 @@ type ReaderContentProps = {
   onMinimizeAnnotationsPanel: () => void;
   onRestoreAnnotationsPanel: () => void;
   onNativeFullscreenVisualStateChange: (fullscreen: boolean) => void;
+  databaseSource?: DatabaseHandleSource;
   children: (args: ReaderContentRenderArgs) => ReactNode;
 };
 
@@ -421,6 +428,7 @@ export function ReaderContent({
   onMinimizeAnnotationsPanel,
   onRestoreAnnotationsPanel,
   onNativeFullscreenVisualStateChange,
+  databaseSource = "loaded",
   children,
 }: ReaderContentProps) {
   const readerInstanceTokenRef = useRef(Symbol(`reader-${document.id}`));
@@ -664,7 +672,7 @@ export function ReaderContent({
   useEffect(() => {
     let isCancelled = false;
 
-    void getSetting(readerViewPreferencesSettingKey)
+    void getSetting(readerViewPreferencesSettingKey, databaseSource)
       .then((value) => {
         if (isCancelled) {
           return;
@@ -686,7 +694,7 @@ export function ReaderContent({
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [databaseSource]);
 
   useEffect(() => {
     if (!viewPreferencesLoaded) {
@@ -694,10 +702,10 @@ export function ReaderContent({
     }
 
     const preferences: ReaderViewPreferences = { pageLayout, continuousScroll, showCover };
-    void setSetting(readerViewPreferencesSettingKey, JSON.stringify(preferences)).catch((error) => {
+    void setSetting(readerViewPreferencesSettingKey, JSON.stringify(preferences), databaseSource).catch((error) => {
       console.warn("Nao foi possivel salvar as preferencias de visualizacao do leitor.", error);
     });
-  }, [continuousScroll, pageLayout, showCover, viewPreferencesLoaded]);
+  }, [continuousScroll, databaseSource, pageLayout, showCover, viewPreferencesLoaded]);
 
   useEffect(() => {
     visibleContentAbortControllerRef.current.abort();
@@ -900,7 +908,7 @@ export function ReaderContent({
       return next;
     });
   }, []);
-  const { flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds);
+  const { flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds, databaseSource);
 
   const flushNotes = useCallback(async () => {
     if (notesSaveTimerRef.current !== null) {
@@ -993,7 +1001,10 @@ export function ReaderContent({
     latestNotesRef.current = document.notes ?? "";
   }, [document.id, document.notes]);
 
-  const loadDocumentAnnotations = useCallback(() => listAnnotations(document.id), [document.id]);
+  const loadDocumentAnnotations = useCallback(
+    () => listAnnotations(document.id, databaseSource),
+    [databaseSource, document.id],
+  );
 
   // Carrega as anotacoes salvas ao abrir/trocar de documento.
   useEffect(() => {
@@ -1046,7 +1057,7 @@ export function ReaderContent({
     async (optimisticId: string, payload: NewAnnotation): Promise<Annotation | null> => {
       setSaveState(optimisticId, "saving");
       try {
-        const saved = await createAnnotation(payload);
+        const saved = await createAnnotation(payload, databaseSource);
         failedCreatesRef.current.delete(optimisticId);
         setAnnotations((current) => [
           ...current.filter((item) => item.id !== optimisticId && item.id !== saved.id),
@@ -1061,7 +1072,7 @@ export function ReaderContent({
         return null;
       }
     },
-    [clearSaveState, setSaveState],
+    [clearSaveState, databaseSource, setSaveState],
   );
 
   // Adiciona a anotacao de forma otimista e dispara a persistencia. Devolve o id
@@ -1150,31 +1161,31 @@ export function ReaderContent({
         return;
       }
 
-      await updateAnnotationNote(annotationId, note);
+      await updateAnnotationNote(annotationId, note, databaseSource);
       const updatedAt = new Date().toISOString();
       setAnnotations((current) => current.map((item) => (item.id === annotationId ? { ...item, note, updatedAt } : item)));
       setEditingAnnotationId(null);
     },
-    [editingAnnotationId],
+    [databaseSource, editingAnnotationId],
   );
 
   const saveAnnotationNoteById = useCallback(async (annotationId: string, note: string) => {
-    await updateAnnotationNote(annotationId, note);
+    await updateAnnotationNote(annotationId, note, databaseSource);
     const updatedAt = new Date().toISOString();
     setAnnotations((current) => current.map((item) => (item.id === annotationId ? { ...item, note, updatedAt } : item)));
-  }, []);
+  }, [databaseSource]);
 
   // Remove a anotacao (highlight + nota). LANCA em caso de falha para o popup
   // avisar; so atualiza o estado local apos o banco confirmar.
   const removeAnnotation = useCallback(
     async (annotationId: string) => {
-      await deleteAnnotation(annotationId);
+      await deleteAnnotation(annotationId, databaseSource);
       setAnnotations((current) => current.filter((item) => item.id !== annotationId));
       failedCreatesRef.current.delete(annotationId);
       clearSaveState(annotationId);
       setEditingAnnotationId((current) => (current === annotationId ? null : current));
     },
-    [clearSaveState],
+    [clearSaveState, databaseSource],
   );
 
   // Remocao pela lista do painel: a falha so mantem o item (sem perda de dado).
@@ -1268,7 +1279,7 @@ export function ReaderContent({
       }
 
       const requestSequence = ++notesReloadSequenceRef.current;
-      void getDocumentNotes(document.id)
+      void getDocumentNotes(document.id, databaseSource)
         .then((loadedNotes) => {
           if (isDisposed || requestSequence !== notesReloadSequenceRef.current) {
             return;
@@ -1354,7 +1365,7 @@ export function ReaderContent({
       isDisposed = true;
       unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
     };
-  }, [document.id, loadDocumentAnnotations, onNotesReloaded, queryClient, scrollToPage, updatePopoutDocumentId]);
+  }, [databaseSource, document.id, loadDocumentAnnotations, onNotesReloaded, queryClient, scrollToPage, updatePopoutDocumentId]);
 
   const closePopoutAfterFlush = useCallback(async (): Promise<boolean> => {
     if (popoutDocumentIdRef.current !== document.id) {
@@ -1675,7 +1686,7 @@ export function ReaderContent({
     }
 
     await exitOwnedNativeFullscreen();
-    onClose(readingLocation);
+    await onClose(readingLocation);
   }, [closePopoutAfterFlush, exitOwnedNativeFullscreen, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
 
   // Ctrl+F abre a sidebar esquerda e foca o campo de busca do documento.
@@ -1704,10 +1715,10 @@ export function ReaderContent({
   // gravar a cada evento de scroll. O flush exato no fechamento fica com o
   // closeAndSave (onClose) acima.
   const persistReadingLocation = useCallback(() => {
-    void setDocumentReadingLocation(document, getCurrentReadingLocation()).catch((error) => {
+    void setDocumentReadingLocation(document, getCurrentReadingLocation(), databaseSource).catch((error) => {
       console.warn("Nao foi possivel salvar a posicao de leitura.", error);
     });
-  }, [document, getCurrentReadingLocation]);
+  }, [databaseSource, document, getCurrentReadingLocation]);
 
   const { schedule: scheduleReadingSave } = useReaderPersistence(persistReadingLocation, 750);
 
@@ -1734,7 +1745,7 @@ export function ReaderContent({
       }
     })();
     void flushReadingTime();
-    void setDocumentReadingLocation(document, readingLocation)
+    void setDocumentReadingLocation(document, readingLocation, databaseSource)
       .then(() => queryClient.invalidateQueries({ queryKey: ["library"] }))
       .catch((error) => {
         console.warn("Nao foi possivel salvar a posicao de leitura na troca de documento.", error);
@@ -2125,7 +2136,7 @@ export function ReaderContent({
   // com o estado atual.
   async function openPanelSystemWindow() {
     await flushNotes();
-    await setDocumentReadingLocation(document, getCurrentReadingLocation());
+    await setDocumentReadingLocation(document, getCurrentReadingLocation(), databaseSource);
     await invoke("open_reader_panel_window", {
       documentId: document.id,
       documentTitle: document.title,
@@ -2641,6 +2652,7 @@ export function ReaderContent({
               fileSizeBytes={fileSizeBytes}
               progress={progress}
               searchFocusSignal={searchFocusSignal}
+              databaseSource={databaseSource}
               onJumpToPage={scrollToPage}
               onToggleFavorite={() => onToggleFavorite(document.id)}
             />
@@ -2706,6 +2718,7 @@ export function ReaderContent({
             onDeleteAnnotation={handleDeleteAnnotationFromList}
             onUpdateAnnotationNote={saveAnnotationNoteById}
             onToggleFavorite={() => onToggleFavorite(document.id)}
+            databaseSource={databaseSource}
             onClose={onCloseAnnotationsPanel}
           />
         ) : null}
@@ -2748,5 +2761,5 @@ export function ReaderContent({
     </>
   );
 
-  return <>{children({ renderHeader, body, effectiveNativeFullscreen })}</>;
+  return <>{children({ renderHeader, body, effectiveNativeFullscreen, requestClose: closeAndSave })}</>;
 }
