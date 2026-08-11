@@ -24,6 +24,8 @@ import { useContextMenu } from "../../hooks/useContextMenu";
 import {
   createAnnotation,
   deleteAnnotation,
+  getLatestLinkedNotebook,
+  getLibraryDocument,
   getDocumentNotes,
   openDocumentExternally,
   isReaderDocumentPayload,
@@ -31,6 +33,9 @@ import {
   isReaderJumpToPagePayload,
   isReaderPopoutCloseRequestPayload,
   listAnnotations,
+  listAvailableTags,
+  listAvailableTagsFromPreloadedDatabase,
+  listNotebookOptions,
   READER_ANNOTATIONS_CHANGED_EVENT,
   READER_DETAILS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
@@ -43,6 +48,7 @@ import {
   READER_REQUEST_POPOUT_CLOSE_EVENT,
   getSetting,
   setDocumentReadingLocation,
+  setDocumentReadingStarted,
   setSetting,
   updateAnnotationNote,
 } from "../../lib/database";
@@ -58,7 +64,7 @@ import { useInViewport } from "../../hooks/useInViewport";
 import { captureSelection, type CapturedSelection, type PageElement } from "./anchor";
 import { HighlightLayer } from "./HighlightLayer";
 import { NotePopover } from "./NotePopover";
-import { PdfTextLayer } from "./PdfTextLayer";
+import { PdfTextLayer, type RegisterPdfCancellation } from "./PdfTextLayer";
 import { ReaderAnnotationsDock } from "./ReaderAnnotationsDock";
 import { ReaderFloatingChrome, ReaderToolRail } from "./ReaderChrome";
 import { ReaderLeftSidebar, readerLeftSidebarWidth, type PdfOutlineItem } from "./ReaderLeftSidebar";
@@ -78,6 +84,7 @@ import {
   type ReaderZoomMode,
 } from "./readerView";
 import { ReaderSidePanel, type ReaderFloatingPanelState } from "./ReaderSidePanel";
+import type { ReaderDetailsPreload } from "./panels/DetailsTab";
 import { ExternalLinkIcon } from "./panels/readerPanelIcons";
 import { SelectionToolbar } from "./SelectionToolbar";
 import { useReaderPersistence } from "./useReaderPersistence";
@@ -115,6 +122,7 @@ type ReaderContentRenderArgs = {
   body: ReactNode;
   effectiveNativeFullscreen: boolean;
   requestClose: () => Promise<void>;
+  switchDocument: (documentId: string) => Promise<void>;
 };
 
 type ReaderContentProps = {
@@ -133,6 +141,7 @@ type ReaderContentProps = {
   onMinimizeAnnotationsPanel: () => void;
   onRestoreAnnotationsPanel: () => void;
   onNativeFullscreenVisualStateChange: (fullscreen: boolean) => void;
+  onDocumentSwitched?: (document: LibraryDocument) => void;
   databaseSource?: DatabaseHandleSource;
   children: (args: ReaderContentRenderArgs) => ReactNode;
 };
@@ -262,6 +271,85 @@ function base64ToBytes(base64: string) {
   return bytes;
 }
 
+type LoadedPdfResource = {
+  pdfDocument: PdfDocument | null;
+  outline: PdfOutlineItem[];
+  fileSizeBytes: number | null;
+  totalPages: number;
+};
+
+type PdfLoadOperation = {
+  promise: Promise<LoadedPdfResource>;
+  cancel: () => Promise<void>;
+  isCancelled: () => boolean;
+};
+
+function createPdfLoadOperation(targetDocument: LibraryDocument): PdfLoadOperation {
+  let cancelled = false;
+  let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+  let destroyPromise: Promise<void> | null = null;
+
+  const cancel = () => {
+    cancelled = true;
+    if (!loadingTask) {
+      return Promise.resolve();
+    }
+
+    destroyPromise ??= loadingTask.destroy();
+    return destroyPromise;
+  };
+
+  const promise = (async (): Promise<LoadedPdfResource> => {
+    if (!hasPdfSource(targetDocument)) {
+      return {
+        pdfDocument: null,
+        outline: [],
+        fileSizeBytes: null,
+        totalPages: fallbackPageCount,
+      };
+    }
+
+    let source: Parameters<typeof pdfjsLib.getDocument>[0];
+    let fileSizeBytes: number | null = null;
+
+    if (targetDocument.fileUrl) {
+      source = { url: targetDocument.fileUrl };
+    } else {
+      const base64 = await invoke<string>("read_pdf_file", { filePath: targetDocument.filePath });
+      if (cancelled) {
+        throw new DOMException("Carregamento cancelado.", "AbortError");
+      }
+      const bytes = base64ToBytes(base64);
+      fileSizeBytes = bytes.byteLength;
+      source = { data: bytes };
+    }
+
+    if (cancelled) {
+      throw new DOMException("Carregamento cancelado.", "AbortError");
+    }
+
+    loadingTask = pdfjsLib.getDocument(source);
+    const loadedDocument = await loadingTask.promise;
+    if (cancelled) {
+      throw new DOMException("Carregamento cancelado.", "AbortError");
+    }
+
+    const outline = await resolveOutlineWithPages(loadedDocument);
+    if (cancelled) {
+      throw new DOMException("Carregamento cancelado.", "AbortError");
+    }
+
+    return {
+      pdfDocument: loadedDocument,
+      outline,
+      fileSizeBytes,
+      totalPages: loadedDocument.numPages,
+    };
+  })();
+
+  return { promise, cancel, isCancelled: () => cancelled };
+}
+
 type PdfCanvasPageProps = {
   pdfDocument: PdfDocument;
   pageNumber: number;
@@ -272,9 +360,10 @@ type PdfCanvasPageProps = {
   onSelectAnnotation: (annotation: Annotation) => void;
   pageSize: PageSize;
   onPageSize: (pageNumber: number, size: PageSize, renderedZoom: number) => void;
+  registerCancellation?: RegisterPdfCancellation;
 };
 
-function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates, onRetry, onSelectAnnotation, pageSize, onPageSize }: PdfCanvasPageProps) {
+function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates, onRetry, onSelectAnnotation, pageSize, onPageSize, registerCancellation }: PdfCanvasPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isRendering, setIsRendering] = useState(true);
   const scale = pageScale(zoom);
@@ -282,6 +371,16 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
   useEffect(() => {
     let isCancelled = false;
     let renderTask: pdfjsLib.RenderTask | null = null;
+    const cancel = () => {
+      isCancelled = true;
+      renderTask?.cancel();
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    };
+    const unregisterCancellation = registerCancellation?.(cancel);
 
     async function renderPage() {
       setIsRendering(true);
@@ -325,10 +424,10 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
     });
 
     return () => {
-      isCancelled = true;
-      renderTask?.cancel();
+      unregisterCancellation?.();
+      cancel();
     };
-  }, [onPageSize, pageNumber, pdfDocument, scale, zoom]);
+  }, [onPageSize, pageNumber, pdfDocument, registerCancellation, scale, zoom]);
 
   // article e `relative` para ancorar a camada de texto e os highlights, que
   // ficam sobrepostos ao canvas com inset-0.
@@ -342,7 +441,12 @@ function PdfCanvasPage({ pdfDocument, pageNumber, zoom, annotations, saveStates,
       <canvas ref={canvasRef} className={isRendering ? "hidden" : "block"} />
       {!isRendering ? (
         <>
-          <PdfTextLayer pdfDocument={pdfDocument} pageNumber={pageNumber} scale={scale} />
+          <PdfTextLayer
+            pdfDocument={pdfDocument}
+            pageNumber={pageNumber}
+            scale={scale}
+            registerCancellation={registerCancellation}
+          />
           <HighlightLayer annotations={annotations} saveStates={saveStates} onRetry={onRetry} onSelect={onSelectAnnotation} />
         </>
       ) : null}
@@ -428,6 +532,7 @@ export function ReaderContent({
   onMinimizeAnnotationsPanel,
   onRestoreAnnotationsPanel,
   onNativeFullscreenVisualStateChange,
+  onDocumentSwitched,
   databaseSource = "loaded",
   children,
 }: ReaderContentProps) {
@@ -455,6 +560,15 @@ export function ReaderContent({
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
   const pdfDocumentRef = useRef<PdfDocument | null>(pdfDocument);
   pdfDocumentRef.current = pdfDocument;
+  const activePdfLoadOperationRef = useRef<PdfLoadOperation | null>(null);
+  const preloadedPdfDocumentIdRef = useRef<string | null>(null);
+  const pdfCancellationCallbacksRef = useRef<Set<() => void>>(new Set());
+  const documentSwitchPromiseRef = useRef<Promise<void>>(Promise.resolve());
+  const isReaderDisposedRef = useRef(false);
+  const onDocumentSwitchedRef = useRef(onDocumentSwitched);
+  onDocumentSwitchedRef.current = onDocumentSwitched;
+  const activeDocumentRef = useRef(document);
+  activeDocumentRef.current = document;
   const activeDocumentIdRef = useRef(document.id);
   activeDocumentIdRef.current = document.id;
   const [pdfOutline, setPdfOutline] = useState<PdfOutlineItem[]>([]);
@@ -485,6 +599,7 @@ export function ReaderContent({
   // Sinaliza para a doca inferior que o campo de nota deve receber foco. A
   // nota continua estritamente vinculada a uma selecao capturada no PDF.
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
+  const [detailsPreload, setDetailsPreload] = useState<ReaderDetailsPreload | null>(null);
   const queryClient = useQueryClient();
   const sidePanelFloating = annotationsPanel !== null;
   const nativeFullscreenOwnedRef = useRef(false);
@@ -512,6 +627,7 @@ export function ReaderContent({
   const saveStatesRef = useRef<Map<string, AnnotationSaveState>>(new Map());
   const notesReloadSequenceRef = useRef(0);
   const annotationsReloadSequenceRef = useRef(0);
+  const preloadedAnnotationsDocumentIdRef = useRef<string | null>(null);
   const [popoutDocumentId, setPopoutDocumentId] = useState<string | null>(null);
   const popoutDocumentIdRef = useRef<string | null>(null);
   const closePopoutPromiseRef = useRef<Promise<boolean> | null>(null);
@@ -530,6 +646,19 @@ export function ReaderContent({
   const updatePopoutDocumentId = useCallback((nextDocumentId: string | null) => {
     popoutDocumentIdRef.current = nextDocumentId;
     setPopoutDocumentId(nextDocumentId);
+  }, []);
+
+  const registerPdfCancellation = useCallback<RegisterPdfCancellation>((cancel) => {
+    pdfCancellationCallbacksRef.current.add(cancel);
+    return () => {
+      pdfCancellationCallbacksRef.current.delete(cancel);
+    };
+  }, []);
+
+  const cancelRegisteredPdfWork = useCallback(() => {
+    const cancellations = Array.from(pdfCancellationCallbacksRef.current);
+    pdfCancellationCallbacksRef.current.clear();
+    cancellations.forEach((cancel) => cancel());
   }, []);
 
   const pageGroups = useMemo(
@@ -736,13 +865,19 @@ export function ReaderContent({
   }, [isReadingMode, onMinimizeAnnotationsPanel, sidePanelFloating]);
 
   useEffect(() => {
+    isReaderDisposedRef.current = false;
     return () => {
+      isReaderDisposedRef.current = true;
+      cancelRegisteredPdfWork();
       visibleContentAbortControllerRef.current.abort();
+      const activePdfLoadOperation = activePdfLoadOperationRef.current;
+      activePdfLoadOperationRef.current = null;
+      void activePdfLoadOperation?.cancel();
       if (pinchZoomResetTimerRef.current !== null) {
         window.clearTimeout(pinchZoomResetTimerRef.current);
       }
     };
-  }, []);
+  }, [cancelRegisteredPdfWork]);
 
   useEffect(() => {
     setPageSizes(new Map());
@@ -909,6 +1044,8 @@ export function ReaderContent({
     });
   }, []);
   const { flushReadingTime } = useReadingTimer(document.id, document.timeSpentSeconds, databaseSource);
+  const flushReadingTimeRef = useRef(flushReadingTime);
+  flushReadingTimeRef.current = flushReadingTime;
 
   const flushNotes = useCallback(async () => {
     if (notesSaveTimerRef.current !== null) {
@@ -916,8 +1053,8 @@ export function ReaderContent({
       notesSaveTimerRef.current = null;
     }
 
-    await onSaveNotes(document.id, latestNotesRef.current);
-  }, [document.id, onSaveNotes]);
+    await onSaveNotes(activeDocumentRef.current.id, latestNotesRef.current);
+  }, [onSaveNotes]);
 
   useEffect(() => {
     return () => {
@@ -930,71 +1067,54 @@ export function ReaderContent({
   }, [document.id, onSaveNotes]);
 
   useEffect(() => {
-    if (!hasPdfSource(document)) {
-      setPdfDocument(null);
-      setPdfOutline([]);
-      setPdfError("");
-      setFileSizeBytes(null);
-      setIsPdfLoading(false);
-      setTotalPages(fallbackPageCount);
-      return;
+    if (preloadedPdfDocumentIdRef.current === document.id) {
+      preloadedPdfDocumentIdRef.current = null;
+      const preloadedOperation = activePdfLoadOperationRef.current;
+      return () => {
+        if (activePdfLoadOperationRef.current === preloadedOperation) {
+          activePdfLoadOperationRef.current = null;
+        }
+        void preloadedOperation?.cancel();
+      };
     }
 
-    let isCancelled = false;
-    let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+    const operation = createPdfLoadOperation(document);
+    activePdfLoadOperationRef.current = operation;
     setIsPdfLoading(true);
     setPdfError("");
     setFileSizeBytes(null);
 
-    async function resolvePdfSource() {
-      if (document.fileUrl) {
-        return { source: { url: document.fileUrl }, sizeBytes: null };
-      }
-
-      const base64 = await invoke<string>("read_pdf_file", { filePath: document.filePath });
-      const bytes = base64ToBytes(base64);
-      return { source: { data: bytes }, sizeBytes: bytes.byteLength };
-    }
-
-    resolvePdfSource()
-      .then(async ({ source, sizeBytes }) => {
-        if (isCancelled) {
+    operation.promise
+      .then((loadedPdf) => {
+        if (operation.isCancelled() || activePdfLoadOperationRef.current !== operation) {
           return;
         }
 
-        setFileSizeBytes(sizeBytes);
-        loadingTask = pdfjsLib.getDocument(source);
-        const loadedDocument = await loadingTask.promise;
-
-        if (isCancelled) {
-          return;
-        }
-
-        setPdfDocument(loadedDocument);
-        setTotalPages(loadedDocument.numPages);
-        setCurrentPage((page) => clamp(page, 1, loadedDocument.numPages));
-
-        const outlineItems = await resolveOutlineWithPages(loadedDocument);
-        if (!isCancelled) {
-          setPdfOutline(outlineItems);
-        }
+        pdfDocumentRef.current = loadedPdf.pdfDocument;
+        setPdfDocument(loadedPdf.pdfDocument);
+        setPdfOutline(loadedPdf.outline);
+        setFileSizeBytes(loadedPdf.fileSizeBytes);
+        setTotalPages(loadedPdf.totalPages);
+        setCurrentPage((page) => clamp(page, 1, loadedPdf.totalPages));
       })
       .catch(() => {
-        if (!isCancelled) {
+        if (!operation.isCancelled() && activePdfLoadOperationRef.current === operation) {
           setPdfError("Nao foi possivel carregar este PDF.");
         }
       })
       .finally(() => {
-        if (!isCancelled) {
+        if (!operation.isCancelled() && activePdfLoadOperationRef.current === operation) {
           setIsPdfLoading(false);
         }
       });
 
     return () => {
-      isCancelled = true;
-      void loadingTask?.destroy();
+      if (activePdfLoadOperationRef.current === operation) {
+        activePdfLoadOperationRef.current = null;
+      }
+      void operation.cancel();
     };
-  }, [document.fileUrl, document.filePath]);
+  }, [document.id, document.fileUrl, document.filePath]);
 
   useEffect(() => {
     setNotesText(document.notes ?? "");
@@ -1008,6 +1128,11 @@ export function ReaderContent({
 
   // Carrega as anotacoes salvas ao abrir/trocar de documento.
   useEffect(() => {
+    if (preloadedAnnotationsDocumentIdRef.current === document.id) {
+      preloadedAnnotationsDocumentIdRef.current = null;
+      return;
+    }
+
     let isCancelled = false;
     const requestSequence = ++annotationsReloadSequenceRef.current;
     const emptySaveStates = new Map<string, AnnotationSaveState>();
@@ -1720,7 +1845,10 @@ export function ReaderContent({
     });
   }, [databaseSource, document, getCurrentReadingLocation]);
 
-  const { schedule: scheduleReadingSave } = useReaderPersistence(persistReadingLocation, 750);
+  const { schedule: scheduleReadingSave, cancel: cancelScheduledReadingSave } = useReaderPersistence(
+    persistReadingLocation,
+    750,
+  );
 
   // Flush no UNMOUNT sem fechamento explicito — o caso real e a troca de
   // documento no leitor (abrir outro PDF desmonta este painel sem passar pelo
@@ -1755,6 +1883,197 @@ export function ReaderContent({
   const getCurrentReadingLocationRef = useRef(getCurrentReadingLocation);
   getCurrentReadingLocationRef.current = getCurrentReadingLocation;
   const flushOnUnmountTimerRef = useRef<number | null>(null);
+
+  const switchDocument = useCallback(
+    (nextDocumentId: string) => {
+      const switchPromise = documentSwitchPromiseRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const previousDocument = activeDocumentRef.current;
+          if (nextDocumentId === previousDocument.id) {
+            return;
+          }
+          if (!onDocumentSwitchedRef.current) {
+            throw new Error("A troca de documento nao esta disponivel nesta superficie do Reader.");
+          }
+
+          // 1. A posicao mensuravel e persistida antes de qualquer alteracao do
+          // DOM. Notas e tempo usam seus flushes correntes ainda vinculados ao
+          // documento anterior.
+          const previousReadingLocation = getCurrentReadingLocationRef.current();
+          cancelScheduledReadingSave();
+          await setDocumentReadingLocation(previousDocument, previousReadingLocation, databaseSource);
+          await queryClient.invalidateQueries({ queryKey: ["library"] });
+          await flushNotes();
+          await flushReadingTimeRef.current();
+
+          // 2. Cancela de forma sincrona os RenderTask/TextLayer registrados e
+          // aborta analises offscreen; destroy encerra tambem o worker do PDF.
+          setIsPdfLoading(true);
+          setPdfError("");
+          cancelRegisteredPdfWork();
+          visibleContentAbortControllerRef.current.abort();
+          visibleContentGenerationRef.current += 1;
+          visibleContentCacheRef.current = new Map();
+          pageBaseSizesRef.current.clear();
+          fitRequestSequenceRef.current += 1;
+          readingRestoreSequenceRef.current += 1;
+          pendingVisibleAlignmentRef.current = null;
+          pendingZoomAnchorRef.current = null;
+          readingModeTransitionAnchorRef.current = null;
+          activePageLockRef.current = null;
+
+          const previousPdfLoadOperation = activePdfLoadOperationRef.current;
+          activePdfLoadOperationRef.current = null;
+          await previousPdfLoadOperation?.cancel();
+          pdfDocumentRef.current = null;
+          setPdfDocument(null);
+          setPdfOutline([]);
+          setFileSizeBytes(null);
+
+          // 3. Todos os dados SQLite sao obtidos pelo mesmo handle da janela
+          // antes de publicar o novo ID. getLibraryDocument inclui metadados,
+          // favorito e tags atribuidas ao documento.
+          let loadedDocument: LibraryDocument | null;
+          let loadedNotes: string;
+          let loadedAnnotations: Annotation[];
+          let linkedNotebook: Awaited<ReturnType<typeof getLatestLinkedNotebook>>;
+          let notebooks: Awaited<ReturnType<typeof listNotebookOptions>>;
+          try {
+            await setDocumentReadingStarted(nextDocumentId, databaseSource);
+            [loadedDocument, loadedNotes, loadedAnnotations, linkedNotebook, notebooks] = await Promise.all([
+              getLibraryDocument(nextDocumentId, databaseSource),
+              getDocumentNotes(nextDocumentId, databaseSource),
+              listAnnotations(nextDocumentId, databaseSource),
+              getLatestLinkedNotebook(nextDocumentId, databaseSource),
+              listNotebookOptions(databaseSource),
+              databaseSource === "preloaded"
+                ? listAvailableTagsFromPreloadedDatabase()
+                : listAvailableTags(),
+            ]);
+          } catch (error) {
+            setPdfError("Nao foi possivel carregar o novo documento.");
+            setIsPdfLoading(false);
+            throw error;
+          }
+
+          if (!loadedDocument) {
+            setPdfError("Nao foi possivel carregar o novo documento.");
+            setIsPdfLoading(false);
+            throw new Error("Documento nao encontrado.");
+          }
+
+          const nextDocument = { ...loadedDocument, notes: loadedNotes };
+
+          // 4. O novo PDF so comeca depois que o preload de dados terminou.
+          const nextPdfLoadOperation = createPdfLoadOperation(nextDocument);
+          activePdfLoadOperationRef.current = nextPdfLoadOperation;
+          let loadedPdf: LoadedPdfResource;
+          let pdfLoadError = "";
+          try {
+            loadedPdf = await nextPdfLoadOperation.promise;
+          } catch (error) {
+            if (nextPdfLoadOperation.isCancelled() || isReaderDisposedRef.current) {
+              throw error;
+            }
+            console.warn("Nao foi possivel carregar o PDF durante a troca de documento.", error);
+            await nextPdfLoadOperation.cancel().catch(() => undefined);
+            if (activePdfLoadOperationRef.current === nextPdfLoadOperation) {
+              activePdfLoadOperationRef.current = null;
+            }
+            loadedPdf = {
+              pdfDocument: null,
+              outline: [],
+              fileSizeBytes: null,
+              totalPages: fallbackPageCount,
+            };
+            pdfLoadError = "Nao foi possivel carregar este PDF.";
+          }
+
+          if (isReaderDisposedRef.current) {
+            await nextPdfLoadOperation.cancel();
+            return;
+          }
+
+          // 5. Publica o snapshot e reseta todo estado por documento em um unico
+          // lote. Preferencias globais de visualizacao e fullscreen sobrevivem.
+          const nextZoom = getInitialZoom(nextDocument);
+          const nextPage = clamp(
+            nextDocument.readingLocation?.page ??
+              Math.max(1, Math.ceil((nextDocument.progress / 100) * loadedPdf.totalPages)),
+            1,
+            loadedPdf.totalPages,
+          );
+          const emptySaveStates = new Map<string, AnnotationSaveState>();
+          const readerSurface = readerSurfaceRef.current;
+
+          window.getSelection()?.removeAllRanges();
+          readerContextMenu.close();
+          if (readerSurface) {
+            readerSurface.scrollTop = 0;
+            readerSurface.scrollLeft = 0;
+          }
+          pageRefs.current = [];
+          pinchZoomAccumulatorRef.current = 0;
+          if (pinchZoomResetTimerRef.current !== null) {
+            window.clearTimeout(pinchZoomResetTimerRef.current);
+            pinchZoomResetTimerRef.current = null;
+          }
+          notesReloadSequenceRef.current += 1;
+          annotationsReloadSequenceRef.current += 1;
+          failedCreatesRef.current = new Map();
+          saveStatesRef.current = emptySaveStates;
+          zoomRef.current = nextZoom;
+          pdfDocumentRef.current = loadedPdf.pdfDocument;
+          activeDocumentRef.current = nextDocument;
+          activeDocumentIdRef.current = nextDocument.id;
+          preloadedPdfDocumentIdRef.current = nextDocument.id;
+          preloadedAnnotationsDocumentIdRef.current = nextDocument.id;
+
+          setPageSizes(new Map());
+          setPdfOutline(loadedPdf.outline);
+          setPdfError(pdfLoadError);
+          setFileSizeBytes(loadedPdf.fileSizeBytes);
+          setTotalPages(loadedPdf.totalPages);
+          setCurrentPage(nextPage);
+          setZoom(nextZoom);
+          setZoomMode("custom");
+          setViewAlignmentRevision((revision) => revision + 1);
+          setNotesText(loadedNotes);
+          latestNotesRef.current = loadedNotes;
+          setAnnotations(loadedAnnotations);
+          setSaveStates(emptySaveStates);
+          setPendingSelection(null);
+          setEditingAnnotationId(null);
+          setSearchFocusSignal(0);
+          setComposerFocusSignal(0);
+          setReaderActionError("");
+          setIsTogglingFavoriteFromContextMenu(false);
+          setIsOpeningOriginalFromContextMenu(false);
+          setDetailsPreload({ documentId: nextDocument.id, linkedNotebook, notebooks });
+          onDocumentSwitchedRef.current(nextDocument);
+          setPdfDocument(loadedPdf.pdfDocument);
+          setIsPdfLoading(false);
+
+          // A fila so libera a proxima troca depois que o React teve a chance
+          // de publicar os refs/callbacks vinculados ao documento novo.
+          await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve());
+          });
+        });
+
+      documentSwitchPromiseRef.current = switchPromise;
+      return switchPromise;
+    },
+    [
+      cancelRegisteredPdfWork,
+      cancelScheduledReadingSave,
+      databaseSource,
+      flushNotes,
+      queryClient,
+      readerContextMenu,
+    ],
+  );
 
   useLayoutEffect(() => {
     if (flushOnUnmountTimerRef.current !== null) {
@@ -2583,6 +2902,7 @@ export function ReaderContent({
                           onRetry={retryAnnotation}
                           onSelectAnnotation={openAnnotationEditor}
                           onPageSize={updatePageSize}
+                          registerCancellation={registerPdfCancellation}
                         />
                       ) : (
                         <FallbackReaderPage page={page} zoom={zoom} document={document} />
@@ -2644,6 +2964,7 @@ export function ReaderContent({
             style={{ width: readerLeftSidebarWidth }}
           >
             <ReaderLeftSidebar
+              key={document.id}
               document={document}
               pdfDocument={pdfDocument}
               outline={pdfOutline}
@@ -2653,6 +2974,8 @@ export function ReaderContent({
               progress={progress}
               searchFocusSignal={searchFocusSignal}
               databaseSource={databaseSource}
+              detailsPreload={detailsPreload}
+              registerPdfCancellation={registerPdfCancellation}
               onJumpToPage={scrollToPage}
               onToggleFavorite={() => onToggleFavorite(document.id)}
             />
@@ -2684,6 +3007,7 @@ export function ReaderContent({
           }}
         >
           <ReaderAnnotationsDock
+            key={document.id}
             annotations={annotations}
             currentPage={currentPage}
             visiblePages={currentPageGroup}
@@ -2761,5 +3085,5 @@ export function ReaderContent({
     </>
   );
 
-  return <>{children({ renderHeader, body, effectiveNativeFullscreen, requestClose: closeAndSave })}</>;
+  return <>{children({ renderHeader, body, effectiveNativeFullscreen, requestClose: closeAndSave, switchDocument })}</>;
 }

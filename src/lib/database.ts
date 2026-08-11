@@ -33,6 +33,7 @@ export const READER_OPEN_DOCUMENT_EVENT = "reader:open-document";
 export const READER_DETAILS_CHANGED_EVENT = "reader:details-changed";
 export const READER_POPOUT_CLOSED_EVENT = "reader:popout-closed";
 export const READER_SET_DOCUMENT_EVENT = "reader:set-document";
+export const READER_SWITCH_DOCUMENT_EVENT = "reader-window:switch-document";
 export const READER_REQUEST_POPOUT_CLOSE_EVENT = "reader:request-popout-close";
 export const READER_POPOUT_FLUSHED_EVENT = "reader:popout-flushed";
 export const READER_PANEL_WINDOW_LABEL = "reader-annotations-panel";

@@ -95,6 +95,7 @@ const MAX_AUTHORIZED_EXPORT_DESTINATIONS: usize = 32;
 const READER_PANEL_WINDOW_LABEL: &str = "reader-annotations-panel";
 const READER_WINDOW_LABEL: &str = "reader-window";
 const READER_SET_DOCUMENT_EVENT: &str = "reader:set-document";
+const READER_SWITCH_DOCUMENT_EVENT: &str = "reader-window:switch-document";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,11 +188,20 @@ async fn open_reader_window<R: tauri::Runtime>(
 ) -> Result<(), String> {
     validate_document_id(&document_id)?;
 
-    // Label fixo: existe no maximo um Reader nativo. Nesta fase, inclusive se
-    // o ID pedido for outro, apenas recuperamos/focamos a janela atual.
-    // TODO(Fase 2b): trocar o documento da janela existente via switchDocument.
+    // Label fixo: existe no maximo um Reader nativo. O frontend compara o ID com
+    // o documento efetivamente publicado e transforma pedidos redundantes em
+    // no-op; o Rust nao antecipa esse estado assincrono.
     if let Some(window) = app.get_webview_window(READER_WINDOW_LABEL) {
         window.show().map_err(|error| error.to_string())?;
+        app.emit_to(
+            READER_WINDOW_LABEL,
+            READER_SWITCH_DOCUMENT_EVENT,
+            ReaderDocumentPayload { document_id },
+        )
+        .map_err(|error| error.to_string())?;
+        window
+            .set_title(&document_title)
+            .map_err(|error| error.to_string())?;
         window.set_focus().map_err(|error| error.to_string())?;
         return Ok(());
     }

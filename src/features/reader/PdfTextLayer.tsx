@@ -4,18 +4,21 @@ import * as pdfjsLib from "pdfjs-dist";
 type PdfTextLayer = pdfjsLib.TextLayer;
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
 
+export type RegisterPdfCancellation = (cancel: () => void) => () => void;
+
 type PdfTextLayerProps = {
   pdfDocument: PdfDocument;
   pageNumber: number;
   // Mesma escala usada para renderizar o canvas da pagina, para o texto
   // transparente cair exatamente sobre as letras desenhadas.
   scale: number;
+  registerCancellation?: RegisterPdfCancellation;
 };
 
 // Renderiza a camada de texto selecionavel do pdf.js sobre o canvas. Os spans
 // sao transparentes (CSS de .textLayer): servem so para o navegador permitir
 // selecao nativa, que depois viramos highlight ancorado.
-export function PdfTextLayer({ pdfDocument, pageNumber, scale }: PdfTextLayerProps) {
+export function PdfTextLayer({ pdfDocument, pageNumber, scale, registerCancellation }: PdfTextLayerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -26,6 +29,12 @@ export function PdfTextLayer({ pdfDocument, pageNumber, scale }: PdfTextLayerPro
 
     let isCancelled = false;
     let textLayer: PdfTextLayer | null = null;
+    const cancel = () => {
+      isCancelled = true;
+      textLayer?.cancel();
+      container.replaceChildren();
+    };
+    const unregisterCancellation = registerCancellation?.(cancel);
 
     async function renderTextLayer() {
       const page = await pdfDocument.getPage(pageNumber);
@@ -55,10 +64,10 @@ export function PdfTextLayer({ pdfDocument, pageNumber, scale }: PdfTextLayerPro
     });
 
     return () => {
-      isCancelled = true;
-      textLayer?.cancel();
+      unregisterCancellation?.();
+      cancel();
     };
-  }, [pdfDocument, pageNumber, scale]);
+  }, [pdfDocument, pageNumber, registerCancellation, scale]);
 
   // A classe .textLayer vem do CSS oficial do pdf.js (importado no ReaderModal).
   return <div ref={containerRef} className="textLayer" />;

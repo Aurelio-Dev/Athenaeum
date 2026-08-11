@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ThemeProvider } from "../../hooks/useTheme";
@@ -6,6 +7,8 @@ import {
   getDocumentNotes,
   getLibraryDocument,
   getReaderOpensMaximized,
+  isReaderDocumentPayload,
+  READER_SWITCH_DOCUMENT_EVENT,
   setDocumentFavorite,
   setDocumentNote,
   setDocumentReadingLocation,
@@ -39,6 +42,8 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
   const [readerSize, setReaderSize] = useState<ReaderContentSize>(getWindowContentSize);
   const documentRef = useRef<LibraryDocument | null>(null);
   const requestCloseRef = useRef<(() => Promise<void>) | null>(null);
+  const switchDocumentRef = useRef<((documentId: string) => Promise<void>) | null>(null);
+  const pendingDocumentSwitchesRef = useRef<string[]>([]);
   const closeWindowPromiseRef = useRef<Promise<void> | null>(null);
   const hasValidDocumentId = documentId.length > 0;
 
@@ -82,6 +87,56 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
       cancelled = true;
     };
   }, [documentId, hasValidDocumentId]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen<unknown>(READER_SWITCH_DOCUMENT_EVENT, (event) => {
+      if (!isReaderDocumentPayload(event.payload)) {
+        return;
+      }
+
+      const switchReaderDocument = switchDocumentRef.current;
+      if (!switchReaderDocument) {
+        pendingDocumentSwitchesRef.current.push(event.payload.documentId);
+        return;
+      }
+
+      void switchReaderDocument(event.payload.documentId).catch((error) => {
+        console.warn("Nao foi possivel trocar o documento da janela do Reader.", error);
+      });
+    })
+      .then((removeListener) => {
+        if (isDisposed) {
+          removeListener();
+          return;
+        }
+        unlisten = removeListener;
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel escutar pedidos de troca do Reader.", error);
+      });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const switchReaderDocument = switchDocumentRef.current;
+    if (!bootstrap || !switchReaderDocument || pendingDocumentSwitchesRef.current.length === 0) {
+      return;
+    }
+
+    const pendingDocumentSwitches = pendingDocumentSwitchesRef.current.splice(0);
+    pendingDocumentSwitches.forEach((pendingDocumentId) => {
+      void switchReaderDocument(pendingDocumentId).catch((error) => {
+        console.warn("Nao foi possivel concluir uma troca pendente do Reader.", error);
+      });
+    });
+  }, [bootstrap]);
 
   useEffect(() => {
     function synchronizeReaderSize() {
@@ -183,6 +238,12 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
     });
   }
 
+  const applySwitchedDocument = useCallback((nextDocument: LibraryDocument) => {
+    documentRef.current = nextDocument;
+    setLoadError(false);
+    setBootstrap((current) => current ? { ...current, document: nextDocument } : current);
+  }, []);
+
   async function toggleFavorite(targetDocumentId: string) {
     const currentDocument = documentRef.current;
     if (!currentDocument || currentDocument.id !== targetDocumentId) {
@@ -231,10 +292,12 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
         onMinimizeAnnotationsPanel={() => undefined}
         onRestoreAnnotationsPanel={() => undefined}
         onNativeFullscreenVisualStateChange={() => setReaderSize(getWindowContentSize())}
+        onDocumentSwitched={applySwitchedDocument}
         databaseSource="preloaded"
       >
-        {({ renderHeader, body, requestClose }) => {
+        {({ renderHeader, body, requestClose, switchDocument }) => {
           requestCloseRef.current = requestClose;
+          switchDocumentRef.current = switchDocument;
           return (
             <div className="flex h-screen flex-col overflow-hidden bg-[var(--card)]">
               {renderHeader()}

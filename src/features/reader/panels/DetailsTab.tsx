@@ -26,6 +26,12 @@ import {
 } from "./DocumentInfoSections";
 import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon, UnlinkIcon } from "./readerPanelIcons";
 
+export type ReaderDetailsPreload = {
+  documentId: string;
+  linkedNotebook: LatestLinkedNotebook | null;
+  notebooks: NotebookOption[];
+};
+
 type DetailsTabProps = {
   document: ReaderDocumentDetails;
   progress: number;
@@ -38,6 +44,7 @@ type DetailsTabProps = {
   onToggleFavorite: () => Promise<void>;
   onOpenExternally: () => Promise<void>;
   showFooterActions?: boolean;
+  preloadedData?: ReaderDetailsPreload | null;
   // Renovacao de cache do host apos edicao de tags (ver DocumentTagsSection).
   onTagsChanged?: () => void;
 };
@@ -117,6 +124,7 @@ export function DetailsTab({
   onToggleFavorite,
   onOpenExternally,
   showFooterActions = true,
+  preloadedData = null,
   onTagsChanged,
 }: DetailsTabProps) {
   const [linkedNotebook, setLinkedNotebook] = useState<LatestLinkedNotebook | null>(null);
@@ -182,12 +190,20 @@ export function DetailsTab({
     setIsLinking(false);
     setIsTogglingFavorite(false);
     setIsOpeningExternally(false);
-    reloadLinkedNotebook(isCancelledRef);
+
+    if (preloadedData?.documentId === document.id) {
+      setLinkedNotebook(preloadedData.linkedNotebook);
+      setNotebooks(preloadedData.notebooks);
+      setSelectedNotebookId(preloadedData.linkedNotebook?.id ?? preloadedData.notebooks[0]?.id ?? null);
+      setIsNotebookLoading(false);
+    } else {
+      reloadLinkedNotebook(isCancelledRef);
+    }
 
     return () => {
       isCancelledRef.current = true;
     };
-  }, [reloadLinkedNotebook]);
+  }, [document.id, preloadedData, reloadLinkedNotebook]);
 
   useEffect(() => {
     if (!actionError) {

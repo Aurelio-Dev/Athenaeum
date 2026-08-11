@@ -6,7 +6,8 @@ import { useInViewport } from "../../hooks/useInViewport";
 import { openDocumentExternally } from "../../lib/database";
 import type { DatabaseHandleSource } from "../../lib/database";
 import type { LibraryDocument } from "../../types/library";
-import { DetailsTab } from "./panels/DetailsTab";
+import type { RegisterPdfCancellation } from "./PdfTextLayer";
+import { DetailsTab, type ReaderDetailsPreload } from "./panels/DetailsTab";
 import { createDocumentTextSearcher, type DocumentSearchResult } from "./pdfTextSearch";
 
 export const readerLeftSidebarWidth = 306;
@@ -34,6 +35,8 @@ type ReaderLeftSidebarProps = {
   // sidebar tenha acabado de ser aberta (sinal deterministico, sem timers).
   searchFocusSignal: number;
   databaseSource?: DatabaseHandleSource;
+  detailsPreload?: ReaderDetailsPreload | null;
+  registerPdfCancellation?: RegisterPdfCancellation;
   onJumpToPage: (page: number) => void;
   onToggleFavorite: () => Promise<void>;
 };
@@ -131,12 +134,30 @@ function BookmarkIcon() {
 // Miniatura de uma pagina, renderizada pelo pdf.js apos entrar (perto) da
 // viewport da lista e mantida depois disso (canvas pequeno, custo de memoria
 // baixo mesmo em PDFs longos).
-function PageThumbnailCanvas({ pdfDocument, page }: { pdfDocument: PdfDocument; page: number }) {
+function PageThumbnailCanvas({
+  pdfDocument,
+  page,
+  registerPdfCancellation,
+}: {
+  pdfDocument: PdfDocument;
+  page: number;
+  registerPdfCancellation?: RegisterPdfCancellation;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
     let renderTask: pdfjsLib.RenderTask | null = null;
+    const cancel = () => {
+      isCancelled = true;
+      renderTask?.cancel();
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    };
+    const unregisterCancellation = registerPdfCancellation?.(cancel);
 
     async function renderThumbnail() {
       const pdfPage = await pdfDocument.getPage(page);
@@ -167,10 +188,10 @@ function PageThumbnailCanvas({ pdfDocument, page }: { pdfDocument: PdfDocument; 
     renderThumbnail().catch(() => undefined);
 
     return () => {
-      isCancelled = true;
-      renderTask?.cancel();
+      unregisterCancellation?.();
+      cancel();
     };
-  }, [page, pdfDocument]);
+  }, [page, pdfDocument, registerPdfCancellation]);
 
   return <canvas ref={canvasRef} className="block" />;
 }
@@ -180,10 +201,11 @@ type ThumbnailRowProps = {
   page: number;
   active: boolean;
   sectionTitle: string | null;
+  registerPdfCancellation?: RegisterPdfCancellation;
   onClick: () => void;
 };
 
-function ThumbnailRow({ pdfDocument, page, active, sectionTitle, onClick }: ThumbnailRowProps) {
+function ThumbnailRow({ pdfDocument, page, active, sectionTitle, registerPdfCancellation, onClick }: ThumbnailRowProps) {
   const { elementRef, isInViewport } = useInViewport<HTMLDivElement>("400px 0px");
   const [hasRendered, setHasRendered] = useState(false);
 
@@ -208,7 +230,11 @@ function ThumbnailRow({ pdfDocument, page, active, sectionTitle, onClick }: Thum
         <span className={`text-center text-xs tabular-nums ${active ? "font-bold text-primary" : "text-[var(--muted-foreground)]"}`}>{page}</span>
         <span className={`overflow-hidden rounded border bg-white ${active ? "border-primary" : "border-border-subtle"}`} style={{ width: thumbnailWidth }}>
           {pdfDocument && hasRendered ? (
-            <PageThumbnailCanvas pdfDocument={pdfDocument} page={page} />
+            <PageThumbnailCanvas
+              pdfDocument={pdfDocument}
+              page={page}
+              registerPdfCancellation={registerPdfCancellation}
+            />
           ) : (
             // Pulsa so enquanto ha um PDF por renderizar; sem PDF (documento
             // fallback) o bloco fica estatico.
@@ -234,6 +260,8 @@ export function ReaderLeftSidebar({
   progress,
   searchFocusSignal,
   databaseSource = "loaded",
+  detailsPreload = null,
+  registerPdfCancellation,
   onJumpToPage,
   onToggleFavorite,
 }: ReaderLeftSidebarProps) {
@@ -417,6 +445,7 @@ export function ReaderLeftSidebar({
           page={page}
           active={page === currentPage}
           sectionTitle={sectionTitleByPage.get(page) ?? null}
+          registerPdfCancellation={registerPdfCancellation}
           onClick={() => onJumpToPage(page)}
         />
       ))}
@@ -452,6 +481,7 @@ export function ReaderLeftSidebar({
       totalPages={totalPages}
       fileSizeBytes={fileSizeBytes}
       databaseSource={databaseSource}
+      preloadedData={detailsPreload}
       onOpenNotebook={openNotebookWindow}
       onToggleFavorite={onToggleFavorite}
       onOpenExternally={() => openDocumentExternally(document.id)}
