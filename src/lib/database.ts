@@ -1922,9 +1922,17 @@ export async function setDocumentReadingLocation(
   readingLocation: ReadingLocation,
   source: DatabaseHandleSource = "loaded",
 ) {
+  // Uma montagem que nunca mediu a superficie nao tem informacao nova para
+  // persistir. Ignorar o fallback impede zeros transitorios de substituirem
+  // uma posicao valida ja salva (fechamento rapido, troca de documento ou
+  // replay de efeitos do React.StrictMode).
+  if (!readingLocation.canMeasure) {
+    return;
+  }
+
   const database = await getDatabase(source);
   const measuredProgress = Math.round(readingLocation.scrollRatio * 100);
-  const progress = readingLocation.canMeasure ? Math.max(document.progress, measuredProgress) : document.progress;
+  const progress = Math.max(document.progress, measuredProgress);
 
   await database.execute("UPDATE documents SET reading_location_json = $1, progress = $2, updated_at = $3 WHERE id = $4", [
     JSON.stringify(readingLocation),

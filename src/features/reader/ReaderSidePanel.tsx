@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { FloatingPanelFrame } from "../../components/floating/FloatingPanelFrame";
-import { floatingPanelId, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { openDocumentExternally } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
@@ -10,6 +9,15 @@ import { AnnotationsTab } from "./panels/AnnotationsTab";
 import { DetailsTab } from "./panels/DetailsTab";
 
 type ReaderTab = "details" | "annotations";
+
+export type ReaderFloatingPanelState = {
+  id: string;
+  type: "annotations" | "canvas" | "reader" | "settings";
+  entityId: string;
+  position: { x: number; y: number };
+  zIndex: number;
+  isMinimized: boolean;
+};
 
 type ReaderSidePanelProps = {
   document: LibraryDocument;
@@ -19,10 +27,14 @@ type ReaderSidePanelProps = {
   totalPages: number | null;
   fileSizeBytes: number | null;
   isFloating: boolean;
+  floatingPanel?: ReaderFloatingPanelState | null;
+  isActiveForShortcuts?: boolean;
   initialTab?: ReaderTab;
   onFloat: () => void;
   onOpenSystemWindow: () => Promise<void>;
   onDock: () => void;
+  onMinimize?: () => void;
+  onRestore?: () => void;
   onJumpToPage: (page: number) => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onUpdateAnnotationNote: (annotationId: string, note: string) => Promise<void>;
@@ -75,10 +87,14 @@ export function ReaderSidePanel({
   totalPages,
   fileSizeBytes,
   isFloating,
+  floatingPanel = null,
+  isActiveForShortcuts = false,
   initialTab,
   onFloat,
   onOpenSystemWindow,
   onDock,
+  onMinimize,
+  onRestore,
   onJumpToPage,
   onDeleteAnnotation,
   onUpdateAnnotationNote,
@@ -86,9 +102,7 @@ export function ReaderSidePanel({
   onClose,
 }: ReaderSidePanelProps) {
   const [activeTab, setActiveTab] = useState<ReaderTab>(initialTab ?? "details");
-  const { panels, minimizePanel, restorePanel } = useFloatingPanels();
   const queryClient = useQueryClient();
-  const annotationsPanelId = floatingPanelId("annotations", document.id);
 
   async function openSystemWindow() {
     try {
@@ -111,15 +125,14 @@ export function ReaderSidePanel({
         return;
       }
 
-      const topPanel = panels[panels.length - 1];
-      if (topPanel?.id === annotationsPanelId && !topPanel.isMinimized) {
+      if (isActiveForShortcuts) {
         onClose();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFloating, panels, annotationsPanelId, onClose]);
+  }, [isActiveForShortcuts, isFloating, onClose]);
 
   // Handlers compartilhados pelas duas abas. Caderno abre como janela nativa
   // do SO (open_notebook_window: foca a existente ou cria uma nova).
@@ -198,7 +211,7 @@ export function ReaderSidePanel({
   );
 
   if (isFloating) {
-    const panel = panels.find((candidate) => candidate.id === annotationsPanelId);
+    const panel = floatingPanel;
 
     // Estado transitorio (painel acabou de ser fechado na pilha): nao ha o que
     // renderizar ate o ReaderModal reagir e voltar para o modo dock.
@@ -246,11 +259,11 @@ export function ReaderSidePanel({
                 event.stopPropagation();
 
                 if (panel.isMinimized) {
-                  restorePanel(panel.id);
+                  onRestore?.();
                   return;
                 }
 
-                minimizePanel(panel.id);
+                onMinimize?.();
               }}
             >
               <MinimizeIcon />

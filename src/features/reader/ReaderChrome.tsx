@@ -195,7 +195,7 @@ type ReaderFloatingChromeProps = {
   visiblePageLabel: string;
   compact: boolean;
   draggable: boolean;
-  onStartDragging: (event: MouseEvent<HTMLElement>) => void;
+  onStartDragging?: (event: MouseEvent<HTMLElement>) => void;
   onToggleDetails: () => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
