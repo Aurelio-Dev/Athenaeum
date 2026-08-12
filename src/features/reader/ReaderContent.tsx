@@ -49,6 +49,7 @@ import {
   setDocumentReadingLocation,
   setDocumentReadingStarted,
   setSetting,
+  updateAnnotationMark,
   updateAnnotationNote,
 } from "../../lib/database";
 import type {
@@ -57,7 +58,7 @@ import type {
   ReaderDocumentPayload,
   ReaderPageStatePayload,
 } from "../../lib/database";
-import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
+import type { Annotation, AnnotationMarkStyle, AnnotationSaveState, HighlightColor } from "../../types/annotation";
 import type { LibraryDocument, ReadingLocation } from "../../types/library";
 import { useInViewport } from "../../hooks/useInViewport";
 import { captureSelection, type CapturedSelection, type PageElement } from "./anchor";
@@ -108,6 +109,26 @@ type PendingZoomAnchor = {
   pageOffsetRatio: number;
   expectedPageHeight: number;
   targetZoom: number;
+};
+
+type SelectionMark = {
+  style: AnnotationMarkStyle;
+  color: HighlightColor;
+};
+
+type SelectionSessionAnnotation = {
+  optimisticId: string;
+  persistedId: string | null;
+  latestPayload: NewAnnotation;
+  persistedMark: SelectionMark | null;
+};
+
+type ReaderSelectionSession = {
+  id: string;
+  selection: CapturedSelection;
+  annotations: SelectionSessionAnnotation[];
+  desiredMark: SelectionMark | null;
+  writeQueue: Promise<void>;
 };
 
 export type ReaderContentSize = {
@@ -615,9 +636,12 @@ export function ReaderContent({
   const [popoutDocumentId, setPopoutDocumentId] = useState<string | null>(null);
   const popoutDocumentIdRef = useRef<string | null>(null);
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
+  const [selectionSessionId, setSelectionSessionId] = useState<string | null>(null);
+  const selectionSessionRef = useRef<ReaderSelectionSession | null>(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
   const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
+  const retriesInFlightRef = useRef<Set<string>>(new Set());
   const currentPageStateRef = useRef<ReaderPageStatePayload>({
     documentId: document.id,
     page: currentPage,
@@ -629,6 +653,14 @@ export function ReaderContent({
   const updatePopoutDocumentId = useCallback((nextDocumentId: string | null) => {
     popoutDocumentIdRef.current = nextDocumentId;
     setPopoutDocumentId(nextDocumentId);
+  }, []);
+
+  const closeSelectionSession = useCallback((preservePendingSelection = false) => {
+    selectionSessionRef.current = null;
+    setSelectionSessionId(null);
+    if (!preservePendingSelection) {
+      setPendingSelection(null);
+    }
   }, []);
 
   const registerPdfCancellation = useCallback<RegisterPdfCancellation>((cancel) => {
@@ -746,13 +778,13 @@ export function ReaderContent({
 
       if (enabled) {
         window.getSelection()?.removeAllRanges();
-        setPendingSelection(null);
+        closeSelectionSession();
       }
 
       setIsReadingMode(enabled);
       setViewAlignmentRevision((revision) => revision + 1);
     },
-    [captureCurrentPageAnchor, isReadingMode],
+    [captureCurrentPageAnchor, closeSelectionSession, isReadingMode],
   );
 
   const cancelInitialReadingRestore = useCallback(() => {
@@ -1155,20 +1187,30 @@ export function ReaderContent({
   // fica "unsaved" (visivel + retry) — nunca some sem o usuario saber.
   // Devolve a anotacao salva (com id real) ou null se a escrita falhou.
   const persistNewAnnotation = useCallback(
-    async (optimisticId: string, payload: NewAnnotation): Promise<Annotation | null> => {
+    async (
+      optimisticId: string,
+      payload: NewAnnotation,
+      getLatestPayload?: () => NewAnnotation,
+    ): Promise<Annotation | null> => {
       setSaveState(optimisticId, "saving");
       try {
         const saved = await createAnnotation(payload, databaseSource);
+        const latestPayload = getLatestPayload?.() ?? payload;
+        const visibleSaved = {
+          ...saved,
+          markStyle: latestPayload.markStyle,
+          color: latestPayload.color,
+        };
         failedCreatesRef.current.delete(optimisticId);
         setAnnotations((current) => [
           ...current.filter((item) => item.id !== optimisticId && item.id !== saved.id),
-          saved,
+          visibleSaved,
         ]);
         clearSaveState(optimisticId);
         return saved;
       } catch (error) {
         console.warn("Nao foi possivel salvar a anotacao.", error);
-        failedCreatesRef.current.set(optimisticId, payload);
+        failedCreatesRef.current.set(optimisticId, getLatestPayload?.() ?? payload);
         setSaveState(optimisticId, "unsaved");
         return null;
       }
@@ -1176,24 +1218,71 @@ export function ReaderContent({
     [clearSaveState, databaseSource, setSaveState],
   );
 
-  // Adiciona a anotacao de forma otimista e dispara a persistencia. Devolve o id
-  // otimista e a Promise da persistencia (resolve com a anotacao salva ou null).
-  const addAnnotationFromPayload = useCallback(
+  const addOptimisticAnnotation = useCallback(
     (payload: NewAnnotation) => {
       const optimisticId = crypto.randomUUID();
       const now = new Date().toISOString();
       setAnnotations((current) => [...current, { id: optimisticId, createdAt: now, updatedAt: now, ...payload }]);
+      setSaveState(optimisticId, "saving");
+      return optimisticId;
+    },
+    [setSaveState],
+  );
+
+  // Adiciona a anotacao de forma otimista e dispara a persistencia. Devolve o id
+  // otimista e a Promise da persistencia (resolve com a anotacao salva ou null).
+  const addAnnotationFromPayload = useCallback(
+    (payload: NewAnnotation) => {
+      const optimisticId = addOptimisticAnnotation(payload);
       return { optimisticId, persisted: persistNewAnnotation(optimisticId, payload) };
     },
-    [persistNewAnnotation],
+    [addOptimisticAnnotation, persistNewAnnotation],
   );
 
   const retryAnnotation = useCallback(
     (annotationId: string) => {
       const payload = failedCreatesRef.current.get(annotationId);
-      if (payload) {
-        void persistNewAnnotation(annotationId, payload);
+      if (!payload) {
+        return;
       }
+
+      if (retriesInFlightRef.current.has(annotationId)) {
+        return;
+      }
+      retriesInFlightRef.current.add(annotationId);
+
+      const session = selectionSessionRef.current;
+      const sessionAnnotation = session?.annotations.find((item) => item.optimisticId === annotationId);
+      if (!session || !sessionAnnotation) {
+        void persistNewAnnotation(annotationId, payload).finally(() => {
+          retriesInFlightRef.current.delete(annotationId);
+        });
+        return;
+      }
+
+      // O retry participa da mesma fila das trocas de estilo/cor. Assim uma
+      // nova escolha feita durante o retry espera o novo id persistido existir.
+      session.writeQueue = session.writeQueue
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            const retryPayload = sessionAnnotation.latestPayload;
+            const saved = await persistNewAnnotation(
+              annotationId,
+              retryPayload,
+              () => sessionAnnotation.latestPayload,
+            );
+            if (saved) {
+              sessionAnnotation.persistedId = saved.id;
+              sessionAnnotation.persistedMark = {
+                style: retryPayload.markStyle,
+                color: retryPayload.color,
+              };
+            }
+          } finally {
+            retriesInFlightRef.current.delete(annotationId);
+          }
+        });
     },
     [persistNewAnnotation],
   );
@@ -1203,26 +1292,145 @@ export function ReaderContent({
     text: string,
     rects: NewAnnotation["rects"],
     color: HighlightColor,
+    markStyle: AnnotationMarkStyle = "highlight",
     note = "",
   ): NewAnnotation {
-    return { documentId: document.id, page, color, selectedText: text, note, rects };
+    return { documentId: document.id, page, markStyle, color, selectedText: text, note, rects };
   }
 
-  // Cria um highlight por pagina tocada pela selecao (regra "uma anotacao por
-  // pagina"). Cada pagina vira uma anotacao independente.
-  const highlightSelection = useCallback((color: HighlightColor) => {
-    if (!pendingSelection) {
+  // A primeira aplicacao cria uma anotacao por pagina. As seguintes atualizam
+  // exatamente essas linhas; a fila mantem a ordem mesmo sob cliques rapidos.
+  const applySelectionMark = useCallback((style: AnnotationMarkStyle, color: HighlightColor): void => {
+    const session = selectionSessionRef.current;
+    if (!session) {
       return;
     }
 
-    for (const pageRects of pendingSelection.pages) {
-      addAnnotationFromPayload(buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, color));
+    const requestedMark: SelectionMark = { style, color };
+    session.desiredMark = requestedMark;
+
+    if (session.annotations.length === 0) {
+      session.annotations = session.selection.pages.map((pageRects) => {
+        const payload = buildPayload(
+          pageRects.page,
+          session.selection.text,
+          pageRects.rects,
+          color,
+          style,
+        );
+        return {
+          optimisticId: addOptimisticAnnotation(payload),
+          persistedId: null,
+          latestPayload: payload,
+          persistedMark: null,
+        };
+      });
+
+      const sessionAnnotations = session.annotations;
+      session.writeQueue = session.writeQueue
+        .catch(() => undefined)
+        .then(async () => {
+          for (const sessionAnnotation of sessionAnnotations) {
+            const payload = sessionAnnotation.latestPayload;
+            const saved = await persistNewAnnotation(
+              sessionAnnotation.optimisticId,
+              payload,
+              () => sessionAnnotation.latestPayload,
+            );
+            if (saved) {
+              sessionAnnotation.persistedId = saved.id;
+              sessionAnnotation.persistedMark = {
+                style: payload.markStyle,
+                color: payload.color,
+              };
+            }
+          }
+        });
+      return;
     }
 
-    window.getSelection()?.removeAllRanges();
-    setPendingSelection(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addAnnotationFromPayload, document.id, pendingSelection]);
+    const updatedAt = new Date().toISOString();
+    const annotationIds = new Set<string>();
+    for (const sessionAnnotation of session.annotations) {
+      sessionAnnotation.latestPayload = {
+        ...sessionAnnotation.latestPayload,
+        markStyle: style,
+        color,
+      };
+      annotationIds.add(sessionAnnotation.optimisticId);
+      if (sessionAnnotation.persistedId) {
+        annotationIds.add(sessionAnnotation.persistedId);
+      }
+      if (failedCreatesRef.current.has(sessionAnnotation.optimisticId)) {
+        failedCreatesRef.current.set(sessionAnnotation.optimisticId, sessionAnnotation.latestPayload);
+      }
+    }
+
+    // A aparencia muda imediatamente; somente a escrita espera a fila anterior.
+    setAnnotations((current) => current.map((annotation) => (
+      annotationIds.has(annotation.id)
+        ? { ...annotation, markStyle: style, color, updatedAt }
+        : annotation
+    )));
+
+    const sessionAnnotations = session.annotations;
+    session.writeQueue = session.writeQueue
+      .catch(() => undefined)
+      .then(async () => {
+        let updateFailed = false;
+
+        for (const sessionAnnotation of sessionAnnotations) {
+          if (!sessionAnnotation.persistedId) {
+            if (failedCreatesRef.current.has(sessionAnnotation.optimisticId)) {
+              failedCreatesRef.current.set(sessionAnnotation.optimisticId, sessionAnnotation.latestPayload);
+            }
+            continue;
+          }
+
+          try {
+            await updateAnnotationMark(sessionAnnotation.persistedId, style, color, databaseSource);
+            sessionAnnotation.persistedMark = requestedMark;
+          } catch (error) {
+            updateFailed = true;
+            console.warn("Nao foi possivel atualizar a marcacao.", error);
+          }
+        }
+
+        // Se esta ainda for a escolha mais recente, uma falha nao pode deixar a
+        // UI afirmando algo que o banco nao confirmou. Cada pagina volta ao seu
+        // ultimo estilo persistido e o usuario recebe um aviso visivel.
+        if (updateFailed && session.desiredMark?.style === style && session.desiredMark.color === color) {
+          const persistedMarks = new Map<string, SelectionMark>();
+          for (const sessionAnnotation of sessionAnnotations) {
+            if (sessionAnnotation.persistedMark) {
+              persistedMarks.set(sessionAnnotation.optimisticId, sessionAnnotation.persistedMark);
+              if (sessionAnnotation.persistedId) {
+                persistedMarks.set(sessionAnnotation.persistedId, sessionAnnotation.persistedMark);
+              }
+              sessionAnnotation.latestPayload = {
+                ...sessionAnnotation.latestPayload,
+                markStyle: sessionAnnotation.persistedMark.style,
+                color: sessionAnnotation.persistedMark.color,
+              };
+            }
+          }
+          setAnnotations((current) => current.map((annotation) => {
+            const persistedMark = persistedMarks.get(annotation.id);
+            return persistedMark
+              ? { ...annotation, markStyle: persistedMark.style, color: persistedMark.color }
+              : annotation;
+          }));
+          setReaderActionError("Nao foi possivel atualizar a marcacao. Tente novamente.");
+        }
+      });
+  }, [addOptimisticAnnotation, databaseSource, document.id, persistNewAnnotation]);
+
+  const onApplyMark = useCallback(
+    (style: AnnotationMarkStyle, color: HighlightColor): void => {
+      applySelectionMark(style, color);
+    },
+    [applySelectionMark],
+  );
 
   const createNoteFromSelection = useCallback((note: string) => {
     const normalizedNote = note.trim();
@@ -1233,14 +1441,14 @@ export function ReaderContent({
 
     for (const pageRects of pendingSelection.pages) {
       addAnnotationFromPayload(
-        buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, "amber", normalizedNote),
+        buildPayload(pageRects.page, pendingSelection.text, pageRects.rects, "amber", "highlight", normalizedNote),
       );
     }
 
     window.getSelection()?.removeAllRanges();
-    setPendingSelection(null);
+    closeSelectionSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addAnnotationFromPayload, document.id, pendingSelection]);
+  }, [addAnnotationFromPayload, closeSelectionSession, document.id, pendingSelection]);
   // Abre o editor ao clicar num highlight ja salvo. Highlights ainda nao
   // persistidos (saving/unsaved) nao abrem editor — o emblema de retry cuida deles.
   const openAnnotationEditor = useCallback(
@@ -1308,8 +1516,20 @@ export function ReaderContent({
       console.warn("Nao foi possivel copiar a selecao.", error);
     });
     window.getSelection()?.removeAllRanges();
-    setPendingSelection(null);
-  }, [pendingSelection]);
+    closeSelectionSession();
+  }, [closeSelectionSession, pendingSelection]);
+
+  const onAnotar = useCallback((): void => {
+    if (!pendingSelection) {
+      return;
+    }
+
+    // A toolbar fecha, mas o snapshot da selecao fica disponivel para a doca
+    // criar a nota quando o usuario enviar o formulario.
+    window.getSelection()?.removeAllRanges();
+    closeSelectionSession(true);
+    setComposerFocusSignal((signal) => signal + 1);
+  }, [closeSelectionSession, pendingSelection]);
 
   // Le a selecao atual do navegador no fim de cada interacao de mouse sobre a
   // area de leitura e posiciona a toolbar (ou a esconde, se nao houver selecao).
@@ -1325,8 +1545,23 @@ export function ReaderContent({
       }
     });
 
-    setPendingSelection(captureSelection(pageElements));
-  }, [pdfDocument]);
+    const capturedSelection = captureSelection(pageElements);
+    if (!capturedSelection) {
+      closeSelectionSession();
+      return;
+    }
+
+    const session: ReaderSelectionSession = {
+      id: crypto.randomUUID(),
+      selection: capturedSelection,
+      annotations: [],
+      desiredMark: null,
+      writeQueue: Promise.resolve(),
+    };
+    selectionSessionRef.current = session;
+    setSelectionSessionId(session.id);
+    setPendingSelection(capturedSelection);
+  }, [closeSelectionSession, pdfDocument]);
 
   const scrollToPage = useCallback((page: number) => {
     cancelReaderAutoAlignment();
@@ -1978,7 +2213,7 @@ export function ReaderContent({
           latestNotesRef.current = loadedNotes;
           setAnnotations(loadedAnnotations);
           setSaveStates(emptySaveStates);
-          setPendingSelection(null);
+          closeSelectionSession();
           setEditingAnnotationId(null);
           setSearchFocusSignal(0);
           setComposerFocusSignal(0);
@@ -2003,6 +2238,7 @@ export function ReaderContent({
     [
       cancelRegisteredPdfWork,
       cancelScheduledReadingSave,
+      closeSelectionSession,
       databaseSource,
       flushNotes,
       queryClient,
@@ -2089,7 +2325,7 @@ export function ReaderContent({
       if (pendingSelection) {
         event.preventDefault();
         window.getSelection()?.removeAllRanges();
-        setPendingSelection(null);
+        closeSelectionSession();
         return;
       }
 
@@ -2116,7 +2352,7 @@ export function ReaderContent({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [changeReadingMode, closeAndSave, editingAnnotationId, pendingSelection, isActiveForShortcuts, isReadingMode, readerContextMenu.isOpen, setNativeFullscreen]);
+  }, [changeReadingMode, closeAndSave, closeSelectionSession, editingAnnotationId, pendingSelection, isActiveForShortcuts, isReadingMode, readerContextMenu.isOpen, setNativeFullscreen]);
 
   useEffect(() => {
     function handleFullscreenShortcut(event: KeyboardEvent) {
@@ -2151,7 +2387,7 @@ export function ReaderContent({
     // deslocada, entao escondemos a selecao pendente.
     if (pendingSelection) {
       window.getSelection()?.removeAllRanges();
-      setPendingSelection(null);
+      closeSelectionSession();
     }
 
     const readerSurface = readerSurfaceRef.current;
@@ -2727,7 +2963,7 @@ export function ReaderContent({
           onSetPageLayout={(layout) => {
             cancelReaderAutoAlignment();
             window.getSelection()?.removeAllRanges();
-            setPendingSelection(null);
+            closeSelectionSession();
             captureCurrentPageAnchor(zoomRef.current);
             setPageLayout(layout);
             setViewAlignmentRevision((revision) => revision + 1);
@@ -2741,7 +2977,7 @@ export function ReaderContent({
           onToggleShowCover={() => {
             cancelReaderAutoAlignment();
             window.getSelection()?.removeAllRanges();
-            setPendingSelection(null);
+            closeSelectionSession();
             captureCurrentPageAnchor(zoomRef.current);
             setShowCover((enabled) => !enabled);
             setViewAlignmentRevision((revision) => revision + 1);
@@ -2912,15 +3148,11 @@ export function ReaderContent({
         ) : null}
 
         <ReaderToolRail
-          hasSelection={pendingSelection !== null}
+          hasSelection={selectionSessionId !== null}
           right={toolRailRight}
           readingMode={isReadingMode}
-          onHighlight={() => highlightSelection("amber")}
-          onAnnotate={() => {
-            if (pendingSelection) {
-              setComposerFocusSignal((signal) => signal + 1);
-            }
-          }}
+          onHighlight={() => onApplyMark("highlight", "amber")}
+          onAnnotate={onAnotar}
         />
 
         <div
@@ -2973,10 +3205,11 @@ export function ReaderContent({
         </div>
       ) : null}
 
-      {pendingSelection ? (
+      {pendingSelection && selectionSessionId ? (
         <SelectionToolbar
+          key={selectionSessionId}
           anchor={pendingSelection.anchor}
-          onHighlight={highlightSelection}
+          onHighlight={(color) => onApplyMark("highlight", color)}
           onCopy={copySelection}
         />
       ) : null}
