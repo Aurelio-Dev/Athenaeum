@@ -3489,6 +3489,18 @@ END;
             sql: include_str!("../migrations/0019_add_document_details_metadata.sql"),
             kind: MigrationKind::Up,
         },
+        // v20: cada anotacao passa a registrar como sua geometria deve ser
+        // desenhada no PDF: preenchimento de marca-texto ou linha inferior.
+        // O SQL fica em arquivo separado porque migrations novas seguem esse
+        // padrao no projeto. `include_str!` inclui o texto no binario durante a
+        // compilacao; a execucao continua sendo feita pelo tauri-plugin-sql, na
+        // ordem numerica das versions, quando o aplicativo abre o banco.
+        Migration {
+            version: 20,
+            description: "add_annotation_mark_style",
+            sql: include_str!("../migrations/0020_add_annotation_mark_style.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

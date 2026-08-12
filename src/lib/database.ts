@@ -5,8 +5,8 @@ import Database from "@tauri-apps/plugin-sql";
 import { availableSubjectTags } from "../data/subjectTags";
 import { TAG_COLOR_TOKENS } from "./tagColors";
 import { getSubjectTagTone, registerSubjectTagTone } from "../styles/designTokens";
-import { isHighlightColor } from "../types/annotation";
-import type { Annotation, HighlightColor, NormalizedRect } from "../types/annotation";
+import { isAnnotationMarkStyle, isHighlightColor } from "../types/annotation";
+import type { Annotation, AnnotationMarkStyle, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
@@ -210,6 +210,7 @@ type AnnotationRow = {
   id: string;
   documentId: string;
   page: number;
+  markStyle: string;
   color: HighlightColor;
   selectedText: string;
   note: string;
@@ -227,6 +228,7 @@ type AnnotationDocumentRow = {
 export type NewAnnotation = {
   documentId: string;
   page: number;
+  markStyle: AnnotationMarkStyle;
   color: HighlightColor;
   selectedText: string;
   note: string;
@@ -2007,6 +2009,7 @@ function mapAnnotationRow(row: AnnotationRow): Annotation {
     id: row.id,
     documentId: row.documentId,
     page: row.page,
+    markStyle: isAnnotationMarkStyle(row.markStyle) ? row.markStyle : "highlight",
     color: isHighlightColor(row.color) ? row.color : "amber",
     selectedText: row.selectedText,
     note: row.note,
@@ -2031,6 +2034,7 @@ export async function listAnnotations(documentId: string, source: DatabaseHandle
       id,
       document_id AS documentId,
       page,
+      mark_style AS markStyle,
       color,
       selected_text AS selectedText,
       note,
@@ -2055,6 +2059,7 @@ export async function createAnnotation(input: NewAnnotation, source: DatabaseHan
     id: crypto.randomUUID(),
     documentId: input.documentId,
     page: input.page,
+    markStyle: input.markStyle,
     color: input.color,
     selectedText: input.selectedText,
     note: input.note,
@@ -2068,17 +2073,19 @@ export async function createAnnotation(input: NewAnnotation, source: DatabaseHan
       id,
       document_id,
       page,
+      mark_style,
       color,
       selected_text,
       note,
       rects_json,
       created_at,
       updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       annotation.id,
       annotation.documentId,
       annotation.page,
+      annotation.markStyle,
       annotation.color,
       annotation.selectedText,
       annotation.note,
@@ -2091,6 +2098,26 @@ export async function createAnnotation(input: NewAnnotation, source: DatabaseHan
   await emitReaderInvalidation(READER_ANNOTATIONS_CHANGED_EVENT, annotation.documentId);
 
   return annotation;
+}
+
+// Cor e estilo formam uma unica aparencia logica. Atualiza ambos no mesmo
+// statement para que leitores concorrentes nunca observem uma combinacao parcial.
+export async function updateAnnotationMark(
+  annotationId: string,
+  markStyle: AnnotationMarkStyle,
+  color: HighlightColor,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const database = await getDatabase(source);
+  const documentId = await getAnnotationDocumentId(database, annotationId);
+  const result = await database.execute(
+    "UPDATE annotations SET mark_style = $1, color = $2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $3",
+    [markStyle, color, annotationId],
+  );
+
+  if (documentId && result.rowsAffected > 0) {
+    await emitReaderInvalidation(READER_ANNOTATIONS_CHANGED_EVENT, documentId);
+  }
 }
 
 export async function updateAnnotationNote(annotationId: string, note: string, source: DatabaseHandleSource = "loaded"): Promise<void> {

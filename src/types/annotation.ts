@@ -8,8 +8,16 @@ export const highlightColors = ["amber", "violet", "indigo", "blue", "teal", "ro
 
 export type HighlightColor = (typeof highlightColors)[number];
 
+export const annotationMarkStyles = ["highlight", "underline"] as const;
+
+export type AnnotationMarkStyle = (typeof annotationMarkStyles)[number];
+
 export function isHighlightColor(value: string): value is HighlightColor {
   return (highlightColors as readonly string[]).includes(value);
+}
+
+export function isAnnotationMarkStyle(value: string): value is AnnotationMarkStyle {
+  return (annotationMarkStyles as readonly string[]).includes(value);
 }
 
 // Retangulo normalizado em fracoes 0..1 do tamanho da pagina renderizada.
@@ -27,6 +35,7 @@ export type Annotation = {
   documentId: string;
   // Pagina 1-based onde a anotacao vive.
   page: number;
+  markStyle: AnnotationMarkStyle;
   color: HighlightColor;
   // Texto exato selecionado (para a lista do painel, copiar e verificacao).
   selectedText: string;
