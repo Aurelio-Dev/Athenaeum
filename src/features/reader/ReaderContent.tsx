@@ -32,6 +32,7 @@ import {
   isReaderInvalidationPayload,
   isReaderJumpToPagePayload,
   listAnnotations,
+  listBookmarks,
   listAvailableTags,
   listAvailableTagsFromPreloadedDatabase,
   listNotebookOptions,
@@ -59,6 +60,7 @@ import type {
   ReaderPageStatePayload,
 } from "../../lib/database";
 import type { Annotation, AnnotationMarkStyle, AnnotationSaveState, HighlightColor } from "../../types/annotation";
+import type { DocumentBookmark } from "../../types/bookmark";
 import type { LibraryDocument, ReadingLocation } from "../../types/library";
 import { useInViewport } from "../../hooks/useInViewport";
 import { captureSelection, type CapturedSelection, type PageElement } from "./anchor";
@@ -628,11 +630,15 @@ export function ReaderContent({
   const notesSaveTimerRef = useRef<number | null>(null);
   const latestNotesRef = useRef(document.notes ?? "");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [bookmarks, setBookmarks] = useState<DocumentBookmark[]>([]);
+  const [isBookmarksLoading, setIsBookmarksLoading] = useState(true);
   const [saveStates, setSaveStates] = useState<Map<string, AnnotationSaveState>>(new Map());
   const saveStatesRef = useRef<Map<string, AnnotationSaveState>>(new Map());
   const notesReloadSequenceRef = useRef(0);
   const annotationsReloadSequenceRef = useRef(0);
+  const bookmarksReloadSequenceRef = useRef(0);
   const preloadedAnnotationsDocumentIdRef = useRef<string | null>(null);
+  const preloadedBookmarksDocumentIdRef = useRef<string | null>(null);
   const [popoutDocumentId, setPopoutDocumentId] = useState<string | null>(null);
   const popoutDocumentIdRef = useRef<string | null>(null);
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
@@ -1163,6 +1169,42 @@ export function ReaderContent({
       isCancelled = true;
     };
   }, [document.id, loadDocumentAnnotations]);
+
+  const loadDocumentBookmarks = useCallback(
+    () => listBookmarks(document.id, databaseSource),
+    [databaseSource, document.id],
+  );
+
+  // Carrega os marcadores salvos ao abrir/trocar de documento.
+  useEffect(() => {
+    if (preloadedBookmarksDocumentIdRef.current === document.id) {
+      preloadedBookmarksDocumentIdRef.current = null;
+      return;
+    }
+
+    let isCancelled = false;
+    const requestSequence = ++bookmarksReloadSequenceRef.current;
+    setBookmarks([]);
+    setIsBookmarksLoading(true);
+
+    loadDocumentBookmarks()
+      .then((loaded) => {
+        if (!isCancelled && requestSequence === bookmarksReloadSequenceRef.current) {
+          setBookmarks(loaded);
+          setIsBookmarksLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel carregar os marcadores.", error);
+        if (!isCancelled && requestSequence === bookmarksReloadSequenceRef.current) {
+          setIsBookmarksLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [document.id, loadDocumentBookmarks]);
 
   const setSaveState = useCallback((annotationId: string, state: AnnotationSaveState) => {
     const next = new Map(saveStatesRef.current);
@@ -2107,14 +2149,16 @@ export function ReaderContent({
           let loadedDocument: LibraryDocument | null;
           let loadedNotes: string;
           let loadedAnnotations: Annotation[];
+          let loadedBookmarks: DocumentBookmark[];
           let linkedNotebook: Awaited<ReturnType<typeof getLatestLinkedNotebook>>;
           let notebooks: Awaited<ReturnType<typeof listNotebookOptions>>;
           try {
             await setDocumentReadingStarted(nextDocumentId, databaseSource);
-            [loadedDocument, loadedNotes, loadedAnnotations, linkedNotebook, notebooks] = await Promise.all([
+            [loadedDocument, loadedNotes, loadedAnnotations, loadedBookmarks, linkedNotebook, notebooks] = await Promise.all([
               getLibraryDocument(nextDocumentId, databaseSource),
               getDocumentNotes(nextDocumentId, databaseSource),
               listAnnotations(nextDocumentId, databaseSource),
+              listBookmarks(nextDocumentId, databaseSource),
               getLatestLinkedNotebook(nextDocumentId, databaseSource),
               listNotebookOptions(databaseSource),
               databaseSource === "preloaded"
@@ -2191,6 +2235,7 @@ export function ReaderContent({
           }
           notesReloadSequenceRef.current += 1;
           annotationsReloadSequenceRef.current += 1;
+          bookmarksReloadSequenceRef.current += 1;
           failedCreatesRef.current = new Map();
           saveStatesRef.current = emptySaveStates;
           zoomRef.current = nextZoom;
@@ -2199,6 +2244,7 @@ export function ReaderContent({
           activeDocumentIdRef.current = nextDocument.id;
           preloadedPdfDocumentIdRef.current = nextDocument.id;
           preloadedAnnotationsDocumentIdRef.current = nextDocument.id;
+          preloadedBookmarksDocumentIdRef.current = nextDocument.id;
 
           setPageSizes(new Map());
           setPdfOutline(loadedPdf.outline);
@@ -2212,6 +2258,8 @@ export function ReaderContent({
           setNotesText(loadedNotes);
           latestNotesRef.current = loadedNotes;
           setAnnotations(loadedAnnotations);
+          setBookmarks(loadedBookmarks);
+          setIsBookmarksLoading(false);
           setSaveStates(emptySaveStates);
           closeSelectionSession();
           setEditingAnnotationId(null);
@@ -3133,6 +3181,8 @@ export function ReaderContent({
               document={document}
               pdfDocument={pdfDocument}
               outline={pdfOutline}
+              bookmarks={bookmarks}
+              isBookmarksLoading={isBookmarksLoading}
               currentPage={currentPage}
               totalPages={totalPages}
               fileSizeBytes={fileSizeBytes}

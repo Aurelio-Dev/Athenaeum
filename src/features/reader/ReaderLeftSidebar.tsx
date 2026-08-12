@@ -5,6 +5,7 @@ import type * as pdfjsLib from "pdfjs-dist";
 import { useInViewport } from "../../hooks/useInViewport";
 import { openDocumentExternally } from "../../lib/database";
 import type { DatabaseHandleSource } from "../../lib/database";
+import type { DocumentBookmark } from "../../types/bookmark";
 import type { LibraryDocument } from "../../types/library";
 import type { RegisterPdfCancellation } from "./PdfTextLayer";
 import { DetailsTab, type ReaderDetailsPreload } from "./panels/DetailsTab";
@@ -27,6 +28,8 @@ type ReaderLeftSidebarProps = {
   document: LibraryDocument;
   pdfDocument: PdfDocument | null;
   outline: PdfOutlineItem[];
+  bookmarks: DocumentBookmark[];
+  isBookmarksLoading: boolean;
   currentPage: number;
   totalPages: number;
   fileSizeBytes: number | null;
@@ -41,10 +44,10 @@ type ReaderLeftSidebarProps = {
   onToggleFavorite: () => Promise<void>;
 };
 
-const tabs: Array<{ id: ReaderSidebarView; label: string; disabled?: boolean }> = [
+const tabs: Array<{ id: ReaderSidebarView; label: string }> = [
   { id: "outline", label: "Sumário" },
   { id: "thumbnails", label: "Miniaturas" },
-  { id: "bookmarks", label: "Marcadores", disabled: true },
+  { id: "bookmarks", label: "Marcadores" },
   { id: "details", label: "Detalhes" },
 ];
 
@@ -250,10 +253,70 @@ function ThumbnailRow({ pdfDocument, page, active, sectionTitle, registerPdfCanc
   );
 }
 
+type BookmarksViewProps = {
+  bookmarks: DocumentBookmark[];
+  isLoading: boolean;
+  currentPage: number;
+  onJumpToPage: (page: number) => void;
+};
+
+function BookmarksView({ bookmarks, isLoading, currentPage, onJumpToPage }: BookmarksViewProps) {
+  if (isLoading) {
+    return (
+      <p role="status" className="px-1 text-xs leading-5 text-[var(--muted-foreground)]">
+        Carregando marcadores...
+      </p>
+    );
+  }
+
+  if (bookmarks.length === 0) {
+    return (
+      <div
+        role="status"
+        className="flex flex-col items-center rounded-lg border border-dashed border-border-subtle px-4 py-8 text-center text-[var(--muted-foreground)]"
+      >
+        <BookmarkIcon />
+        <p className="mt-3 text-xs leading-5">Nenhum marcador ainda.</p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {bookmarks.map((bookmark) => {
+        const label = bookmark.label?.trim();
+        const isCurrentPage = bookmark.pageNumber === currentPage;
+
+        return (
+          <li key={bookmark.id}>
+            <button
+              type="button"
+              aria-current={isCurrentPage ? "page" : undefined}
+              className={`w-full rounded-lg border px-3 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                isCurrentPage
+                  ? "border-primary bg-[var(--color-accent-tint-bg)]"
+                  : "border-border-subtle bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
+              }`}
+              onClick={() => onJumpToPage(bookmark.pageNumber)}
+            >
+              <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary" : "text-[var(--foreground)]"}`}>
+                Página {bookmark.pageNumber}
+              </span>
+              {label ? <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">{label}</span> : null}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function ReaderLeftSidebar({
   document,
   pdfDocument,
   outline,
+  bookmarks,
+  isBookmarksLoading,
   currentPage,
   totalPages,
   fileSizeBytes,
@@ -383,21 +446,20 @@ export function ReaderLeftSidebar({
       return;
     }
 
-    const enabledTabs = tabs.filter((tab) => !tab.disabled);
-    const currentIndex = enabledTabs.findIndex((tab) => tab.id === currentView);
+    const currentIndex = tabs.findIndex((tab) => tab.id === currentView);
     let nextIndex = currentIndex;
 
     if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = enabledTabs.length - 1;
+      nextIndex = tabs.length - 1;
     } else if (event.key === "ArrowRight") {
-      nextIndex = (currentIndex + 1) % enabledTabs.length;
+      nextIndex = (currentIndex + 1) % tabs.length;
     } else {
-      nextIndex = (currentIndex - 1 + enabledTabs.length) % enabledTabs.length;
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
     }
 
-    const nextTab = enabledTabs[nextIndex];
+    const nextTab = tabs[nextIndex];
     if (!nextTab) {
       return;
     }
@@ -489,10 +551,12 @@ export function ReaderLeftSidebar({
       onTagsChanged={handleTagsChanged}
     />
   ) : (
-    <div className="flex flex-col items-center rounded-lg border border-dashed border-border-subtle px-4 py-8 text-center text-[var(--muted-foreground)]">
-      <BookmarkIcon />
-      <p className="mt-3 text-xs leading-5">Marcadores estarão disponíveis em uma próxima entrega.</p>
-    </div>
+    <BookmarksView
+      bookmarks={bookmarks}
+      isLoading={isBookmarksLoading}
+      currentPage={currentPage}
+      onJumpToPage={onJumpToPage}
+    />
   );
 
   return (
@@ -509,7 +573,6 @@ export function ReaderLeftSidebar({
       >
         {tabs.map((tab) => {
           const isSelected = activeView === tab.id;
-          const disabledTitle = "Marcadores estarão disponíveis em uma próxima entrega.";
 
           return (
             <button
@@ -517,13 +580,12 @@ export function ReaderLeftSidebar({
               id={`${tabIdPrefix}-${tab.id}-tab`}
               type="button"
               role="tab"
-              aria-label={tab.disabled ? `${tab.label} — indisponível nesta versão` : tab.label}
+              aria-label={tab.label}
               aria-selected={isSelected}
               aria-controls={`${tabIdPrefix}-panel`}
-              disabled={tab.disabled}
-              title={tab.disabled ? disabledTitle : tab.label}
+              title={tab.label}
               tabIndex={isSelected ? 0 : -1}
-              className={`inline-flex h-[30px] min-w-0 flex-1 items-center justify-center rounded-[7px] outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`inline-flex h-[30px] min-w-0 flex-1 items-center justify-center rounded-[7px] outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 isSelected
                   ? "bg-[var(--color-accent-tint-bg)] text-primary"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
