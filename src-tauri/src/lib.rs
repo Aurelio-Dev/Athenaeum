@@ -3501,6 +3501,12 @@ END;
             sql: include_str!("../migrations/0020_add_annotation_mark_style.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 21,
+            description: "add_document_bookmarks",
+            sql: include_str!("../migrations/0021_add_document_bookmarks.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

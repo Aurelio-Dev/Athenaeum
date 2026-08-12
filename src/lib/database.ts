@@ -7,6 +7,7 @@ import { TAG_COLOR_TOKENS } from "./tagColors";
 import { getSubjectTagTone, registerSubjectTagTone } from "../styles/designTokens";
 import { isAnnotationMarkStyle, isHighlightColor } from "../types/annotation";
 import type { Annotation, AnnotationMarkStyle, HighlightColor, NormalizedRect } from "../types/annotation";
+import type { DocumentBookmark } from "../types/bookmark";
 import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
@@ -221,6 +222,14 @@ type AnnotationRow = {
 
 type AnnotationDocumentRow = {
   documentId: string;
+};
+
+type DocumentBookmarkRow = {
+  id: string;
+  documentId: string;
+  pageNumber: number;
+  label: string | null;
+  createdAt: string;
 };
 
 // Dados necessarios para criar uma anotacao. id e timestamps sao gerados aqui
@@ -2138,6 +2147,80 @@ export async function deleteAnnotation(annotationId: string, source: DatabaseHan
   if (documentId && result.rowsAffected > 0) {
     await emitReaderInvalidation(READER_ANNOTATIONS_CHANGED_EVENT, documentId);
   }
+}
+
+function mapDocumentBookmarkRow(row: DocumentBookmarkRow): DocumentBookmark {
+  return {
+    id: row.id,
+    documentId: row.documentId,
+    pageNumber: row.pageNumber,
+    label: row.label,
+    createdAt: row.createdAt,
+  };
+}
+
+export async function listBookmarks(
+  documentId: string,
+  source: DatabaseHandleSource,
+): Promise<DocumentBookmark[]> {
+  const database = await getDatabase(source);
+  const rows = await database.select<DocumentBookmarkRow[]>(
+    `SELECT
+      id,
+      document_id AS documentId,
+      page_number AS pageNumber,
+      label,
+      created_at AS createdAt
+    FROM document_bookmarks
+    WHERE document_id = $1
+    ORDER BY page_number ASC, created_at ASC`,
+    [documentId],
+  );
+
+  return rows.map(mapDocumentBookmarkRow);
+}
+
+export async function createBookmark(
+  documentId: string,
+  pageNumber: number,
+  label: string | null,
+  source: DatabaseHandleSource,
+): Promise<DocumentBookmark> {
+  const database = await getDatabase(source);
+  const bookmark: DocumentBookmark = {
+    id: crypto.randomUUID(),
+    documentId,
+    pageNumber,
+    label,
+    createdAt: new Date().toISOString(),
+  };
+
+  await database.execute(
+    `INSERT INTO document_bookmarks (
+      id,
+      document_id,
+      page_number,
+      label,
+      created_at
+    ) VALUES ($1, $2, $3, $4, $5)`,
+    [bookmark.id, bookmark.documentId, bookmark.pageNumber, bookmark.label, bookmark.createdAt],
+  );
+
+  return bookmark;
+}
+
+export async function updateBookmarkLabel(
+  bookmarkId: string,
+  label: string | null,
+  source: DatabaseHandleSource,
+): Promise<void> {
+  const database = await getDatabase(source);
+  await database.execute("UPDATE document_bookmarks SET label = $1 WHERE id = $2", [label, bookmarkId]);
+}
+
+export async function deleteBookmark(bookmarkId: string, source: DatabaseHandleSource): Promise<void> {
+  const database = await getDatabase(source);
+  await database.execute("DELETE FROM document_bookmarks WHERE id = $1", [bookmarkId]);
 }
 
 async function purgeExpiredTrash(database: Database) {
