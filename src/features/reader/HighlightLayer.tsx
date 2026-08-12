@@ -44,6 +44,7 @@ export function HighlightLayer({ annotations, saveStates, onRetry, onSelect }: H
         const isUnsaved = (saveStates.get(annotation.id) ?? "saved") === "unsaved";
         const firstRect = annotation.rects[0];
         const palette = highlightPalette[annotation.color];
+        const isUnderline = annotation.markStyle === "underline";
 
         return (
           <div key={annotation.id}>
@@ -62,8 +63,9 @@ export function HighlightLayer({ annotations, saveStates, onRetry, onSelect }: H
                   top: `${rect.y * 100}%`,
                   width: `${rect.w * 100}%`,
                   height: `${rect.h * 100}%`,
-                  backgroundColor: palette.bg,
-                  opacity: 0.3,
+                  backgroundColor: isUnderline ? "transparent" : palette.bg,
+                  borderBottom: isUnderline ? `2px solid ${palette.bg}` : undefined,
+                  opacity: isUnderline ? undefined : 0.3,
                 }}
                 onClick={() => onSelect(annotation)}
               />

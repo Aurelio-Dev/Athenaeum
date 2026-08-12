@@ -3209,7 +3209,8 @@ export function ReaderContent({
         <SelectionToolbar
           key={selectionSessionId}
           anchor={pendingSelection.anchor}
-          onHighlight={(color) => onApplyMark("highlight", color)}
+          onApplyMark={onApplyMark}
+          onAnotar={onAnotar}
           onCopy={copySelection}
         />
       ) : null}

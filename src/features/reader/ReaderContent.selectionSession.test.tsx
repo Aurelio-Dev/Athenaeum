@@ -5,7 +5,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NewAnnotation } from "../../lib/database";
-import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
+import type {
+  Annotation,
+  AnnotationMarkStyle,
+  AnnotationSaveState,
+  HighlightColor,
+} from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
 import type { CapturedSelection } from "./anchor";
 import { ReaderContent } from "./ReaderContent";
@@ -137,7 +142,11 @@ vi.mock("./SelectionToolbar", async () => {
   const colors: HighlightColor[] = ["amber", "violet", "blue", "rose"];
 
   return {
-    SelectionToolbar: ({ onHighlight }: { onHighlight: (color: HighlightColor) => void }) => createElement(
+    SelectionToolbar: ({
+      onApplyMark,
+    }: {
+      onApplyMark: (style: AnnotationMarkStyle, color: HighlightColor) => void;
+    }) => createElement(
       "div",
       { "data-testid": "selection-toolbar" },
       colors.map((color) => createElement(
@@ -146,7 +155,7 @@ vi.mock("./SelectionToolbar", async () => {
           key: color,
           type: "button",
           "data-testid": `apply-${color}`,
-          onClick: () => onHighlight(color),
+          onClick: () => onApplyMark("highlight", color),
         },
         color,
       )),
