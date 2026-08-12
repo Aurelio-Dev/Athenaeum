@@ -23,7 +23,9 @@ import { HeartIcon } from "../../components/ui/SharedIcons";
 import { useContextMenu } from "../../hooks/useContextMenu";
 import {
   createAnnotation,
+  createBookmark,
   deleteAnnotation,
+  deleteBookmark,
   getLatestLinkedNotebook,
   getLibraryDocument,
   getDocumentNotes,
@@ -52,6 +54,7 @@ import {
   setSetting,
   updateAnnotationMark,
   updateAnnotationNote,
+  updateBookmarkLabel,
 } from "../../lib/database";
 import type {
   DatabaseHandleSource,
@@ -198,6 +201,11 @@ function mergeAnnotationsPreservingPending(
     ...pendingAnnotations,
   ];
 }
+
+function compareDocumentBookmarks(first: DocumentBookmark, second: DocumentBookmark) {
+  return first.pageNumber - second.pageNumber || first.createdAt.localeCompare(second.createdAt);
+}
+
 // Escala base do PDF: o canvas e a camada de texto usam a MESMA escala para o
 // texto transparente cair exatamente sobre as letras.
 const pdfBaseScale = 1.1;
@@ -604,6 +612,9 @@ export function ReaderContent({
   // Incrementado no Ctrl+F para a sidebar focar o campo de busca depois de
   // renderizada (sinal deterministico, sem timers de foco).
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
+  // Solicita que a sidebar revele Marcadores e encaminhe a criacao para a
+  // BookmarksView depois que ela estiver montada.
+  const [bookmarkFocusSignal, setBookmarkFocusSignal] = useState(0);
   // Sinaliza para a doca inferior que o campo de nota deve receber foco. A
   // nota continua estritamente vinculada a uma selecao capturada no PDF.
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
@@ -814,6 +825,14 @@ export function ReaderContent({
       setLeftPanelOpen(false);
     }
   }, [isCompactReader]);
+
+  // Evita que uma solicitacao antiga seja interpretada novamente quando a
+  // sidebar for reaberta manualmente depois de ter sido desmontada.
+  useEffect(() => {
+    if (!leftPanelOpen) {
+      setBookmarkFocusSignal(0);
+    }
+  }, [leftPanelOpen]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1206,6 +1225,57 @@ export function ReaderContent({
     };
   }, [document.id, loadDocumentBookmarks]);
 
+  const createPageBookmark = useCallback(async (): Promise<DocumentBookmark> => {
+    const targetDocumentId = document.id;
+    const createdBookmark = await createBookmark(targetDocumentId, currentPage, null, databaseSource);
+    if (activeDocumentIdRef.current === targetDocumentId) {
+      setBookmarks((current) =>
+        [...current.filter((bookmark) => bookmark.id !== createdBookmark.id), createdBookmark].sort(compareDocumentBookmarks),
+      );
+    }
+    return createdBookmark;
+  }, [currentPage, databaseSource, document.id]);
+
+  const saveBookmarkLabel = useCallback(
+    async (bookmarkId: string, label: string | null): Promise<void> => {
+      const previousBookmark = bookmarks.find((bookmark) => bookmark.id === bookmarkId);
+      if (!previousBookmark || previousBookmark.label === label) {
+        return;
+      }
+
+      setBookmarks((current) =>
+        current.map((bookmark) => (bookmark.id === bookmarkId ? { ...bookmark, label } : bookmark)),
+      );
+
+      try {
+        await updateBookmarkLabel(bookmarkId, label, databaseSource);
+      } catch (error) {
+        // Reverte apenas se nenhuma edicao mais recente substituiu este valor.
+        if (activeDocumentIdRef.current === document.id) {
+          setBookmarks((current) =>
+            current.map((bookmark) =>
+              bookmark.id === bookmarkId && bookmark.label === label
+                ? { ...bookmark, label: previousBookmark.label }
+                : bookmark,
+            ),
+          );
+        }
+        throw error;
+      }
+    },
+    [bookmarks, databaseSource, document.id],
+  );
+
+  const removePageBookmark = useCallback(
+    async (bookmarkId: string): Promise<void> => {
+      await deleteBookmark(bookmarkId, databaseSource);
+      if (activeDocumentIdRef.current === document.id) {
+        setBookmarks((current) => current.filter((bookmark) => bookmark.id !== bookmarkId));
+      }
+    },
+    [databaseSource, document.id],
+  );
+
   const setSaveState = useCallback((annotationId: string, state: AnnotationSaveState) => {
     const next = new Map(saveStatesRef.current);
     next.set(annotationId, state);
@@ -1572,6 +1642,11 @@ export function ReaderContent({
     closeSelectionSession(true);
     setComposerFocusSignal((signal) => signal + 1);
   }, [closeSelectionSession, pendingSelection]);
+
+  const onAddBookmark = useCallback((): void => {
+    setLeftPanelOpen(true);
+    setBookmarkFocusSignal((signal) => signal + 1);
+  }, []);
 
   // Le a selecao atual do navegador no fim de cada interacao de mouse sobre a
   // area de leitura e posiciona a toolbar (ou a esconde, se nao houver selecao).
@@ -2264,6 +2339,7 @@ export function ReaderContent({
           closeSelectionSession();
           setEditingAnnotationId(null);
           setSearchFocusSignal(0);
+          setBookmarkFocusSignal(0);
           setComposerFocusSignal(0);
           setReaderActionError("");
           setIsTogglingFavoriteFromContextMenu(false);
@@ -3188,10 +3264,14 @@ export function ReaderContent({
               fileSizeBytes={fileSizeBytes}
               progress={progress}
               searchFocusSignal={searchFocusSignal}
+              bookmarkFocusSignal={bookmarkFocusSignal}
               databaseSource={databaseSource}
               detailsPreload={detailsPreload}
               registerPdfCancellation={registerPdfCancellation}
               onJumpToPage={scrollToPage}
+              onCreateBookmark={createPageBookmark}
+              onUpdateBookmarkLabel={saveBookmarkLabel}
+              onDeleteBookmark={removePageBookmark}
               onToggleFavorite={() => onToggleFavorite(document.id)}
             />
           </div>
@@ -3203,6 +3283,7 @@ export function ReaderContent({
           readingMode={isReadingMode}
           onHighlight={() => onApplyMark("highlight", "amber")}
           onAnnotate={onAnotar}
+          onAddBookmark={onAddBookmark}
         />
 
         <div

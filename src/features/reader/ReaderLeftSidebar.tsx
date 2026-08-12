@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as Reac
 import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import type * as pdfjsLib from "pdfjs-dist";
+import { BookmarkIcon, TrashIcon } from "../../components/ui/SharedIcons";
 import { useInViewport } from "../../hooks/useInViewport";
 import { openDocumentExternally } from "../../lib/database";
 import type { DatabaseHandleSource } from "../../lib/database";
@@ -37,10 +38,14 @@ type ReaderLeftSidebarProps = {
   // Incrementado pelo ReaderContent no Ctrl+F: foca o campo de busca mesmo que a
   // sidebar tenha acabado de ser aberta (sinal deterministico, sem timers).
   searchFocusSignal: number;
+  bookmarkFocusSignal: number;
   databaseSource?: DatabaseHandleSource;
   detailsPreload?: ReaderDetailsPreload | null;
   registerPdfCancellation?: RegisterPdfCancellation;
   onJumpToPage: (page: number) => void;
+  onCreateBookmark: () => Promise<DocumentBookmark>;
+  onUpdateBookmarkLabel: (bookmarkId: string, label: string | null) => Promise<void>;
+  onDeleteBookmark: (bookmarkId: string) => Promise<void>;
   onToggleFavorite: () => Promise<void>;
 };
 
@@ -92,11 +97,7 @@ function SidebarViewIcon({ view }: { view: ReaderSidebarView }) {
   }
 
   if (view === "bookmarks") {
-    return (
-      <svg {...commonProps}>
-        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-      </svg>
-    );
+    return <BookmarkIcon size={15} variant="chrome" />;
   }
 
   return (
@@ -122,14 +123,6 @@ function CloseIcon() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
       <path d="m6 6 12 12" />
       <path d="m18 6-12 12" />
-    </svg>
-  );
-}
-
-function BookmarkIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M6 4.5h12A0.5 0.5 0 0 1 18.5 5v15.5L12 16l-6.5 4.5V5A0.5 0.5 0 0 1 6 4.5z" />
     </svg>
   );
 }
@@ -254,60 +247,248 @@ function ThumbnailRow({ pdfDocument, page, active, sectionTitle, registerPdfCanc
 }
 
 type BookmarksViewProps = {
+  documentId: string;
   bookmarks: DocumentBookmark[];
   isLoading: boolean;
+  bookmarkFocusSignal: number;
   currentPage: number;
   onJumpToPage: (page: number) => void;
+  onCreateBookmark: () => Promise<DocumentBookmark>;
+  onUpdateBookmarkLabel: (bookmarkId: string, label: string | null) => Promise<void>;
+  onDeleteBookmark: (bookmarkId: string) => Promise<void>;
 };
 
-function BookmarksView({ bookmarks, isLoading, currentPage, onJumpToPage }: BookmarksViewProps) {
-  if (isLoading) {
-    return (
-      <p role="status" className="px-1 text-xs leading-5 text-[var(--muted-foreground)]">
-        Carregando marcadores...
-      </p>
-    );
+function BookmarksView({
+  documentId,
+  bookmarks,
+  isLoading,
+  bookmarkFocusSignal,
+  currentPage,
+  onJumpToPage,
+  onCreateBookmark,
+  onUpdateBookmarkLabel,
+  onDeleteBookmark,
+}: BookmarksViewProps) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [editingBookmarkId, setEditingBookmarkId] = useState<string | null>(null);
+  const [inlineBookmarkLabel, setInlineBookmarkLabel] = useState("");
+  const [deletingBookmarkIds, setDeletingBookmarkIds] = useState<Set<string>>(new Set());
+  const createInFlightRef = useRef(false);
+  const deleteInFlightRef = useRef<Set<string>>(new Set());
+  const skipInlineRenameBlurRef = useRef(false);
+  const activeDocumentIdRef = useRef(documentId);
+  const lastBookmarkFocusSignalRef = useRef(bookmarkFocusSignal);
+  activeDocumentIdRef.current = documentId;
+
+  useEffect(() => {
+    createInFlightRef.current = false;
+    deleteInFlightRef.current = new Set();
+    skipInlineRenameBlurRef.current = false;
+    setIsCreating(false);
+    setEditingBookmarkId(null);
+    setInlineBookmarkLabel("");
+    setDeletingBookmarkIds(new Set());
+    lastBookmarkFocusSignalRef.current = bookmarkFocusSignal;
+  }, [documentId]);
+
+  function startInlineRename(bookmark: DocumentBookmark) {
+    skipInlineRenameBlurRef.current = false;
+    setEditingBookmarkId(bookmark.id);
+    setInlineBookmarkLabel(bookmark.label ?? "");
   }
 
-  if (bookmarks.length === 0) {
-    return (
-      <div
-        role="status"
-        className="flex flex-col items-center rounded-lg border border-dashed border-border-subtle px-4 py-8 text-center text-[var(--muted-foreground)]"
-      >
-        <BookmarkIcon />
-        <p className="mt-3 text-xs leading-5">Nenhum marcador ainda.</p>
-      </div>
-    );
+  function cancelInlineRename() {
+    skipInlineRenameBlurRef.current = true;
+    setEditingBookmarkId(null);
+    setInlineBookmarkLabel("");
+  }
+
+  async function submitInlineRename(bookmark: DocumentBookmark) {
+    if (skipInlineRenameBlurRef.current) {
+      skipInlineRenameBlurRef.current = false;
+      return;
+    }
+
+    if (editingBookmarkId !== bookmark.id) {
+      return;
+    }
+
+    const trimmedLabel = inlineBookmarkLabel.trim();
+    const nextLabel = trimmedLabel.length > 0 ? trimmedLabel : null;
+    setEditingBookmarkId(null);
+    setInlineBookmarkLabel("");
+
+    try {
+      await onUpdateBookmarkLabel(bookmark.id, nextLabel);
+    } catch (error) {
+      console.warn("Nao foi possivel atualizar o marcador.", error);
+    }
+  }
+
+  async function handleCreateBookmark() {
+    if (createInFlightRef.current) {
+      return;
+    }
+
+    const targetDocumentId = documentId;
+    createInFlightRef.current = true;
+    setIsCreating(true);
+    try {
+      const createdBookmark = await onCreateBookmark();
+      if (activeDocumentIdRef.current === targetDocumentId) {
+        startInlineRename(createdBookmark);
+      }
+    } catch (error) {
+      console.warn("Nao foi possivel criar o marcador.", error);
+    } finally {
+      if (activeDocumentIdRef.current === targetDocumentId) {
+        createInFlightRef.current = false;
+        setIsCreating(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (bookmarkFocusSignal === lastBookmarkFocusSignalRef.current) {
+      return;
+    }
+
+    lastBookmarkFocusSignalRef.current = bookmarkFocusSignal;
+    void handleCreateBookmark();
+  }, [bookmarkFocusSignal]);
+
+  async function handleDeleteBookmark(bookmarkId: string) {
+    if (deleteInFlightRef.current.has(bookmarkId)) {
+      return;
+    }
+
+    const targetDocumentId = documentId;
+    deleteInFlightRef.current.add(bookmarkId);
+    setDeletingBookmarkIds(new Set(deleteInFlightRef.current));
+    try {
+      await onDeleteBookmark(bookmarkId);
+      if (activeDocumentIdRef.current === targetDocumentId) {
+        setEditingBookmarkId((current) => (current === bookmarkId ? null : current));
+      }
+    } catch (error) {
+      console.warn("Nao foi possivel remover o marcador.", error);
+    } finally {
+      if (activeDocumentIdRef.current === targetDocumentId) {
+        deleteInFlightRef.current.delete(bookmarkId);
+        setDeletingBookmarkIds(new Set(deleteInFlightRef.current));
+      }
+    }
   }
 
   return (
-    <ul className="space-y-2">
-      {bookmarks.map((bookmark) => {
-        const label = bookmark.label?.trim();
-        const isCurrentPage = bookmark.pageNumber === currentPage;
+    <div className="space-y-3">
+      <button
+        type="button"
+        disabled={isLoading || isCreating}
+        className="inline-flex items-center rounded-full border border-dashed border-[#D6C8BB] bg-[#E8DDD4] px-2.5 py-1 text-xs font-medium text-text-secondary outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#4A3A2F] dark:bg-[#332820]"
+        onClick={() => void handleCreateBookmark()}
+      >
+        {isCreating ? "Adicionando..." : "+ Marcador"}
+      </button>
 
-        return (
-          <li key={bookmark.id}>
-            <button
-              type="button"
-              aria-current={isCurrentPage ? "page" : undefined}
-              className={`w-full rounded-lg border px-3 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 ${
-                isCurrentPage
-                  ? "border-primary bg-[var(--color-accent-tint-bg)]"
-                  : "border-border-subtle bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
-              }`}
-              onClick={() => onJumpToPage(bookmark.pageNumber)}
-            >
-              <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary" : "text-[var(--foreground)]"}`}>
-                Página {bookmark.pageNumber}
-              </span>
-              {label ? <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">{label}</span> : null}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+      {isLoading ? (
+        <p role="status" className="px-1 text-xs leading-5 text-[var(--muted-foreground)]">
+          Carregando marcadores...
+        </p>
+      ) : bookmarks.length === 0 ? (
+        <div
+          role="status"
+          className="flex flex-col items-center rounded-lg border border-dashed border-border-subtle px-4 py-8 text-center text-[var(--muted-foreground)]"
+        >
+          <BookmarkIcon size={22} />
+          <p className="mt-3 text-xs leading-5">Nenhum marcador ainda.</p>
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {bookmarks.map((bookmark) => {
+            const label = bookmark.label?.trim();
+            const isCurrentPage = bookmark.pageNumber === currentPage;
+            const isEditing = editingBookmarkId === bookmark.id;
+            const isDeleting = deletingBookmarkIds.has(bookmark.id);
+
+            return (
+              <li
+                key={bookmark.id}
+                className={`group flex min-w-0 items-center rounded-lg border transition ${
+                  isCurrentPage
+                    ? "border-primary bg-[var(--color-accent-tint-bg)]"
+                    : "border-border-subtle bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
+                }`}
+              >
+                {isEditing ? (
+                  <div className="min-w-0 flex-1 px-3 py-2">
+                    <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary" : "text-[var(--foreground)]"}`}>
+                      Página {bookmark.pageNumber}
+                    </span>
+                    <input
+                      value={inlineBookmarkLabel}
+                      autoFocus
+                      aria-label={`Editar label do marcador da página ${bookmark.pageNumber}`}
+                      placeholder="Adicionar label"
+                      className="mt-1 block w-full rounded-md border border-border-muted bg-[var(--background)] px-1.5 py-0.5 text-xs leading-5 text-[var(--foreground)] outline-none focus:border-primary"
+                      onChange={(event) => setInlineBookmarkLabel(event.target.value)}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onBlur={() => void submitInlineRename(bookmark)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelInlineRename();
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-current={isCurrentPage ? "page" : undefined}
+                    className="min-w-0 flex-1 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                    onClick={() => onJumpToPage(bookmark.pageNumber)}
+                  >
+                    <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary" : "text-[var(--foreground)]"}`}>
+                      Página {bookmark.pageNumber}
+                    </span>
+                    <span
+                      className={`mt-1 block min-h-5 text-xs leading-5 ${
+                        label ? "text-[var(--muted-foreground)]" : "italic text-[var(--muted-foreground)]"
+                      }`}
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        startInlineRename(bookmark);
+                      }}
+                    >
+                      {label || "Adicionar label"}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  aria-label={`Remover marcador da página ${bookmark.pageNumber}`}
+                  title={isDeleting ? "Removendo marcador..." : "Remover marcador"}
+                  disabled={isDeleting}
+                  className="mr-1.5 shrink-0 rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 outline-none transition hover:bg-status-red hover:text-status-red-text focus:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
+                  onClick={() => void handleDeleteBookmark(bookmark.id)}
+                >
+                  <TrashIcon size={14} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -322,10 +503,14 @@ export function ReaderLeftSidebar({
   fileSizeBytes,
   progress,
   searchFocusSignal,
+  bookmarkFocusSignal,
   databaseSource = "loaded",
   detailsPreload = null,
   registerPdfCancellation,
   onJumpToPage,
+  onCreateBookmark,
+  onUpdateBookmarkLabel,
+  onDeleteBookmark,
   onToggleFavorite,
 }: ReaderLeftSidebarProps) {
   const [activeView, setActiveView] = useState<ReaderSidebarView>("details");
@@ -333,6 +518,8 @@ export function ReaderLeftSidebar({
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<DocumentSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [pendingBookmarkFocusSignal, setPendingBookmarkFocusSignal] = useState<number | null>(null);
+  const [bookmarkCreateSignal, setBookmarkCreateSignal] = useState(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const tabIdPrefix = useId();
@@ -372,6 +559,28 @@ export function ReaderLeftSidebar({
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
   }, [isSearchOpen, searchFocusSignal]);
+
+  useEffect(() => {
+    if (bookmarkFocusSignal <= 0) {
+      return;
+    }
+
+    setSearchTerm("");
+    setIsSearchOpen(false);
+    setActiveView("bookmarks");
+    setPendingBookmarkFocusSignal(bookmarkFocusSignal);
+  }, [bookmarkFocusSignal]);
+
+  // Encaminha a solicitacao apenas depois que a aba ja montou. Com isso,
+  // BookmarksView pode ignorar o valor inicial sem perder uma acao externa.
+  useEffect(() => {
+    if (activeView !== "bookmarks" || pendingBookmarkFocusSignal === null) {
+      return;
+    }
+
+    setBookmarkCreateSignal(pendingBookmarkFocusSignal);
+    setPendingBookmarkFocusSignal(null);
+  }, [activeView, pendingBookmarkFocusSignal]);
 
   // Busca debounced com cancelamento: digitar por cima invalida a busca em
   // andamento (a flag para o loop de paginas do searcher).
@@ -552,10 +761,15 @@ export function ReaderLeftSidebar({
     />
   ) : (
     <BookmarksView
+      documentId={document.id}
       bookmarks={bookmarks}
       isLoading={isBookmarksLoading}
+      bookmarkFocusSignal={bookmarkCreateSignal}
       currentPage={currentPage}
       onJumpToPage={onJumpToPage}
+      onCreateBookmark={onCreateBookmark}
+      onUpdateBookmarkLabel={onUpdateBookmarkLabel}
+      onDeleteBookmark={onDeleteBookmark}
     />
   );
 

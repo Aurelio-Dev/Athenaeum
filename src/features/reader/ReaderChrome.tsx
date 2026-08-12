@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
+import { BookmarkIcon } from "../../components/ui/SharedIcons";
 import { useContextMenu } from "../../hooks/useContextMenu";
 import type { LibraryDocument } from "../../types/library";
 import type { ReaderPageLayout, ReaderZoomMode } from "./readerView";
@@ -9,7 +10,6 @@ import type { ReaderPageLayout, ReaderZoomMode } from "./readerView";
 type ChromeIconName =
   | "actual"
   | "annotate"
-  | "bookmark"
   | "book"
   | "close"
   | "cover"
@@ -49,7 +49,6 @@ function ChromeIcon({ name, size = 18 }: ChromeIconProps) {
         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
       </>
     ),
-    bookmark: <path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />,
     book: (
       <>
         <path d="M12 6.6C9.4 4.9 5.9 4.6 3.1 5.5v12.7c2.8-.9 6.3-.6 8.9 1.1 2.6-1.7 6.1-2 8.9-1.1V5.5C18 4.6 14.6 4.9 12 6.6Z" />
@@ -651,12 +650,13 @@ type ReaderToolRailProps = {
   readingMode: boolean;
   onHighlight: () => void;
   onAnnotate: () => void;
+  onAddBookmark: () => void;
 };
 
 const toolButtonClassName =
   "inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-card disabled:cursor-not-allowed disabled:opacity-40";
 
-export function ReaderToolRail({ hasSelection, right, readingMode, onHighlight, onAnnotate }: ReaderToolRailProps) {
+export function ReaderToolRail({ hasSelection, right, readingMode, onHighlight, onAnnotate, onAddBookmark }: ReaderToolRailProps) {
   const railRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -701,13 +701,12 @@ export function ReaderToolRail({ hasSelection, right, readingMode, onHighlight, 
       </button>
       <button
         type="button"
-        disabled
-        aria-disabled="true"
-        aria-label="Marcador indisponível"
-        title="Marcadores estarão disponíveis em uma próxima entrega."
-        className={toolButtonClassName}
+        aria-label="Adicionar marcador nesta página"
+        title="Adicionar marcador nesta página"
+        className={`${toolButtonClassName} hover:bg-surface-muted hover:text-text-primary`}
+        onClick={onAddBookmark}
       >
-        <ChromeIcon name="bookmark" />
+        <BookmarkIcon size={18} strokeWidth={1.9} variant="chrome" />
       </button>
     </div>
   );
