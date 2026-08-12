@@ -1,10 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-// Pilha de paineis flutuantes do app (anotações do leitor, editor de caderno,
-// futuro editor de quadros). Substitui o antigo `isFloating: boolean`, que so
-// suportava um painel por vez: aqui varios paineis coexistem, cada um com
-// posicao propria e ordem de empilhamento (zIndex).
-export type FloatingPanelType = "annotations" | "canvas" | "reader" | "settings";
+// Pilha de paineis flutuantes internos do app. Quadros e Ajustes coexistem,
+// cada um com posicao propria e ordem de empilhamento (zIndex).
+export type FloatingPanelType = "canvas" | "settings";
 
 export interface FloatingPanel {
   // Deterministico (`${type}-${entityId}`): abrir a mesma entidade duas vezes
@@ -19,8 +17,8 @@ export interface FloatingPanel {
   isMinimized: boolean;
 }
 
-// Acima do ReaderModal (z-50), abaixo dos dialogos modais (z-[60]+) — um
-// dialogo de confirmacao continua bloqueando os paineis. O zIndex de cada
+// Abaixo dos dialogos modais (z-[60]+): um dialogo de confirmacao continua
+// bloqueando os paineis. O zIndex de cada
 // painel e derivado da POSICAO na pilha (base + indice), nunca de um contador
 // crescente: assim nao ha como "vazar" para a faixa dos dialogos apos muitos
 // refocos.

@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { IconContextAbrir, IconContextMoverColecao, IconContextVerDetalhes } from "../../components/ui/ContextMenuIcons";
@@ -23,7 +24,6 @@ type DocumentCardProps = {
   viewMode?: ViewMode;
   collections: LibraryCollection[];
   onSelect: (document: LibraryDocument) => void;
-  onOpenReader: (document: LibraryDocument) => void;
   onOpenDetails: (document: LibraryDocument) => void;
   onToggleFavorite: (documentId: string) => void;
   onMoveToCollection: (documentId: string, collectionId: string) => void;
@@ -92,7 +92,7 @@ export function DocumentCard(props: DocumentCardProps) {
 
 type DocumentCardContextMenuProps = Pick<
   DocumentCardProps,
-  "collections" | "document" | "onDelete" | "onMoveToCollection" | "onOpenDetails" | "onOpenReader" | "onToggleFavorite"
+  "collections" | "document" | "onDelete" | "onMoveToCollection" | "onOpenDetails" | "onToggleFavorite"
 > & {
   contextMenu: ReturnType<typeof useContextMenu>;
 };
@@ -104,7 +104,6 @@ function DocumentCardContextMenu({
   onDelete,
   onMoveToCollection,
   onOpenDetails,
-  onOpenReader,
   onToggleFavorite,
 }: DocumentCardContextMenuProps) {
   return (
@@ -113,7 +112,12 @@ function DocumentCardContextMenu({
         icon={<IconContextAbrir />}
         label="Abrir"
         onSelect={() => {
-          onOpenReader(document);
+          void invoke("open_reader_window", {
+            documentId: document.id,
+            documentTitle: document.title,
+          }).catch((error) => {
+            console.warn("Nao foi possivel abrir o documento no Reader.", error);
+          });
           contextMenu.close();
         }}
       />
@@ -167,7 +171,7 @@ function DocumentCardContextMenu({
 // linha — por isso a linha nao tem borda/shadow propria. Selecao e hover usam o
 // fundo surface-muted (token de hover canonico do projeto), ja que o grid usa um
 // lift via translate, nao um fundo destacado.
-function DocumentListRow({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
+function DocumentListRow({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const coverStyle = getCoverStyle(document.id);
@@ -272,7 +276,6 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
         onDelete={onDelete}
         onMoveToCollection={onMoveToCollection}
         onOpenDetails={onOpenDetails}
-        onOpenReader={onOpenReader}
         onToggleFavorite={onToggleFavorite}
       />
     </>
@@ -280,7 +283,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
 }
 
 // Card vertical (grid): thumbnail com cor derivada + area de texto abaixo.
-function DocumentGridCard({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onOpenReader, onSelect, onToggleFavorite }: DocumentCardProps) {
+function DocumentGridCard({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const coverStyle = getCoverStyle(document.id);
@@ -395,7 +398,6 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
         onDelete={onDelete}
         onMoveToCollection={onMoveToCollection}
         onOpenDetails={onOpenDetails}
-        onOpenReader={onOpenReader}
         onToggleFavorite={onToggleFavorite}
       />
     </>

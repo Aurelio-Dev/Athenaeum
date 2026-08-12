@@ -14,7 +14,7 @@ export const readerLeftSidebarWidth = 306;
 
 type PdfDocument = pdfjsLib.PDFDocumentProxy;
 
-// Item do sumario do PDF ja com a pagina resolvida pelo ReaderModal (itens sem
+// Item do sumario do PDF ja com a pagina resolvida pelo ReaderContent (itens sem
 // destino resolvivel ficam sem pagina e aparecem nao-clicaveis).
 export type PdfOutlineItem = {
   title: string;
@@ -31,7 +31,7 @@ type ReaderLeftSidebarProps = {
   totalPages: number;
   fileSizeBytes: number | null;
   progress: number;
-  // Incrementado pelo ReaderModal no Ctrl+F: foca o campo de busca mesmo que a
+  // Incrementado pelo ReaderContent no Ctrl+F: foca o campo de busca mesmo que a
   // sidebar tenha acabado de ser aberta (sinal deterministico, sem timers).
   searchFocusSignal: number;
   databaseSource?: DatabaseHandleSource;

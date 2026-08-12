@@ -4,6 +4,8 @@ import type { Annotation, AnnotationSaveState } from "../../types/annotation";
 import { highlightPalette } from "./highlightPalette";
 
 export type ReaderAnnotationsDockProps = {
+  documentId: string;
+  documentTitle: string;
   annotations: Annotation[];
   currentPage: number;
   visiblePages?: readonly number[];
@@ -15,6 +17,8 @@ export type ReaderAnnotationsDockProps = {
   onDelete: (annotationId: string) => void;
   onRetry: (annotationId: string) => void;
   onCreateNote: (note: string) => void;
+  isPopoutOpen: boolean;
+  onOpenPopout: () => Promise<void>;
 };
 
 function FilterIcon() {
@@ -30,6 +34,16 @@ function PlusIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function PopOutIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 3h7v7" />
+      <path d="M10 14 21 3" />
+      <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1 2-2V5a2 2 0 0 1 2-2h5" />
     </svg>
   );
 }
@@ -170,6 +184,8 @@ function AnnotationCard({ annotation, saveState, onJumpToPage, onEdit, onDelete,
 }
 
 export function ReaderAnnotationsDock({
+  documentId,
+  documentTitle,
   annotations,
   currentPage,
   visiblePages,
@@ -181,9 +197,12 @@ export function ReaderAnnotationsDock({
   onDelete,
   onRetry,
   onCreateNote,
+  isPopoutOpen,
+  onOpenPopout,
 }: ReaderAnnotationsDockProps) {
   const [note, setNote] = useState("");
   const [composerFeedback, setComposerFeedback] = useState("");
+  const [isOpeningPopout, setIsOpeningPopout] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastFocusSignalRef = useRef(composerFocusSignal);
   const feedbackId = useId();
@@ -235,6 +254,21 @@ export function ReaderAnnotationsDock({
     setComposerFeedback("Anotação adicionada.");
   }
 
+  async function handleOpenPopout() {
+    if (isOpeningPopout) {
+      return;
+    }
+
+    setIsOpeningPopout(true);
+    try {
+      await onOpenPopout();
+    } catch (error) {
+      console.warn("Nao foi possivel abrir a janela de Anotacoes.", error);
+    } finally {
+      setIsOpeningPopout(false);
+    }
+  }
+
   const isSpread = effectiveVisiblePages.length > 1;
   const pageLabel = isSpread
     ? `páginas ${effectiveVisiblePages[0]}–${effectiveVisiblePages[effectiveVisiblePages.length - 1]}`
@@ -251,7 +285,21 @@ export function ReaderAnnotationsDock({
       style={{ boxShadow: "var(--reader-dock-shadow)" }}
     >
       <header className="reader-annotation-border flex min-w-0 flex-col justify-center border-r px-[18px] py-4">
-        <h2 className="font-serif text-base font-bold text-[var(--foreground)]">Anotações</h2>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <h2 className="min-w-0 truncate font-serif text-base font-bold text-[var(--foreground)]">Anotações</h2>
+          <button
+            type="button"
+            disabled={isOpeningPopout}
+            aria-label={isPopoutOpen ? `Focar janela de Anotações aberta para ${documentTitle}` : `Abrir Anotações de ${documentTitle} em uma janela`}
+            title={isPopoutOpen ? "Focar janela aberta" : "Abrir em janela"}
+            data-reader-popout-document-id={documentId}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-[var(--background)] px-2 text-[10px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
+            onClick={() => void handleOpenPopout()}
+          >
+            <PopOutIcon />
+            {isOpeningPopout ? "Abrindo..." : isPopoutOpen ? "Focar" : "Abrir"}
+          </button>
+        </div>
         <p className="mt-1 truncate text-[11.5px] text-[var(--muted-foreground)]">{annotationCountLabel}</p>
         <span className="mt-2.5 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary">
           <FilterIcon />

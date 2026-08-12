@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { CompactDocumentCard } from "../../../components/CompactDocumentCard";
 import { ProgressBar } from "../../../components/ProgressBar";
 import { TagBadge } from "../../../components/TagBadge";
@@ -16,10 +17,8 @@ import {
   listRelatedDocuments,
   openDocumentExternally,
   READER_DETAILS_CHANGED_EVENT,
-  READER_OPEN_DOCUMENT_EVENT,
   removeDocumentTag,
   type DatabaseHandleSource,
-  type ReaderDocumentPayload,
   type RelatedDocument,
 } from "../../../lib/database";
 import type { ReaderDocumentDetails, SubjectTag } from "../../../types/library";
@@ -330,9 +329,10 @@ export function RelatedDocumentsSection({ documentId, databaseSource = "loaded" 
     }
 
     menu.close();
-    // Sempre via evento para a janela principal: funciona igual da popout e da
-    // propria main (o listener vive no LibraryView, fora do leitor).
-    void emitTo<ReaderDocumentPayload>("main", READER_OPEN_DOCUMENT_EVENT, { documentId: menuTarget.id }).catch((error) => {
+    void invoke("open_reader_window", {
+      documentId: menuTarget.id,
+      documentTitle: menuTarget.title,
+    }).catch((error) => {
       console.warn("Não foi possível solicitar a abertura do documento.", error);
     });
   }

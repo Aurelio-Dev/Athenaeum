@@ -20,9 +20,8 @@ import {
   deleteCollection as deletePersistedCollection,
   emptyTrash,
   getDocumentFilePaths,
-  getReaderOpensMaximized,
   getTrashFilePaths,
-  isReaderDocumentPayload,
+  isReaderInvalidationPayload,
   listAvailableTags,
   listCanvases,
   listCollections,
@@ -34,7 +33,7 @@ import {
   moveNotebookToCollection as movePersistedNotebookToCollection,
   moveNotebookToTrash as movePersistedNotebookToTrash,
   permanentlyDeleteDocument,
-  READER_OPEN_DOCUMENT_EVENT,
+  READER_PROGRESS_CHANGED_EVENT,
   restoreDocument,
   renameCanvas as renamePersistedCanvas,
   renameCollection as renamePersistedCollection,
@@ -42,15 +41,13 @@ import {
   setCanvasFavorite,
   setDocumentFavorite,
   setDocumentNote,
-  setDocumentReadingLocation,
-  setDocumentReadingStarted,
   setNotebookFavorite,
   updateCollection as updatePersistedCollection,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
   updateTagTone as updatePersistedTagTone,
 } from "../../lib/database";
 import type { CollectionUpdates, DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
-import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, ReadingLocation, SortMode, SubjectTag, Tone, ViewMode } from "../../types/library";
+import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, SortMode, SubjectTag, Tone, ViewMode } from "../../types/library";
 import { NewCollectionModal } from "../../components/NewCollectionModal";
 import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { useContextMenu } from "../../hooks/useContextMenu";
@@ -65,7 +62,6 @@ import { LibraryHeader } from "./LibraryHeader";
 import { LibraryToolbar } from "./LibraryToolbar";
 import { RenameLibraryItemModal } from "./RenameLibraryItemModal";
 
-const ReaderModal = lazy(() => import("./ReaderModal").then((module) => ({ default: module.ReaderModal })));
 // A superficie grafica do Quadro so entra no bundle quando o primeiro painel
 // desse tipo for aberto.
 const CanvasPanel = lazy(() => import("../canvases/CanvasPanel").then((module) => ({ default: module.CanvasPanel })));
@@ -91,6 +87,7 @@ const libraryQueryKeys = {
   collections: () => ["library", "collections"] as const,
   tags: () => ["library", "tags"] as const,
   trashCount: () => ["library", "trashCount"] as const,
+  documentsRoot: () => ["library", "documents"] as const,
   documents: ({ searchTerm, sortMode, route }: ListDocumentsOptions) =>
     [
       "library",
@@ -218,10 +215,6 @@ export function LibraryView() {
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [isEditCollectionModalOpen, setIsEditCollectionModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [readerDocumentId, setReaderDocumentId] = useState<string | null>(null);
-  // Preferencia lida do banco a cada abertura do leitor (fonte de verdade em
-  // app_settings) — sem valor salvo, a primeira abertura entra maximizada.
-  const [readerInitialMaximized, setReaderInitialMaximized] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
   const libraryAreaContextMenu = useContextMenu();
@@ -299,6 +292,38 @@ export function LibraryView() {
     () => queryClient.invalidateQueries({ queryKey: libraryQueryKeys.all }),
     [queryClient],
   );
+  const invalidateLibraryDocumentQueries = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: libraryQueryKeys.documentsRoot() }),
+    [queryClient],
+  );
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen<unknown>(READER_PROGRESS_CHANGED_EVENT, (event) => {
+      if (!isReaderInvalidationPayload(event.payload) || event.payload.origin === "main") {
+        return;
+      }
+
+      void invalidateLibraryDocumentQueries();
+    })
+      .then((removeListener) => {
+        if (isDisposed) {
+          removeListener();
+          return;
+        }
+        unlisten = removeListener;
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel escutar atualizacoes do Reader na biblioteca.", error);
+      });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, [invalidateLibraryDocumentQueries]);
 
   const updateAvailableTags = useCallback(
     (tags: SubjectTag[]) => {
@@ -328,7 +353,6 @@ export function LibraryView() {
       ? "divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface-card"
       : "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
-  const readerDocument = readerDocumentId ? allDocuments.find((document) => document.id === readerDocumentId) ?? null : null;
   const activeCollection =
     activeRoute.type === "collection" ? collections.find((collection) => collection.name === activeRoute.collectionName) : undefined;
   const hasActiveSearch = searchTerm.trim().length > 0;
@@ -435,66 +459,6 @@ export function LibraryView() {
     await queryClient.invalidateQueries({ queryKey: libraryQueryKeys.trashCount() });
   }
 
-  async function openForReading(documentToOpen: LibraryDocument) {
-    await setDocumentReadingStarted(documentToOpen.id);
-
-    // Um leitor por vez: abrir outro documento fecha o painel do anterior
-    // (a posicao de leitura dele ja fica salva pelo autosave periodico).
-    floatingPanelsList
-      .filter((floatingPanel) => floatingPanel.type === "reader" && floatingPanel.entityId !== documentToOpen.id)
-      .forEach((floatingPanel) => closeFloatingPanel(floatingPanel.id));
-
-    // Preferencia persistida decide se o leitor entra maximizado (edge-to-edge
-    // em {0,0}) ou no tamanho/posicao padrao. Fallback maximizado se a leitura
-    // da preferencia falhar (mesmo default da primeira abertura).
-    const opensMaximized = await getReaderOpensMaximized().catch(() => true);
-    setReaderInitialMaximized(opensMaximized);
-
-    setReaderDocumentId(documentToOpen.id);
-    openFloatingPanel("reader", documentToOpen.id, opensMaximized ? { x: 0, y: 0 } : getReaderInitialPosition());
-    await invalidateLibraryQueries();
-  }
-
-  // Pedido de abertura vindo dos "PDFs relacionados" (main ou popout). O
-  // listener vive aqui — e nao no ReaderModal — para funcionar mesmo com o
-  // leitor fechado. Refs porque openForReading/allDocuments mudam por render.
-  const openForReadingRef = useRef(openForReading);
-  openForReadingRef.current = openForReading;
-  const allDocumentsRef = useRef(allDocuments);
-  allDocumentsRef.current = allDocuments;
-
-  useEffect(() => {
-    let isDisposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void listen<unknown>(READER_OPEN_DOCUMENT_EVENT, (event) => {
-      if (!isReaderDocumentPayload(event.payload)) {
-        return;
-      }
-
-      const payloadDocumentId = event.payload.documentId;
-      const documentToOpen = allDocumentsRef.current.find((document) => document.id === payloadDocumentId);
-      if (documentToOpen && !documentToOpen.deletedAt) {
-        void openForReadingRef.current(documentToOpen);
-      }
-    })
-      .then((removeListener) => {
-        if (isDisposed) {
-          removeListener();
-          return;
-        }
-        unlisten = removeListener;
-      })
-      .catch((error) => {
-        console.warn("Não foi possível escutar os pedidos de abertura de documento.", error);
-      });
-
-    return () => {
-      isDisposed = true;
-      unlisten?.();
-    };
-  }, []);
-
   async function saveDocumentNote(documentId: string, note: string) {
     updateDocumentNotesInCache(documentId, note);
     await setDocumentNote(documentId, note);
@@ -543,10 +507,6 @@ export function LibraryView() {
   async function moveToTrash(documentId: string) {
     await moveDocumentToTrash(documentId);
     await invalidateLibraryQueries();
-
-    if (readerDocumentId === documentId) {
-      setReaderDocumentId(null);
-    }
   }
 
   async function moveDocumentToCollection(documentId: string, collectionId: string) {
@@ -570,17 +530,6 @@ export function LibraryView() {
 
   async function restoreFromTrash(documentId: string) {
     await restoreDocument(documentId);
-    await invalidateLibraryQueries();
-  }
-
-  async function closeReader(readingLocation: ReadingLocation) {
-    if (!readerDocument) {
-      setReaderDocumentId(null);
-      return;
-    }
-
-    await setDocumentReadingLocation(readerDocument, readingLocation);
-    setReaderDocumentId(null);
     await invalidateLibraryQueries();
   }
 
@@ -849,7 +798,6 @@ export function LibraryView() {
                     viewMode={viewMode}
                     isSelected={document.id === selectedDocumentId}
                     onSelect={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
-                    onOpenReader={(documentToOpen) => void openForReading(documentToOpen)}
                     onOpenDetails={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
                     onToggleFavorite={(nextDocumentId) => void toggleFavorite(nextDocumentId)}
                     onMoveToCollection={(nextDocumentId, collectionId) => void moveDocumentToCollection(nextDocumentId, collectionId)}
@@ -927,7 +875,6 @@ export function LibraryView() {
             availableTags={availableTags}
             mode={isTrashRoute ? "trash" : "library"}
             onClose={() => setSelectedDocumentId(null)}
-            onOpenReader={(document) => void openForReading(document)}
             onUpdateDocument={(documentId, updates) =>
               void updateDocumentMetadata(documentId, { ...updates, tags: selectedDocument.tags })
             }
@@ -980,30 +927,6 @@ export function LibraryView() {
         />
       ) : null}
 
-      {readerDocument ? (
-        <Suspense
-          fallback={
-            // O leitor agora e um painel flutuante — o fallback do lazy import
-            // e um aviso discreto, nao mais uma tela cheia escura.
-            <div className="pointer-events-none fixed inset-x-0 top-24 z-[55] flex justify-center">
-              <div className="rounded-full bg-[var(--surface-header)] px-4 py-2 text-sm font-semibold text-white shadow-2xl">
-                Carregando leitor
-              </div>
-            </div>
-          }
-        >
-          <ReaderModal
-            key={readerDocument.id}
-            document={readerDocument}
-            initialMaximized={readerInitialMaximized}
-            onClose={(readingLocation) => void closeReader(readingLocation)}
-            onSaveNotes={saveDocumentNote}
-            onNotesReloaded={updateDocumentNotesInCache}
-            onToggleFavorite={toggleFavorite}
-          />
-        </Suspense>
-      ) : null}
-
       {/* Paineis de quadro: superficie Konva em lazy-load. */}
       {floatingPanelsList
         .filter((floatingPanel) => floatingPanel.type === "canvas")
@@ -1051,17 +974,6 @@ export function LibraryView() {
       ) : null}
     </AppShell>
   );
-}
-
-// Posicao inicial do painel do leitor: centralizado horizontalmente, logo
-// abaixo do header do app (espelha o calculo de largura do ReaderModal).
-function getReaderInitialPosition() {
-  const readerWidth = Math.max(720, Math.min(1240, window.innerWidth - 64));
-  const readerHeight = Math.max(480, Math.min(900, window.innerHeight - 96));
-  return {
-    x: Math.max(0, Math.round((window.innerWidth - readerWidth) / 2)),
-    y: Math.max(0, Math.min(84, window.innerHeight - readerHeight)),
-  };
 }
 
 // Linha de contagem sob o titulo, sensivel a aba ativa da colecao

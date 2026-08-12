@@ -69,6 +69,6 @@ export function PdfTextLayer({ pdfDocument, pageNumber, scale, registerCancellat
     };
   }, [pdfDocument, pageNumber, registerCancellation, scale]);
 
-  // A classe .textLayer vem do CSS oficial do pdf.js (importado no ReaderModal).
+  // A classe .textLayer vem do CSS oficial do pdf.js (importado no ReaderContent).
   return <div ref={containerRef} className="textLayer" />;
 }

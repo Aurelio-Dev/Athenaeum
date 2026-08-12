@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { IconButton } from "../../components/IconButton";
 import { TagBadge } from "../../components/TagBadge";
 import { HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
@@ -14,7 +15,6 @@ type DocumentDetailsPanelProps = {
   availableTags: SubjectTag[];
   mode?: "library" | "trash";
   onClose: () => void;
-  onOpenReader: (document: LibraryDocument) => void;
   onUpdateDocument: (documentId: string, updates: DocumentMetadataUpdates) => void;
   onToggleFavorite: (documentId: string) => void;
   onAvailableTagsChange: (tags: SubjectTag[]) => void;
@@ -350,7 +350,6 @@ export function DocumentDetailsPanel({
   availableTags,
   mode = "library",
   onClose,
-  onOpenReader,
   onUpdateDocument,
   onToggleFavorite,
   onAvailableTagsChange,
@@ -690,7 +689,14 @@ export function DocumentDetailsPanel({
             <button
               type="button"
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
-              onClick={() => onOpenReader(document)}
+              onClick={() => {
+                void invoke("open_reader_window", {
+                  documentId: document.id,
+                  documentTitle: document.title,
+                }).catch((error) => {
+                  console.warn("Nao foi possivel abrir o documento no Reader.", error);
+                });
+              }}
             >
               <BookOpenIcon />
               <span>Abrir no Leitor</span>

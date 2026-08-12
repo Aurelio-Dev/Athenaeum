@@ -74,9 +74,8 @@ export function App() {
     <ThemeProvider>
       <AppearancePreferencesProvider>
         <DividerLinesProvider>
-          {/* Pilha de paineis flutuantes no topo da arvore: anotacoes do leitor e
-            editores de caderno/quadro compartilham a mesma pilha, entao podem
-            coexistir e se sobrepor com ordem de foco correta. */}
+          {/* Pilha dos paineis internos de Quadro e Ajustes. Reader, Caderno e
+            Anotacoes usam janelas nativas independentes. */}
           <FloatingPanelsProvider>
             <Suspense fallback={<LoadingScreen />}>
               <LibraryView />

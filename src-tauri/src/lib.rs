@@ -3513,28 +3513,6 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if window.label() != "main"
-                || !matches!(
-                    event,
-                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
-                )
-            {
-                return;
-            }
-
-            // O runtime so encerra quando nao resta nenhuma janela. Solicitar
-            // o fechamento da popout permite que o handler JS dela faca o
-            // flush antes de a ultima janela ser destruida.
-            if let Some(panel) = window
-                .app_handle()
-                .get_webview_window(READER_PANEL_WINDOW_LABEL)
-            {
-                if let Err(error) = panel.close() {
-                    log::warn!("Nao foi possivel fechar a popout do Reader: {error}");
-                }
-            }
-        })
         .invoke_handler(tauri::generate_handler![
             close_notebook_window,
             close_reader_panel_window,

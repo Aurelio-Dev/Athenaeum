@@ -27,16 +27,15 @@ export const READER_ANNOTATIONS_CHANGED_EVENT = "reader:annotations-changed";
 export const READER_JUMP_TO_PAGE_EVENT = "reader:jump-to-page";
 export const READER_PAGE_STATE_CHANGED_EVENT = "reader:page-state-changed";
 export const READER_PAGE_STATE_REQUESTED_EVENT = "reader:page-state-requested";
-// Pedido de abertura de um documento no leitor da janela principal (usado
-// pelos PDFs relacionados; funciona da popout e da propria main via emitTo).
-export const READER_OPEN_DOCUMENT_EVENT = "reader:open-document";
 export const READER_DETAILS_CHANGED_EVENT = "reader:details-changed";
+export const READER_PROGRESS_CHANGED_EVENT = "reader:progress-changed";
 export const READER_POPOUT_CLOSED_EVENT = "reader:popout-closed";
+export const READER_POPOUT_STATUS_CHANGED_EVENT = "reader:popout-status-changed";
+export const READER_POPOUT_STATUS_REQUESTED_EVENT = "reader:popout-status-requested";
 export const READER_SET_DOCUMENT_EVENT = "reader:set-document";
 export const READER_SWITCH_DOCUMENT_EVENT = "reader-window:switch-document";
-export const READER_REQUEST_POPOUT_CLOSE_EVENT = "reader:request-popout-close";
-export const READER_POPOUT_FLUSHED_EVENT = "reader:popout-flushed";
 export const READER_PANEL_WINDOW_LABEL = "reader-annotations-panel";
+export const READER_WINDOW_LABEL = "reader-window";
 
 export type ReaderInvalidationPayload = {
   documentId: string;
@@ -82,10 +81,6 @@ const openDocumentExternallyErrorCodes: ReadonlySet<OpenDocumentExternallyError[
 
 export type ReaderDocumentPayload = {
   documentId: string;
-};
-
-export type ReaderPopoutCloseRequestPayload = ReaderDocumentPayload & {
-  requestId: string;
 };
 
 export function isReaderInvalidationPayload(payload: unknown): payload is ReaderInvalidationPayload {
@@ -157,14 +152,6 @@ export function isReaderDocumentPayload(payload: unknown): payload is ReaderDocu
   }
 
   return typeof (payload as Record<string, unknown>).documentId === "string";
-}
-
-export function isReaderPopoutCloseRequestPayload(payload: unknown): payload is ReaderPopoutCloseRequestPayload {
-  if (!isReaderDocumentPayload(payload)) {
-    return false;
-  }
-
-  return typeof (payload as unknown as Record<string, unknown>).requestId === "string";
 }
 
 let databasePromise: Promise<Database> | null = null;
@@ -367,7 +354,8 @@ async function emitReaderInvalidation(
   eventName:
     | typeof READER_NOTES_CHANGED_EVENT
     | typeof READER_ANNOTATIONS_CHANGED_EVENT
-    | typeof READER_DETAILS_CHANGED_EVENT,
+    | typeof READER_DETAILS_CHANGED_EVENT
+    | typeof READER_PROGRESS_CHANGED_EVENT,
   documentId: string,
 ) {
   try {
@@ -1916,6 +1904,7 @@ export async function setDocumentReadingStarted(
      WHERE id = $1 AND deleted_at IS NULL`,
     [documentId],
   );
+  await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, documentId);
 }
 
 export async function setDocumentReadingLocation(
@@ -1941,6 +1930,7 @@ export async function setDocumentReadingLocation(
     readingLocation.savedAt,
     document.id,
   ]);
+  await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, document.id);
 }
 
 export async function deleteDocument(documentId: string) {

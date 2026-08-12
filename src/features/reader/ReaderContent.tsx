@@ -31,7 +31,6 @@ import {
   isReaderDocumentPayload,
   isReaderInvalidationPayload,
   isReaderJumpToPagePayload,
-  isReaderPopoutCloseRequestPayload,
   listAnnotations,
   listAvailableTags,
   listAvailableTagsFromPreloadedDatabase,
@@ -44,8 +43,8 @@ import {
   READER_PAGE_STATE_REQUESTED_EVENT,
   READER_PANEL_WINDOW_LABEL,
   READER_POPOUT_CLOSED_EVENT,
-  READER_POPOUT_FLUSHED_EVENT,
-  READER_REQUEST_POPOUT_CLOSE_EVENT,
+  READER_POPOUT_STATUS_CHANGED_EVENT,
+  READER_POPOUT_STATUS_REQUESTED_EVENT,
   getSetting,
   setDocumentReadingLocation,
   setDocumentReadingStarted,
@@ -55,8 +54,8 @@ import {
 import type {
   DatabaseHandleSource,
   NewAnnotation,
+  ReaderDocumentPayload,
   ReaderPageStatePayload,
-  ReaderPopoutCloseRequestPayload,
 } from "../../lib/database";
 import type { Annotation, AnnotationSaveState, HighlightColor } from "../../types/annotation";
 import type { LibraryDocument, ReadingLocation } from "../../types/library";
@@ -83,7 +82,6 @@ import {
   type ReaderViewPreferences,
   type ReaderZoomMode,
 } from "./readerView";
-import { ReaderSidePanel, type ReaderFloatingPanelState } from "./ReaderSidePanel";
 import type { ReaderDetailsPreload } from "./panels/DetailsTab";
 import { ExternalLinkIcon } from "./panels/readerPanelIcons";
 import { SelectionToolbar } from "./SelectionToolbar";
@@ -134,12 +132,6 @@ type ReaderContentProps = {
   readerPanelSize: ReaderContentSize;
   isReaderMaximized: boolean;
   isActiveForShortcuts: boolean;
-  annotationsPanel: ReaderFloatingPanelState | null;
-  isAnnotationsPanelActiveForShortcuts: boolean;
-  onOpenAnnotationsPanel: () => void;
-  onCloseAnnotationsPanel: () => void;
-  onMinimizeAnnotationsPanel: () => void;
-  onRestoreAnnotationsPanel: () => void;
   onNativeFullscreenVisualStateChange: (fullscreen: boolean) => void;
   onDocumentSwitched?: (document: LibraryDocument) => void;
   databaseSource?: DatabaseHandleSource;
@@ -152,7 +144,6 @@ const maxZoom = 200;
 const zoomStep = 10;
 const pinchZoomThreshold = 36;
 const pinchZoomResetDelayMs = 180;
-const popoutFlushTimeoutMs = 5000;
 const readerTopInset = 86;
 const readerBottomInset = 198;
 const readerSideInset = 22;
@@ -525,12 +516,6 @@ export function ReaderContent({
   readerPanelSize,
   isReaderMaximized,
   isActiveForShortcuts,
-  annotationsPanel,
-  isAnnotationsPanelActiveForShortcuts,
-  onOpenAnnotationsPanel,
-  onCloseAnnotationsPanel,
-  onMinimizeAnnotationsPanel,
-  onRestoreAnnotationsPanel,
   onNativeFullscreenVisualStateChange,
   onDocumentSwitched,
   databaseSource = "loaded",
@@ -601,7 +586,6 @@ export function ReaderContent({
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [detailsPreload, setDetailsPreload] = useState<ReaderDetailsPreload | null>(null);
   const queryClient = useQueryClient();
-  const sidePanelFloating = annotationsPanel !== null;
   const nativeFullscreenOwnedRef = useRef(false);
   const isNativeFullscreenRef = useRef(false);
   const fullscreenTransitioningRef = useRef(false);
@@ -630,7 +614,6 @@ export function ReaderContent({
   const preloadedAnnotationsDocumentIdRef = useRef<string | null>(null);
   const [popoutDocumentId, setPopoutDocumentId] = useState<string | null>(null);
   const popoutDocumentIdRef = useRef<string | null>(null);
-  const closePopoutPromiseRef = useRef<Promise<boolean> | null>(null);
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
@@ -685,10 +668,6 @@ export function ReaderContent({
   const visiblePageLabel = currentPageGroup.length > 1
     ? `${currentPageGroup[0]}–${currentPageGroup[currentPageGroup.length - 1]}`
     : String(currentPageGroup[0] ?? currentPage);
-  const readerDocument = useMemo(
-    () => ({ ...document, notes: notesText, timeSpentSeconds: document.timeSpentSeconds }),
-    [document, notesText],
-  );
   const defaultPageSize = useMemo(() => estimatedPageSize(zoom), [zoom]);
   const isCompactReader = readerPanelSize.width < 1000;
   const activeTopInset = isReadingMode ? readerReadingModeInset : readerTopInset;
@@ -857,12 +836,9 @@ export function ReaderContent({
     }
 
     if (isReadingMode) {
-      if (sidePanelFloating) {
-        onMinimizeAnnotationsPanel();
-      }
       window.requestAnimationFrame(() => readingModeExitButtonRef.current?.focus({ preventScroll: true }));
     }
-  }, [isReadingMode, onMinimizeAnnotationsPanel, sidePanelFloating]);
+  }, [isReadingMode]);
 
   useEffect(() => {
     isReaderDisposedRef.current = false;
@@ -1479,7 +1455,7 @@ export function ReaderContent({
     });
 
     registerListener<unknown>(READER_POPOUT_CLOSED_EVENT, (payload) => {
-      if (!isReaderDocumentPayload(payload) || payload.documentId !== document.id) {
+      if (!isReaderDocumentPayload(payload) || payload.documentId !== popoutDocumentIdRef.current) {
         return;
       }
 
@@ -1492,73 +1468,38 @@ export function ReaderContent({
     };
   }, [databaseSource, document.id, loadDocumentAnnotations, onNotesReloaded, queryClient, scrollToPage, updatePopoutDocumentId]);
 
-  const closePopoutAfterFlush = useCallback(async (): Promise<boolean> => {
-    if (popoutDocumentIdRef.current !== document.id) {
-      return true;
-    }
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
 
-    if (closePopoutPromiseRef.current) {
-      return closePopoutPromiseRef.current;
-    }
+    void listen<unknown>(READER_POPOUT_STATUS_CHANGED_EVENT, (event) => {
+      if (!isReaderDocumentPayload(event.payload)) {
+        return;
+      }
 
-    const closePromise = (async () => {
-      const requestId = crypto.randomUUID();
-      const payload: ReaderPopoutCloseRequestPayload = { documentId: document.id, requestId };
-      let timeoutId: number | null = null;
-      const listenerRegistration: { unlisten: (() => void) | null } = { unlisten: null };
-      let isFinished = false;
-
-      try {
-        const flushed = new Promise<void>((resolve, reject) => {
-          timeoutId = window.setTimeout(() => {
-            reject(new Error("A popout nao confirmou o flush dentro do prazo."));
-          }, popoutFlushTimeoutMs);
-
-          void listen<unknown>(READER_POPOUT_FLUSHED_EVENT, (event) => {
-            if (
-              isReaderPopoutCloseRequestPayload(event.payload) &&
-              event.payload.documentId === document.id &&
-              event.payload.requestId === requestId
-            ) {
-              resolve();
-            }
-            })
-            .then((removeListener) => {
-              if (isFinished) {
-                removeListener();
-                return;
-              }
-
-              listenerRegistration.unlisten = removeListener;
-              return emitTo(READER_PANEL_WINDOW_LABEL, READER_REQUEST_POPOUT_CLOSE_EVENT, payload);
-            })
-            .catch(reject);
-        });
-
-        await flushed;
-        await invoke("close_reader_panel_window");
-        updatePopoutDocumentId(null);
-        return true;
-      } catch (error) {
-        console.warn("Nao foi possivel fechar a popout depois do flush.", error);
-        return false;
-      } finally {
-        isFinished = true;
-        if (timeoutId !== null) {
-          window.clearTimeout(timeoutId);
+      updatePopoutDocumentId(event.payload.documentId);
+    })
+      .then((removeListener) => {
+        if (isDisposed) {
+          removeListener();
+          return;
         }
-        listenerRegistration.unlisten?.();
-      }
-    })();
 
-    closePopoutPromiseRef.current = closePromise;
-    try {
-      return await closePromise;
-    } finally {
-      if (closePopoutPromiseRef.current === closePromise) {
-        closePopoutPromiseRef.current = null;
-      }
-    }
+        unlisten = removeListener;
+        return emitTo<ReaderDocumentPayload>(
+          READER_PANEL_WINDOW_LABEL,
+          READER_POPOUT_STATUS_REQUESTED_EVENT,
+          { documentId: document.id },
+        );
+      })
+      .catch(() => {
+        // Ausencia da popout e o estado normal; o botao permanece como "Abrir".
+      });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
   }, [document.id, updatePopoutDocumentId]);
 
   const getCurrentReadingLocation = useCallback((): ReadingLocation => {
@@ -1805,14 +1746,9 @@ export function ReaderContent({
       console.warn("Nao foi possivel salvar o tempo de leitura antes de fechar.", error);
     });
 
-    if (!(await closePopoutAfterFlush())) {
-      hasClosedExplicitlyRef.current = false;
-      return;
-    }
-
     await exitOwnedNativeFullscreen();
     await onClose(readingLocation);
-  }, [closePopoutAfterFlush, exitOwnedNativeFullscreen, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
+  }, [exitOwnedNativeFullscreen, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
 
   // Ctrl+F abre a sidebar esquerda e foca o campo de busca do documento.
   useEffect(() => {
@@ -1867,9 +1803,8 @@ export function ReaderContent({
     void (async () => {
       try {
         await flushNotes();
-        await closePopoutAfterFlush();
       } catch (error) {
-        console.warn("Nao foi possivel concluir o fechamento coordenado da popout.", error);
+        console.warn("Nao foi possivel salvar as notas ao desmontar o Reader.", error);
       }
     })();
     void flushReadingTime();
@@ -2444,16 +2379,10 @@ export function ReaderContent({
     }
   }
 
-  // A doca 1C permanece no leitor. Esta acao oferece a mesma informacao em um
-  // painel independente para fluxos que precisam de mais espaco.
-  function openDetachedPanel() {
-    onOpenAnnotationsPanel();
-  }
-
-  // Leva o painel de detalhes/anotacoes para uma janela nativa do SO. Faz o
+  // Abre ou foca a janela nativa de detalhes/anotacoes. Faz o
   // flush das notas e da posicao ANTES de abrir, para a popout ler do SQLite ja
   // com o estado atual.
-  async function openPanelSystemWindow() {
+  async function openAnnotationsPopout() {
     await flushNotes();
     await setDocumentReadingLocation(document, getCurrentReadingLocation(), databaseSource);
     await invoke("open_reader_panel_window", {
@@ -3008,6 +2937,8 @@ export function ReaderContent({
         >
           <ReaderAnnotationsDock
             key={document.id}
+            documentId={document.id}
+            documentTitle={document.title}
             annotations={annotations}
             currentPage={currentPage}
             visiblePages={currentPageGroup}
@@ -3019,33 +2950,10 @@ export function ReaderContent({
             onDelete={handleDeleteAnnotationFromList}
             onRetry={retryAnnotation}
             onCreateNote={createNoteFromSelection}
+            isPopoutOpen={popoutDocumentId === document.id}
+            onOpenPopout={openAnnotationsPopout}
           />
         </div>
-
-        {sidePanelFloating ? (
-          <ReaderSidePanel
-            document={readerDocument}
-            annotations={annotations}
-            currentPage={currentPage}
-            progress={progress}
-            totalPages={pdfDocument?.numPages ?? null}
-            fileSizeBytes={fileSizeBytes}
-            isFloating
-            floatingPanel={annotationsPanel}
-            isActiveForShortcuts={isAnnotationsPanelActiveForShortcuts}
-            onFloat={openDetachedPanel}
-            onOpenSystemWindow={openPanelSystemWindow}
-            onDock={onCloseAnnotationsPanel}
-            onMinimize={onMinimizeAnnotationsPanel}
-            onRestore={onRestoreAnnotationsPanel}
-            onJumpToPage={scrollToPage}
-            onDeleteAnnotation={handleDeleteAnnotationFromList}
-            onUpdateAnnotationNote={saveAnnotationNoteById}
-            onToggleFavorite={() => onToggleFavorite(document.id)}
-            databaseSource={databaseSource}
-            onClose={onCloseAnnotationsPanel}
-          />
-        ) : null}
       </div>
 
       {readerActionError ? (

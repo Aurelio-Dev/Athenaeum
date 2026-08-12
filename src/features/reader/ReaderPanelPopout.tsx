@@ -10,7 +10,6 @@ import {
   isReaderDocumentPayload,
   isReaderInvalidationPayload,
   isReaderPageStatePayload,
-  isReaderPopoutCloseRequestPayload,
   listAnnotations,
   listAvailableTagsFromPreloadedDatabase,
   READER_ANNOTATIONS_CHANGED_EVENT,
@@ -20,15 +19,16 @@ import {
   READER_PAGE_STATE_CHANGED_EVENT,
   READER_PAGE_STATE_REQUESTED_EVENT,
   READER_POPOUT_CLOSED_EVENT,
-  READER_POPOUT_FLUSHED_EVENT,
-  READER_REQUEST_POPOUT_CLOSE_EVENT,
+  READER_POPOUT_STATUS_CHANGED_EVENT,
+  READER_POPOUT_STATUS_REQUESTED_EVENT,
   READER_SET_DOCUMENT_EVENT,
+  READER_WINDOW_LABEL,
   setDocumentNote,
   setDocumentFavorite,
   openDocumentExternally,
   updateAnnotationNote,
 } from "../../lib/database";
-import type { ReaderDocumentPayload, ReaderJumpToPagePayload, ReaderPopoutCloseRequestPayload } from "../../lib/database";
+import type { ReaderDocumentPayload, ReaderJumpToPagePayload } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
@@ -273,7 +273,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       setTotalPages(payload.totalPages);
       setFileSizeBytes(payload.fileSizeBytes);
     }, () => {
-      void emitTo<ReaderDocumentPayload>("main", READER_PAGE_STATE_REQUESTED_EVENT, { documentId })
+      void emitTo<ReaderDocumentPayload>(READER_WINDOW_LABEL, READER_PAGE_STATE_REQUESTED_EVENT, { documentId })
         .catch((error) => {
           console.warn("Nao foi possivel solicitar o estado atual do Reader.", error);
         });
@@ -350,7 +350,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
   }
 
   function handleJumpToPage(page: number) {
-    void emitTo<ReaderJumpToPagePayload>("main", READER_JUMP_TO_PAGE_EVENT, { documentId, page }).catch((error) => {
+    void emitTo<ReaderJumpToPagePayload>(READER_WINDOW_LABEL, READER_JUMP_TO_PAGE_EVENT, { documentId, page }).catch((error) => {
       console.warn("Nao foi possivel solicitar a navegacao para a pagina.", error);
     });
   }
@@ -380,6 +380,12 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
 
   const notifyPopoutClosed = useCallback(async (closedDocumentId: string) => {
     await emit<ReaderDocumentPayload>(READER_POPOUT_CLOSED_EVENT, { documentId: closedDocumentId });
+  }, []);
+
+  const notifyPopoutStatus = useCallback(async (openDocumentId: string) => {
+    await emitTo<ReaderDocumentPayload>(READER_WINDOW_LABEL, READER_POPOUT_STATUS_CHANGED_EVENT, {
+      documentId: openDocumentId,
+    });
   }, []);
 
   const switchDocument = useCallback(
@@ -424,6 +430,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             applyLoadedNotes(loadedNotes);
             setAnnotations(loadedAnnotations);
             applyLoadedDocument(loadedDocument);
+            await notifyPopoutStatus(nextDocumentId);
           } catch (error) {
             console.warn("Nao foi possivel trocar o documento da popout.", error);
             setErrorMessage("Nao foi possivel carregar o novo documento.");
@@ -442,7 +449,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       documentSwitchPromiseRef.current = switchPromise;
       return switchPromise;
     },
-    [applyLoadedDocument, applyLoadedNotes, flushNotes, loadDocumentAnnotations, loadDocumentDetails, loadDocumentNotes, notifyPopoutClosed],
+    [applyLoadedDocument, applyLoadedNotes, flushNotes, loadDocumentAnnotations, loadDocumentDetails, loadDocumentNotes, notifyPopoutClosed, notifyPopoutStatus],
   );
 
   useEffect(() => {
@@ -472,30 +479,17 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       void switchDocument(payload.documentId).catch(() => undefined);
     });
 
-    registerListener<unknown>(READER_REQUEST_POPOUT_CLOSE_EVENT, (payload) => {
-      if (
-        !isReaderPopoutCloseRequestPayload(payload) ||
-        payload.documentId !== documentIdRef.current
-      ) {
-        return;
-      }
-
-      setIsClosing(true);
-      void flushNotes()
-        .then(() =>
-          emitTo<ReaderPopoutCloseRequestPayload>("main", READER_POPOUT_FLUSHED_EVENT, payload),
-        )
-        .catch((error) => {
-          setIsClosing(false);
-          console.warn("Nao foi possivel confirmar o flush da popout.", error);
-        });
+    registerListener<unknown>(READER_POPOUT_STATUS_REQUESTED_EVENT, () => {
+      void notifyPopoutStatus(documentIdRef.current).catch((error) => {
+        console.warn("Nao foi possivel informar o estado da popout ao Reader.", error);
+      });
     });
 
     return () => {
       isDisposed = true;
       unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
     };
-  }, [flushNotes, switchDocument]);
+  }, [notifyPopoutStatus, switchDocument]);
 
   const closeWindow = useCallback(async () => {
     if (closeWindowPromiseRef.current) {

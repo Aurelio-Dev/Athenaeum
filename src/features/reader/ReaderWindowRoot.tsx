@@ -285,12 +285,6 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
         readerPanelSize={readerSize}
         isReaderMaximized={bootstrap.opensMaximized}
         isActiveForShortcuts={true}
-        annotationsPanel={null}
-        isAnnotationsPanelActiveForShortcuts={false}
-        onOpenAnnotationsPanel={() => undefined}
-        onCloseAnnotationsPanel={() => undefined}
-        onMinimizeAnnotationsPanel={() => undefined}
-        onRestoreAnnotationsPanel={() => undefined}
         onNativeFullscreenVisualStateChange={() => setReaderSize(getWindowContentSize())}
         onDocumentSwitched={applySwitchedDocument}
         databaseSource="preloaded"
