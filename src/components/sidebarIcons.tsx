@@ -1,3 +1,5 @@
+import { BookmarkIcon } from "./ui/SharedIcons";
+
 // Icones da barra lateral do app. Fonte unica: a sidebar da biblioteca
 // (Sidebar) e a sidebar do leitor (ReaderLeftSidebar) usam exatamente os
 // mesmos desenhos e pesos de traco.
@@ -92,11 +94,7 @@ export function SidebarIcon({ name }: { name: SidebarIconName }) {
   }
 
   if (name === "bookmark") {
-    return (
-      <svg {...commonProps}>
-        <path d="M6 4.5h12A0.5 0.5 0 0 1 18.5 5v15.5L12 16l-6.5 4.5V5A0.5 0.5 0 0 1 6 4.5z" />
-      </svg>
-    );
+    return <BookmarkIcon size={16} />;
   }
 
   if (name === "gear") {

@@ -7,6 +7,11 @@ type HeartIconProps = IconProps & {
   filled?: boolean;
 };
 
+type BookmarkIconProps = IconProps & {
+  strokeWidth?: number;
+  variant?: "default" | "chrome";
+};
+
 // Icones extraidos dos componentes existentes para evitar duplicacao de SVG.
 export function HeartIcon({ className, filled = false, size = 18 }: HeartIconProps) {
   return (
@@ -46,6 +51,31 @@ export function TrashIcon({ className, size = 18 }: IconProps) {
       <path d="M4.66667 3.5V2.33334C4.66667 1.75 5.25 1.16667 5.83333 1.16667H8.16667C8.75 1.16667 9.33333 1.75 9.33333 2.33334V3.5" />
       <path d="M5.83333 6.41667V9.91667" />
       <path d="M8.16667 6.41667V9.91667" />
+    </svg>
+  );
+}
+
+export function BookmarkIcon({ className, size = 18, strokeWidth = 2, variant = "default" }: BookmarkIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d={
+          variant === "chrome"
+            ? "m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"
+            : "M6 4.5h12A0.5 0.5 0 0 1 18.5 5v15.5L12 16l-6.5 4.5V5A0.5 0.5 0 0 1 6 4.5z"
+        }
+      />
     </svg>
   );
 }
