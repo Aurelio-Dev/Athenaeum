@@ -55,6 +55,8 @@ export function HighlightLayer({ annotations, saveStates, onRetry, onSelect }: H
                 key={index}
                 type="button"
                 aria-label="Abrir anotacao"
+                data-annotation-id={annotation.id}
+                data-rect-index={index}
                 className={`pointer-events-auto absolute cursor-pointer ${
                   isUnsaved ? "outline-dashed outline-2 outline-status-red-text" : ""
                 }`}

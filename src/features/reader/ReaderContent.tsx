@@ -100,6 +100,11 @@ type PageSize = {
   height: number;
 };
 
+type PageRawSizeCache = {
+  documentId: string;
+  sizes: Map<number, PageSize>;
+};
+
 type VisibleFitAlignment = {
   requestId: number;
   activePage: number;
@@ -209,9 +214,27 @@ function compareDocumentBookmarks(first: DocumentBookmark, second: DocumentBookm
 // Escala base do PDF: o canvas e a camada de texto usam a MESMA escala para o
 // texto transparente cair exatamente sobre as letras.
 const pdfBaseScale = 1.1;
+const pageGeometryBatchSize = 50;
 
 function pageScale(zoom: number) {
   return (zoom / 100) * pdfBaseScale;
+}
+
+// Reconstrói a geometria completa no zoom atual antes de liberar o layout.
+// Assim, páginas virtualizadas não voltam a depender das estimativas ao mudar
+// o zoom, embora o canvas continue sendo renderizado apenas quando necessário.
+function derivePageSizesFromRaw(pageRawSizes: ReadonlyMap<number, PageSize>, zoom: number): Map<number, PageSize> {
+  const scale = pageScale(zoom);
+  const pageSizes = new Map<number, PageSize>();
+
+  for (const [pageNumber, rawSize] of pageRawSizes) {
+    pageSizes.set(pageNumber, {
+      width: Math.round(rawSize.width * scale),
+      height: Math.round(rawSize.height * scale),
+    });
+  }
+
+  return pageSizes;
 }
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -296,6 +319,7 @@ function base64ToBytes(base64: string) {
 type LoadedPdfResource = {
   pdfDocument: PdfDocument | null;
   outline: PdfOutlineItem[];
+  pageRawSizes: Map<number, PageSize>;
   fileSizeBytes: number | null;
   totalPages: number;
 };
@@ -326,6 +350,7 @@ function createPdfLoadOperation(targetDocument: LibraryDocument): PdfLoadOperati
       return {
         pdfDocument: null,
         outline: [],
+        pageRawSizes: new Map(),
         fileSizeBytes: null,
         totalPages: fallbackPageCount,
       };
@@ -356,6 +381,42 @@ function createPdfLoadOperation(targetDocument: LibraryDocument): PdfLoadOperati
       throw new DOMException("Carregamento cancelado.", "AbortError");
     }
 
+    const pageRawSizes = new Map<number, PageSize>();
+    // Os lotes limitam o pico de chamadas concorrentes em PDFs extensos e
+    // permitem interromper o pré-cálculo antes de visitar as páginas restantes.
+    for (let batchStart = 1; batchStart <= loadedDocument.numPages; batchStart += pageGeometryBatchSize) {
+      if (cancelled) {
+        throw new DOMException("Carregamento cancelado.", "AbortError");
+      }
+
+      const batchEnd = Math.min(loadedDocument.numPages, batchStart + pageGeometryBatchSize - 1);
+      const batchEntries = await Promise.all(
+        Array.from({ length: batchEnd - batchStart + 1 }, async (_, index) => {
+          const pageNumber = batchStart + index;
+
+          try {
+            const page = await loadedDocument.getPage(pageNumber);
+            const viewport = page.getViewport({ scale: 1 });
+            return [pageNumber, { width: viewport.width, height: viewport.height }] as const;
+          } catch (error) {
+            if (!cancelled) {
+              console.warn(`Não foi possível obter as dimensões da página ${pageNumber}.`, error);
+            }
+            return null;
+          }
+        }),
+      );
+      if (cancelled) {
+        throw new DOMException("Carregamento cancelado.", "AbortError");
+      }
+
+      for (const entry of batchEntries) {
+        if (entry) {
+          pageRawSizes.set(...entry);
+        }
+      }
+    }
+
     const outline = await resolveOutlineWithPages(loadedDocument);
     if (cancelled) {
       throw new DOMException("Carregamento cancelado.", "AbortError");
@@ -364,6 +425,7 @@ function createPdfLoadOperation(targetDocument: LibraryDocument): PdfLoadOperati
     return {
       pdfDocument: loadedDocument,
       outline,
+      pageRawSizes,
       fileSizeBytes,
       totalPages: loadedDocument.numPages,
     };
@@ -571,6 +633,10 @@ export function ReaderContent({
   const pendingZoomAnchorRef = useRef<PendingZoomAnchor | null>(null);
   const readingModeTransitionAnchorRef = useRef<Pick<PendingZoomAnchor, "page" | "pageOffsetRatio"> | null>(null);
   const readingRestoreSequenceRef = useRef(0);
+  // Cache completo em escala 1.0, pré-calculado uma única vez por documento.
+  // Ele fica separado porque pageBaseSizesRef usa a escala visual 1.1 e é
+  // preenchido apenas conforme cada página renderiza.
+  const pageRawSizesRef = useRef<PageRawSizeCache | null>(null);
   const pageBaseSizesRef = useRef<Map<number, PageSize>>(new Map());
   const [pageSizes, setPageSizes] = useState<Map<number, PageSize>>(new Map());
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
@@ -912,8 +978,15 @@ export function ReaderContent({
     };
   }, [cancelRegisteredPdfWork]);
 
-  useEffect(() => {
-    setPageSizes(new Map());
+  useLayoutEffect(() => {
+    // A associação explícita impede que a ordem entre layout effects e effects
+    // passivos aplique, mesmo por um frame, a geometria do documento anterior.
+    const pageRawSizes = pageRawSizesRef.current;
+    setPageSizes(
+      pageRawSizes?.documentId === document.id
+        ? derivePageSizesFromRaw(pageRawSizes.sizes, zoom)
+        : new Map(),
+    );
   }, [document.id, zoom]);
 
   useEffect(() => {
@@ -1111,6 +1184,8 @@ export function ReaderContent({
       };
     }
 
+    pageRawSizesRef.current = null;
+    setPageSizes(new Map());
     const operation = createPdfLoadOperation(document);
     activePdfLoadOperationRef.current = operation;
     setIsPdfLoading(true);
@@ -1123,6 +1198,8 @@ export function ReaderContent({
           return;
         }
 
+        pageRawSizesRef.current = { documentId: document.id, sizes: loadedPdf.pageRawSizes };
+        setPageSizes(derivePageSizesFromRaw(loadedPdf.pageRawSizes, zoomRef.current));
         pdfDocumentRef.current = loadedPdf.pdfDocument;
         setPdfDocument(loadedPdf.pdfDocument);
         setPdfOutline(loadedPdf.outline);
@@ -1680,27 +1757,58 @@ export function ReaderContent({
     setPendingSelection(capturedSelection);
   }, [closeSelectionSession, pdfDocument]);
 
-  const scrollToPage = useCallback((page: number) => {
-    cancelReaderAutoAlignment();
-    const readerSurface = readerSurfaceRef.current;
-    const targetPage = clamp(Math.round(page), 1, totalPages);
-    const pageElement = pageRefs.current[targetPage - 1];
-    activePageLockRef.current = {
-      page: targetPage,
-      expiresAt: window.performance.now() + 700,
-    };
+  const scrollToReaderPosition = useCallback(
+    (page: number, getTargetScrollTop: (pageElement: HTMLElement) => number) => {
+      cancelReaderAutoAlignment();
+      const readerSurface = readerSurfaceRef.current;
+      const targetPage = clamp(Math.round(page), 1, totalPages);
+      const pageElement = pageRefs.current[targetPage - 1];
+      activePageLockRef.current = {
+        page: targetPage,
+        expiresAt: window.performance.now() + 700,
+      };
 
-    if (!readerSurface || !pageElement) {
+      if (!readerSurface || !pageElement) {
+        setCurrentPage(targetPage);
+        return;
+      }
+
       setCurrentPage(targetPage);
-      return;
-    }
+      readerSurface.scrollTo({
+        top: Math.max(0, getTargetScrollTop(pageElement)),
+        behavior: "smooth",
+      });
+    },
+    [cancelReaderAutoAlignment, totalPages],
+  );
 
-    setCurrentPage(targetPage);
-    readerSurface.scrollTo({
-      top: getPageAlignedScrollTop(pageElement, activeTopInset),
-      behavior: "smooth",
-    });
-  }, [activeTopInset, cancelReaderAutoAlignment, totalPages]);
+  const scrollToPage = useCallback(
+    (page: number) => {
+      scrollToReaderPosition(page, (pageElement) => getPageAlignedScrollTop(pageElement, activeTopInset));
+    },
+    [activeTopInset, scrollToReaderPosition],
+  );
+
+  const scrollToAnnotation = useCallback(
+    (annotation: Annotation) => {
+      if (!continuousScroll) {
+        scrollToPage(annotation.page);
+        return;
+      }
+
+      const rectY = annotation.rects.reduce((lowest, rect) => Math.min(lowest, rect.y), Number.POSITIVE_INFINITY);
+      if (!Number.isFinite(rectY)) {
+        scrollToPage(annotation.page);
+        return;
+      }
+
+      scrollToReaderPosition(
+        annotation.page,
+        (pageElement) => pageElement.offsetTop - activeTopInset + rectY * pageElement.offsetHeight,
+      );
+    },
+    [activeTopInset, continuousScroll, scrollToPage, scrollToReaderPosition],
+  );
 
   useEffect(() => {
     let isDisposed = false;
@@ -2202,6 +2310,7 @@ export function ReaderContent({
           visibleContentAbortControllerRef.current.abort();
           visibleContentGenerationRef.current += 1;
           visibleContentCacheRef.current = new Map();
+          pageRawSizesRef.current = null;
           pageBaseSizesRef.current.clear();
           fitRequestSequenceRef.current += 1;
           readingRestoreSequenceRef.current += 1;
@@ -2273,6 +2382,7 @@ export function ReaderContent({
             loadedPdf = {
               pdfDocument: null,
               outline: [],
+              pageRawSizes: new Map(),
               fileSizeBytes: null,
               totalPages: fallbackPageCount,
             };
@@ -2315,13 +2425,14 @@ export function ReaderContent({
           saveStatesRef.current = emptySaveStates;
           zoomRef.current = nextZoom;
           pdfDocumentRef.current = loadedPdf.pdfDocument;
+          pageRawSizesRef.current = { documentId: nextDocument.id, sizes: loadedPdf.pageRawSizes };
           activeDocumentRef.current = nextDocument;
           activeDocumentIdRef.current = nextDocument.id;
           preloadedPdfDocumentIdRef.current = nextDocument.id;
           preloadedAnnotationsDocumentIdRef.current = nextDocument.id;
           preloadedBookmarksDocumentIdRef.current = nextDocument.id;
 
-          setPageSizes(new Map());
+          setPageSizes(derivePageSizesFromRaw(loadedPdf.pageRawSizes, nextZoom));
           setPdfOutline(loadedPdf.outline);
           setPdfError(pdfLoadError);
           setFileSizeBytes(loadedPdf.fileSizeBytes);
@@ -3308,7 +3419,7 @@ export function ReaderContent({
             pendingSelection={pendingSelection}
             saveStates={saveStates}
             composerFocusSignal={composerFocusSignal}
-            onJumpToPage={scrollToPage}
+            onJumpToAnnotation={scrollToAnnotation}
             onEdit={openAnnotationEditor}
             onDelete={handleDeleteAnnotationFromList}
             onRetry={retryAnnotation}

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { formatEditedAgo } from "../../lib/relativeTime";
 import type { Annotation, AnnotationSaveState } from "../../types/annotation";
 import { highlightPalette } from "./highlightPalette";
@@ -12,7 +12,7 @@ export type ReaderAnnotationsDockProps = {
   pendingSelection: { text: string } | null;
   saveStates: ReadonlyMap<string, AnnotationSaveState>;
   composerFocusSignal: number;
-  onJumpToPage: (page: number) => void;
+  onJumpToAnnotation: (annotation: Annotation) => void;
   onEdit: (annotation: Annotation) => void;
   onDelete: (annotationId: string) => void;
   onRetry: (annotationId: string) => void;
@@ -103,30 +103,39 @@ function compareAnnotationPosition(first: Annotation, second: Annotation) {
 type AnnotationCardProps = {
   annotation: Annotation;
   saveState: AnnotationSaveState;
-  onJumpToPage: (page: number) => void;
+  onJumpToAnnotation: (annotation: Annotation) => void;
   onEdit: (annotation: Annotation) => void;
   onDelete: (annotationId: string) => void;
   onRetry: (annotationId: string) => void;
 };
 
-function AnnotationCard({ annotation, saveState, onJumpToPage, onEdit, onDelete, onRetry }: AnnotationCardProps) {
+function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onDelete, onRetry }: AnnotationCardProps) {
   const palette = highlightPalette[annotation.color];
 
+  function handleCardKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+
+    event.preventDefault();
+    onJumpToAnnotation(annotation);
+  }
+
   return (
-    <article className="reader-annotation-border flex h-full flex-col rounded-[11px] border bg-[var(--reader-annotation-card-bg)] px-3 py-2 transition hover:border-primary/70">
-      <button
-        type="button"
-        title={`Ir para a página ${annotation.page}`}
-        className="min-w-0 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-        onClick={() => onJumpToPage(annotation.page)}
+    <article
+      role="button"
+      tabIndex={0}
+      title={`Ir para a anotação na página ${annotation.page}`}
+      className="reader-annotation-border flex h-full cursor-pointer flex-col rounded-[11px] border bg-[var(--reader-annotation-card-bg)] px-3 py-2 outline-none transition hover:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+      onClick={() => onJumpToAnnotation(annotation)}
+      onKeyDown={handleCardKeyDown}
+    >
+      <blockquote
+        className="line-clamp-2 border-l-2 pl-2.5 font-serif text-xs italic leading-[1.45] text-[var(--foreground)]"
+        style={{ borderLeftColor: palette.bg }}
       >
-        <blockquote
-          className="line-clamp-2 border-l-2 pl-2.5 font-serif text-xs italic leading-[1.45] text-[var(--foreground)]"
-          style={{ borderLeftColor: palette.bg }}
-        >
-          “{annotation.selectedText}”
-        </blockquote>
-      </button>
+        “{annotation.selectedText}”
+      </blockquote>
 
       {annotation.note.trim().length > 0 ? (
         <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-[1.45] text-[var(--foreground)]">{annotation.note}</p>
@@ -146,7 +155,10 @@ function AnnotationCard({ annotation, saveState, onJumpToPage, onEdit, onDelete,
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 rounded-sm text-status-red-text outline-none transition hover:underline focus-visible:ring-2 focus-visible:ring-primary/60"
-                  onClick={() => onRetry(annotation.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRetry(annotation.id);
+                  }}
                 >
                   <RetryIcon />
                   Tentar novamente
@@ -163,7 +175,10 @@ function AnnotationCard({ annotation, saveState, onJumpToPage, onEdit, onDelete,
             title={saveState === "saved" ? "Editar anotação" : "Aguarde a anotação ser salva."}
             disabled={saveState !== "saved"}
             className="rounded-md p-1.5 text-[var(--muted-foreground)] outline-none transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
-            onClick={() => onEdit(annotation)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(annotation);
+            }}
           >
             <EditIcon />
           </button>
@@ -173,7 +188,10 @@ function AnnotationCard({ annotation, saveState, onJumpToPage, onEdit, onDelete,
             title={saveState === "saving" ? "Aguarde a anotação ser salva." : "Excluir anotação"}
             disabled={saveState === "saving"}
             className="rounded-md p-1.5 text-[var(--muted-foreground)] outline-none transition hover:bg-status-red hover:text-status-red-text focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
-            onClick={() => onDelete(annotation.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(annotation.id);
+            }}
           >
             <TrashIcon />
           </button>
@@ -192,7 +210,7 @@ export function ReaderAnnotationsDock({
   pendingSelection,
   saveStates,
   composerFocusSignal,
-  onJumpToPage,
+  onJumpToAnnotation,
   onEdit,
   onDelete,
   onRetry,
@@ -314,7 +332,7 @@ export function ReaderAnnotationsDock({
               <AnnotationCard
                 annotation={annotation}
                 saveState={saveStates.get(annotation.id) ?? "saved"}
-                onJumpToPage={onJumpToPage}
+                onJumpToAnnotation={onJumpToAnnotation}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onRetry={onRetry}
