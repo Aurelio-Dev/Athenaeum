@@ -16,6 +16,11 @@ export const notebookHighlightAttribute = "data-athenaeum-highlight";
 export const notebookFontColorAttribute = "data-athenaeum-color";
 
 const markerAttribute = "data-athenaeum-text-color-marker";
+// `hiliteColor` ignora `transparent` no Chromium/WebView2. Uma cor CSS
+// valida garante que ambos os comandos criem o carrier transitorio; ela e
+// convertida em remocao antes de qualquer HTML chegar ao autosave.
+const removalCssColor = "#010203";
+const normalizedRemovalCssColor = removalCssColor.toUpperCase();
 const colorAttributeByKind: Record<NotebookTextColorKind, string> = {
   highlight: notebookHighlightAttribute,
   color: notebookFontColorAttribute,
@@ -79,6 +84,10 @@ function resolveCssColorToken(kind: NotebookTextColorKind, value: string) {
   }
 
   if (normalized === "transparent") {
+    return null;
+  }
+
+  if (normalized === normalizedRemovalCssColor) {
     return null;
   }
 
@@ -272,7 +281,7 @@ export function applyNotebookTextColor(
     ? kind === "highlight"
       ? TAG_COLOR_TOKENS[token].pastel
       : TAG_COLOR_TOKENS[token].bg
-    : "transparent";
+    : removalCssColor;
 
   root.focus();
   root.ownerDocument.execCommand(command, false, commandValue);

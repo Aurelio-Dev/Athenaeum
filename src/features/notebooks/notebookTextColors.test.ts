@@ -31,6 +31,11 @@ function installExecCommandMock() {
       }
 
       const range = selection.getRangeAt(0);
+      // Reproduz o Chromium/WebView2: `hiliteColor` nao materializa
+      // `transparent`, portanto esse valor nao consegue remover o realce.
+      if (command === "hiliteColor" && value === "transparent") {
+        return true;
+      }
       const span = document.createElement("span");
       if (command === "hiliteColor") {
         span.style.backgroundColor = value;
@@ -131,11 +136,13 @@ describe("applyNotebookTextColor", () => {
     selection = selectContents(editor);
     applyNotebookTextColor(editor, selection, "highlight", null);
     expect(editor.innerHTML).toBe('<span data-athenaeum-color="blue">texto</span>');
+    expect(editor.innerHTML).not.toContain("010203");
 
     selection = selectContents(editor);
     applyNotebookTextColor(editor, selection, "color", null);
     expect(editor.innerHTML).toBe("texto");
     expect(editor.querySelector("span")).toBeNull();
+    expect(editor.innerHTML).not.toContain("010203");
   });
 });
 
