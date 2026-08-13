@@ -61,4 +61,20 @@ describe("sanitizeNotebookPrintContent", () => {
     );
     expect(output).toBe('<div style="text-align: center">centro</div><code style="display: block">x</code>');
   });
+
+  it("preserva somente enums validos de realce e cor em spans", () => {
+    const output = sanitizeNotebookPrintContent(
+      '<span data-athenaeum-highlight="amber" data-athenaeum-color="blue">valido</span>' +
+      '<span data-athenaeum-highlight="magenta" style="background:#123456;color:#654321">invalido</span>' +
+      '<strong data-athenaeum-color="red">elemento errado</strong>',
+    );
+
+    expect(output).toBe(
+      '<span data-athenaeum-highlight="amber" data-athenaeum-color="blue">valido</span>' +
+      'invalido<strong>elemento errado</strong>',
+    );
+    expect(output).not.toContain("#123456");
+    expect(output).not.toContain("#654321");
+    expect(output).not.toContain("magenta");
+  });
 });

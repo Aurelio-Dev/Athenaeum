@@ -1,5 +1,11 @@
 import { sanitizeHtmlFragment, type HtmlElementDisposition } from "../../lib/htmlSanitizer";
+import { isTagColorToken } from "../../lib/tagColors";
 import { isCalloutType, isDiagramKind } from "./notebookEditorUtils";
+import {
+  isNotebookTextColorAttribute,
+  notebookFontColorAttribute,
+  notebookHighlightAttribute,
+} from "./notebookTextColors";
 
 const allowedElements = new Set([
   "a",
@@ -85,6 +91,15 @@ function getElementDisposition(element: Element): HtmlElementDisposition | null 
 
   if (element.tagName.toLowerCase() === "img" && !hasSafeAssetId(element)) {
     return "discard";
+  }
+
+  if (
+    element.tagName.toLowerCase() === "span" &&
+    (element.hasAttribute(notebookHighlightAttribute) || element.hasAttribute(notebookFontColorAttribute)) &&
+    !isTagColorToken(element.getAttribute(notebookHighlightAttribute)?.trim() ?? "") &&
+    !isTagColorToken(element.getAttribute(notebookFontColorAttribute)?.trim() ?? "")
+  ) {
+    return "unwrap";
   }
 
   return null;
@@ -176,6 +191,10 @@ function sanitizeAttribute(element: Element, attribute: Attr) {
 
   if (name === "style") {
     return sanitizeStyle(element, value);
+  }
+
+  if (isNotebookTextColorAttribute(name)) {
+    return element.tagName.toLowerCase() === "span" && isTagColorToken(value) ? value : null;
   }
 
   if (name.startsWith("data-")) {

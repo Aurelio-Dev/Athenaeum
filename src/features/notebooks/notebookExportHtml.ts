@@ -1,4 +1,5 @@
 import type { NotebookPage } from "../../types/library";
+import { isTagColorToken } from "../../lib/tagColors";
 import type { NotebookEquationStaticRenderResult } from "./notebookExportKatex";
 import { renderNotebookDiagramStaticSvg } from "./notebookDiagramStaticSvg";
 import {
@@ -10,6 +11,12 @@ import {
 import { loadNotebookExportLoraFontFaceCss } from "./notebookExportFonts";
 import { isPlaceholderFigureCaption } from "./notebookEditorUtils";
 import { applyFigureDimensions, resolveFigureExportSizing } from "./notebookFigureDimensions";
+import {
+  isNotebookTextColorAttribute,
+  notebookFontColorAttribute,
+  notebookHighlightAttribute,
+  renderNotebookTextColorStyles,
+} from "./notebookTextColors";
 
 export type NotebookExportScope = "current-page" | "full-notebook";
 
@@ -334,6 +341,13 @@ function copySafeAttributes(source: Element, target: HTMLElement, pageId: number
       const safeStyle = getSanitizedStyle(value);
       if (safeStyle) {
         target.setAttribute("style", safeStyle);
+      }
+      continue;
+    }
+
+    if (isNotebookTextColorAttribute(name)) {
+      if (source.tagName.toLowerCase() === "span" && isTagColorToken(value.trim())) {
+        target.setAttribute(name, value.trim());
       }
       continue;
     }
@@ -731,6 +745,17 @@ function sanitizeNode(node: Node, context: SanitizationContext): Node[] {
     return [];
   }
 
+  if (
+    tagName === "span" &&
+    (node.hasAttribute(notebookHighlightAttribute) || node.hasAttribute(notebookFontColorAttribute)) &&
+    !isTagColorToken(node.getAttribute(notebookHighlightAttribute)?.trim() ?? "") &&
+    !isTagColorToken(node.getAttribute(notebookFontColorAttribute)?.trim() ?? "")
+  ) {
+    const fragment = context.targetDocument.createDocumentFragment();
+    appendSanitizedChildren(node, fragment, context);
+    return [fragment];
+  }
+
   if (isPersistedCodeBlock(node)) {
     return sanitizeCodeBlock(node as HTMLElement, context);
   }
@@ -799,6 +824,7 @@ export function renderExportStyles(options: NotebookExportStyleOptions = {}) {
 
   return `
     ${fontFaceStyles ? `${fontFaceStyles}\n` : ""}
+    ${renderNotebookTextColorStyles(".athenaeum-export")}
     :root {
       color-scheme: light;
       /* Tokens editoriais fixos, espelhando o tema claro do Caderno

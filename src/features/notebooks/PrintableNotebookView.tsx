@@ -9,6 +9,7 @@ import { clearDiagramPreviews, normalizeDiagrams } from "./notebookEditorDiagram
 import { clearEquationPreviews, normalizeEquations } from "./notebookEditorEquationDom";
 import { clearFigurePreviews, hydrateNotebookAssetImages, normalizeFigures } from "./notebookEditorFigureDom";
 import { sanitizeNotebookPrintContent } from "./notebookPrintContent";
+import { renderNotebookTextColorStyles } from "./notebookTextColors";
 import "./notebookPrint.css";
 
 type PrintableNotebookViewProps = {
@@ -34,6 +35,7 @@ type LimitedNotebookAssetLoader = {
 };
 
 const notebookAssetLoadConcurrency = 2;
+const notebookPrintTextColorStyles = renderNotebookTextColorStyles(".notebook-print-page-content");
 
 function pageDisplayTitle(page: NotebookPage) {
   return page.title?.trim() || `Página sem título ${page.position}`;
@@ -274,6 +276,7 @@ export function PrintableNotebookView({ pages, onReady }: PrintableNotebookViewP
 
   return createPortal(
     <main className="notebook-print-root" aria-label="Visualização do caderno para impressão">
+      <style>{notebookPrintTextColorStyles}</style>
       {pages.map((page) => (
         <PrintableNotebookPage key={page.id} page={page} loadAssets={assetLoader.load} onReady={handlePageReady} />
       ))}

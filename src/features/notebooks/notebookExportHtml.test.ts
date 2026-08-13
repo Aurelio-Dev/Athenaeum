@@ -1,6 +1,9 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest";
 
 import {
+  buildNotebookExportHtml,
   createNotebookExportSlotSentinel,
   formatNotebookExportDisplayDate,
   parseNotebookExportSlotSentinels,
@@ -94,6 +97,17 @@ describe("validateNotebookExportManifestSlots", () => {
 });
 
 describe("renderExportStyles", () => {
+  it("inclui cores inline canonicas e forca a impressao exata dos realces", () => {
+    const styles = renderExportStyles();
+
+    expect(styles).toContain('[data-athenaeum-highlight="amber"]');
+    expect(styles).toContain("background-color: #FEF3C7");
+    expect(styles).toContain('[data-athenaeum-color="blue"]');
+    expect(styles).toContain("color: #1D4ED8");
+    expect(styles).toContain("-webkit-print-color-adjust: exact");
+    expect(styles).toContain("print-color-adjust: exact");
+  });
+
   it("keeps exported diagrams visually clean and neutral", () => {
     const styles = renderExportStyles();
 
@@ -178,6 +192,36 @@ describe("renderExportStyles", () => {
     expect(styles).toContain("width: 100%");
     expect(styles).toContain("max-width: 100%");
     expect(styles).toContain("height: auto");
+  });
+});
+
+describe("cores inline no HTML exportado", () => {
+  it("preserva enums validos e descarta atributos e estilos arbitrarios", async () => {
+    const result = await buildNotebookExportHtml({
+      notebookId: 1,
+      notebookTitle: "Caderno",
+      scope: "current-page",
+      createdAt: new Date("2026-08-13T12:00:00.000Z"),
+      nonce: "nonce-2026",
+      pages: [
+        {
+          id: 10,
+          notebookId: 1,
+          title: "Pagina",
+          content:
+            '<p><span data-athenaeum-highlight="amber" data-athenaeum-color="blue">valido</span>' +
+            '<span data-athenaeum-highlight="magenta" style="background:#123456;color:#654321">invalido</span></p>',
+          position: 1,
+          createdAt: "2026-08-13T12:00:00.000Z",
+          updatedAt: "2026-08-13T12:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result.html).toContain('<span data-athenaeum-highlight="amber" data-athenaeum-color="blue">valido</span>invalido');
+    expect(result.html).not.toContain("magenta");
+    expect(result.html).not.toContain("#123456");
+    expect(result.html).not.toContain("#654321");
   });
 });
 

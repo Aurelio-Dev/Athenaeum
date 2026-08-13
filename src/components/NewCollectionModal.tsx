@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useState } from "react";
-import { TAG_COLOR_TOKENS, type TagColorToken } from "../lib/tagColors";
+import { TAG_COLOR_TOKEN_NAMES, TAG_COLOR_TOKENS, type TagColorToken } from "../lib/tagColors";
 import type { LibraryCollection } from "../types/library";
+import { TagColorPicker } from "./ui/TagColorPicker";
 
 type NewCollectionPayload = {
   name: string;
@@ -16,13 +17,12 @@ type NewCollectionModalProps = {
   onCreateCollection: (collection: NewCollectionPayload) => Promise<void>;
 };
 
-const colorOrder: TagColorToken[] = ["violet", "indigo", "blue", "teal", "green", "amber", "rose", "red", "slate"];
 const defaultColorToken: TagColorToken = "violet";
 
 // A cor da colecao e persistida como hex (ex.: "#7C3AED"); mapeia de volta
 // para o token da paleta ao editar, caindo no padrao se nao encontrar.
 function findColorToken(color: string): TagColorToken {
-  const match = colorOrder.find((token) => TAG_COLOR_TOKENS[token].bg.toLowerCase() === color.toLowerCase());
+  const match = TAG_COLOR_TOKEN_NAMES.find((token) => TAG_COLOR_TOKENS[token].bg.toLowerCase() === color.toLowerCase());
   return match ?? defaultColorToken;
 }
 
@@ -36,14 +36,6 @@ function getErrorMessage(error: unknown) {
   }
 
   return "Erro desconhecido.";
-}
-
-function CheckIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
 }
 
 function CloseIcon() {
@@ -166,31 +158,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
 
           <div className="grid gap-3">
             <span className="text-sm font-semibold text-text-primary">Cor</span>
-            <div className="flex flex-wrap items-center gap-4">
-              {colorOrder.map((token) => {
-                const selected = token === selectedColorToken;
-
-                return (
-                  <button
-                    key={token}
-                    type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-full transition hover:scale-105"
-                    onClick={() => setSelectedColorToken(token)}
-                    aria-label={`Selecionar cor ${token}`}
-                    aria-pressed={selected}
-                  >
-                    <span
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-white ${
-                        selected ? "ring-2 ring-white ring-offset-2 ring-offset-surface-panel" : ""
-                      }`}
-                      style={{ backgroundColor: TAG_COLOR_TOKENS[token].bg }}
-                    >
-                      {selected ? <CheckIcon /> : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <TagColorPicker selectedToken={selectedColorToken} onSelect={setSelectedColorToken} />
           </div>
         </div>
 

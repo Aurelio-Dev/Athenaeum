@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { TagColorPicker } from "../../components/ui/TagColorPicker";
 import {
   deleteNotebookFileAttachment,
   loadNotebookAssets,
@@ -9,6 +10,7 @@ import {
   saveNotebookFileAttachment,
   type NotebookAssetMetadata,
 } from "../../lib/database";
+import type { TagColorToken } from "../../lib/tagColors";
 import { findEnclosingTag, insertPlainTextWithLineBreaks, prepareCodeElements, wrapSelectionInCode } from "../reader/richTextShared";
 import {
   clearFileAttachmentControls,
@@ -78,6 +80,14 @@ import {
   type BlockAction,
   type EditorAction,
 } from "./notebookEditorToolbar";
+import {
+  applyNotebookTextColor,
+  getNotebookTextColorsAtSelection,
+  normalizeNotebookTextColors,
+  renderNotebookTextColorStyles,
+  type NotebookTextColorKind,
+  type NotebookTextColors,
+} from "./notebookTextColors";
 import {
   calloutIcons,
   calloutLabels,
@@ -214,6 +224,7 @@ const diagramInsertSubtypes: Array<Exclude<FigureSubtype, "image">> = ["diagram"
 // duas linhas dentro da viewport e acima do trecho selecionado.
 const notebookSelectionToolbarWidth = 224;
 const notebookSelectionToolbarHeight = 80;
+const notebookEditorTextColorStyles = renderNotebookTextColorStyles(".notebook-editor");
 
 const notebookSlashMenuWidth = 236;
 // Altura estimada (itens + rotulo + padding) usada so na decisao de flip
@@ -288,6 +299,7 @@ export function serializeNotebookEditorHtml(editor: HTMLElement) {
   clearFigurePreviews(clone);
   removeNotebookAssetImageSources(clone);
   clearFileAttachmentControls(clone);
+  normalizeNotebookTextColors(clone);
 
   return clone.innerHTML;
 }
@@ -697,6 +709,8 @@ export function NotebookPageEditor({
   const [linkUrl, setLinkUrl] = useState("");
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
+  const [openTextColorMenu, setOpenTextColorMenu] = useState<NotebookTextColorKind | null>(null);
+  const [activeTextColors, setActiveTextColors] = useState<NotebookTextColors>({ highlight: null, color: null });
   const [isReferenceMenuOpen, setIsReferenceMenuOpen] = useState(false);
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isCiteMenuOpen, setIsCiteMenuOpen] = useState(false);
@@ -739,6 +753,7 @@ export function NotebookPageEditor({
 
   useEffect(() => {
     setIsTextMenuOpen(false);
+    setOpenTextColorMenu(null);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -755,7 +770,7 @@ export function NotebookPageEditor({
   // popover junto. Ref (e nao state) porque syncActiveActions le no momento do
   // evento de selecao.
   const isToolbarUiOpen =
-    isTextMenuOpen || isMoreMenuOpen || isLinkPopoverOpen || isCiteMenuOpen || showAttachmentNotice || Boolean(assetPasteError);
+    isTextMenuOpen || Boolean(openTextColorMenu) || isMoreMenuOpen || isLinkPopoverOpen || isCiteMenuOpen || showAttachmentNotice || Boolean(assetPasteError);
   const isToolbarUiOpenRef = useRef(false);
   isToolbarUiOpenRef.current = isToolbarUiOpen;
 
@@ -770,6 +785,7 @@ export function NotebookPageEditor({
       activeEquationElementRef.current?.classList.remove(notebookEquationActiveClassName);
       activeEquationElementRef.current = null;
       setActiveActions(new Set());
+      setActiveTextColors({ highlight: null, color: null });
       setActiveAlignment(null);
       setIsSelectionInLink(false);
       setActiveTableCell(null);
@@ -802,6 +818,7 @@ export function NotebookPageEditor({
     }
 
     const nextActive = new Set<EditorAction>();
+    setActiveTextColors(getNotebookTextColorsAtSelection(selection, editor));
 
     (Object.keys(execCommandByAction) as EditorAction[]).forEach((action) => {
       const command = execCommandByAction[action];
@@ -938,6 +955,7 @@ export function NotebookPageEditor({
     const editor = editorRef.current;
     if (editor) {
       editor.innerHTML = initialContent;
+      normalizeNotebookTextColors(editor);
       clearEquationRuntimeClasses(editor);
       clearTableRuntimeClasses(editor);
       normalizeCallouts(editor);
@@ -986,6 +1004,7 @@ export function NotebookPageEditor({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsTextMenuOpen(false);
+        setOpenTextColorMenu(null);
         setIsReferenceMenuOpen(false);
         setIsLayoutMenuOpen(false);
         setIsLinkPopoverOpen(false);
@@ -1022,7 +1041,7 @@ export function NotebookPageEditor({
   }, []);
 
   useEffect(() => {
-    if (!isTextMenuOpen && !isReferenceMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError && !slashMenu) {
+    if (!isTextMenuOpen && !openTextColorMenu && !isReferenceMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError && !slashMenu) {
       return;
     }
 
@@ -1032,6 +1051,7 @@ export function NotebookPageEditor({
       }
 
       setIsTextMenuOpen(false);
+      setOpenTextColorMenu(null);
       setIsReferenceMenuOpen(false);
       setIsLayoutMenuOpen(false);
       setIsLinkPopoverOpen(false);
@@ -1045,7 +1065,7 @@ export function NotebookPageEditor({
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isTextMenuOpen, isReferenceMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError, slashMenu]);
+  }, [isTextMenuOpen, openTextColorMenu, isReferenceMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError, slashMenu]);
 
   // Caret saindo da regiao da query (clique, setas, Home/End) fecha o menu
   // "/". A validacao le o DOM direto (nao o estado) para nao depender da
@@ -2577,9 +2597,27 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
+    setOpenTextColorMenu(null);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
+  }
+
+  function applySelectedTextColor(kind: NotebookTextColorKind, token: TagColorToken | null) {
+    const editor = editorRef.current;
+    const selection = restoreSavedRange();
+    if (!editor || !selection) {
+      setOpenTextColorMenu(null);
+      return;
+    }
+
+    const nextRange = applyNotebookTextColor(editor, selection, kind, token);
+    if (nextRange) {
+      savedRangeRef.current = nextRange;
+      emitChange();
+      syncActiveActions();
+    }
+    setOpenTextColorMenu(null);
   }
 
   // Cola imagens suportadas como assets; se nao houver imagem real, mantem o
@@ -2818,7 +2856,6 @@ export function NotebookPageEditor({
 
   const toolbarBaseTextClassName = "text-[var(--color-sidebar-muted)] hover:text-[var(--color-sidebar-text)]";
   const toolbarIconButtonClassName = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
-  const disabledToolbarIconButtonClassName = `${toolbarIconButtonClassName} disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-sidebar-muted)]`;
   const toolbarChipButtonClassName = `notebook-toolbar-focus-menu-button inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const activeToolbarButtonClassName = "bg-primary-soft text-[var(--color-sidebar-text)]";
   const focusToolbarSeparator = <span className="notebook-toolbar-focus-separator mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
@@ -2841,6 +2878,7 @@ export function NotebookPageEditor({
 
   const closePeerToolbarMenus = () => {
     setIsTextMenuOpen(false);
+    setOpenTextColorMenu(null);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -2916,6 +2954,28 @@ export function NotebookPageEditor({
       >
         Limpar formatação
       </button>
+    </div>
+  ) : null;
+
+  const textColorMenu = openTextColorMenu ? (
+    <div className={compactMenuPanelClassName} role="menu" aria-label={openTextColorMenu === "highlight" ? "Realce" : "Cor da fonte"}>
+      <p className={menuSectionLabelClassName}>{openTextColorMenu === "highlight" ? "Realce" : "Cor da fonte"}</p>
+      <TagColorPicker
+        compact
+        appearance={openTextColorMenu === "highlight" ? "pastel" : "solid"}
+        ariaLabelPrefix={openTextColorMenu === "highlight" ? "Aplicar realce" : "Aplicar cor da fonte"}
+        selectedToken={activeTextColors[openTextColorMenu]}
+        onSelect={(token) => {
+          if (openTextColorMenu) {
+            applySelectedTextColor(openTextColorMenu, token);
+          }
+        }}
+        onRemove={() => {
+          if (openTextColorMenu) {
+            applySelectedTextColor(openTextColorMenu, null);
+          }
+        }}
+      />
     </div>
   ) : null;
 
@@ -3075,6 +3135,32 @@ export function NotebookPageEditor({
     </button>
   );
 
+  function renderTextColorMenuButton(kind: NotebookTextColorKind, label: string, icon: JSX.Element) {
+    const isOpen = openTextColorMenu === kind;
+    const hasAppliedColor = activeTextColors[kind] !== null;
+
+    return (
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        className={`${toolbarIconButtonClassName} ${hasAppliedColor ? activeToolbarButtonClassName : ""}`}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveCurrentRange();
+        }}
+        onClick={() => {
+          closePeerToolbarMenus();
+          setOpenTextColorMenu(isOpen ? null : kind);
+        }}
+      >
+        {icon}
+      </button>
+    );
+  }
+
   const moreMenuButton = (
     <div className="relative shrink-0">
       <button
@@ -3110,24 +3196,8 @@ export function NotebookPageEditor({
         {renderToolbarActionButton(underlineButton)}
       </div>
       <div className="flex w-full items-center justify-center gap-1">
-        <button
-          type="button"
-          disabled
-          title="Em breve"
-          aria-label="Realce (em breve)"
-          className={disabledToolbarIconButtonClassName}
-        >
-          <HighlightIcon />
-        </button>
-        <button
-          type="button"
-          disabled
-          title="Em breve"
-          aria-label="Cor da fonte (em breve)"
-          className={disabledToolbarIconButtonClassName}
-        >
-          <FontColorIcon />
-        </button>
+        {renderTextColorMenuButton("highlight", "Realce", <HighlightIcon />)}
+        {renderTextColorMenuButton("color", "Cor da fonte", <FontColorIcon />)}
         {focusToolbarSeparator}
         {renderToolbarActionButton(unorderedListButton)}
         {renderToolbarActionButton(orderedListButton)}
@@ -3139,6 +3209,7 @@ export function NotebookPageEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <style>{notebookEditorTextColorStyles}</style>
       <input
         ref={localImageInputRef}
         type="file"
@@ -3166,6 +3237,7 @@ export function NotebookPageEditor({
         >
           {focusToolbarControls}
           {textMenu}
+          {textColorMenu}
 
           {isLinkPopoverOpen ? (
             <div className={"absolute left-1/2 top-[calc(100%+6px)] z-40 flex w-72 -translate-x-1/2 items-center gap-2 rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg"}>

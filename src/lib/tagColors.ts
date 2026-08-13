@@ -12,28 +12,46 @@
  * Referência: athenaeum-design-tokens-cores.md
  */
 
-export type TagColorToken =
-  | 'violet' | 'indigo' | 'blue' | 'teal'
-  | 'green'  | 'amber'  | 'rose' | 'red' | 'slate';
+export const TAG_COLOR_TOKEN_NAMES = [
+  'violet',
+  'indigo',
+  'blue',
+  'teal',
+  'green',
+  'amber',
+  'rose',
+  'red',
+  'slate',
+] as const;
+
+export type TagColorToken = (typeof TAG_COLOR_TOKEN_NAMES)[number];
 
 /** Par bg/texto para pílula de tag em fill sólido (padrão de produção). */
 export interface TagColorPair {
-  bg:   string; // fundo saturado
-  text: string; // sempre #FFFFFF
+  bg:     string; // fundo saturado / cor de texto para destaques inline
+  pastel: string; // fundo claro da paleta pastel
+  text:   string; // sempre #FFFFFF nas pilulas solidas
 }
 
 /** Os 9 tokens de cor do design system. */
 export const TAG_COLOR_TOKENS: Record<TagColorToken, TagColorPair> = {
-  violet: { bg: '#5B21B6', text: '#FFFFFF' }, // 8.98:1
-  indigo: { bg: '#4338CA', text: '#FFFFFF' }, // 7.90:1
-  blue:   { bg: '#1D4ED8', text: '#FFFFFF' }, // 6.70:1
-  teal:   { bg: '#0D5C54', text: '#FFFFFF' }, // 7.85:1
-  green:  { bg: '#036B4D', text: '#FFFFFF' }, // 6.53:1 — STATUS apenas
-  amber:  { bg: '#92400E', text: '#FFFFFF' }, // 7.09:1
-  rose:   { bg: '#9D174D', text: '#FFFFFF' }, // 7.88:1
-  red:    { bg: '#B91C1C', text: '#FFFFFF' }, // 6.47:1 — STATUS apenas
-  slate:  { bg: '#475569', text: '#FFFFFF' }, // 7.58:1 — STATUS apenas
+  violet: { bg: '#5B21B6', pastel: '#EDE9FE', text: '#FFFFFF' }, // 8.98:1
+  indigo: { bg: '#4338CA', pastel: '#E0E7FF', text: '#FFFFFF' }, // 7.90:1
+  blue:   { bg: '#1D4ED8', pastel: '#DBEAFE', text: '#FFFFFF' }, // 6.70:1
+  teal:   { bg: '#0D5C54', pastel: '#CCFBF1', text: '#FFFFFF' }, // 7.85:1
+  green:  { bg: '#036B4D', pastel: '#D1FAE5', text: '#FFFFFF' }, // 6.53:1 — STATUS apenas para tags
+  amber:  { bg: '#92400E', pastel: '#FEF3C7', text: '#FFFFFF' }, // 7.09:1
+  rose:   { bg: '#9D174D', pastel: '#FCE7F3', text: '#FFFFFF' }, // 7.88:1
+  red:    { bg: '#B91C1C', pastel: '#FEE2E2', text: '#FFFFFF' }, // 6.47:1 — STATUS apenas para tags
+  slate:  { bg: '#475569', pastel: '#E2E8F0', text: '#FFFFFF' }, // 7.58:1 — STATUS apenas para tags
 };
+
+const tagColorTokenNameSet = new Set<string>(TAG_COLOR_TOKEN_NAMES);
+
+/** Valida enums persistidos que referenciam a paleta canonica de nove cores. */
+export function isTagColorToken(value: string): value is TagColorToken {
+  return tagColorTokenNameSet.has(value);
+}
 
 /**
  * Mapeamento palavra-chave → token.
