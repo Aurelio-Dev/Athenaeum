@@ -250,15 +250,26 @@ function insertSelectionMarkers(range: Range, ownerDocument: Document) {
   return { startMarker, endMarker };
 }
 
-function restoreSelectionFromMarkers(selection: Selection, startMarker: HTMLElement, endMarker: HTMLElement) {
+function createRangeBetweenMarkers(startMarker: HTMLElement, endMarker: HTMLElement) {
   const range = startMarker.ownerDocument.createRange();
   range.setStartAfter(startMarker);
   range.setEndBefore(endMarker);
+  return range;
+}
+
+function restoreSelectionFromMarkers(selection: Selection, startMarker: HTMLElement, endMarker: HTMLElement) {
+  const range = createRangeBetweenMarkers(startMarker, endMarker);
   endMarker.remove();
   startMarker.remove();
   selection.removeAllRanges();
   selection.addRange(range);
   return range.cloneRange();
+}
+
+function selectBetweenMarkers(selection: Selection, startMarker: HTMLElement, endMarker: HTMLElement) {
+  const range = createRangeBetweenMarkers(startMarker, endMarker);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 export function applyNotebookTextColor(
@@ -271,7 +282,7 @@ export function applyNotebookTextColor(
     return null;
   }
 
-  const currentRange = selection.getRangeAt(0);
+  const currentRange = selection.getRangeAt(0).cloneRange();
   if (!nodeIsInsideRoot(currentRange.startContainer, root) || !nodeIsInsideRoot(currentRange.endContainer, root)) {
     return null;
   }
@@ -283,11 +294,15 @@ export function applyNotebookTextColor(
       : TAG_COLOR_TOKENS[token].bg
     : removalCssColor;
 
+  // O WebView2 pode devolver um Range diferente depois de hiliteColor/foreColor
+  // quando a pagina tem limites de bloco como code/blockquote. Os marcadores
+  // precisam nascer antes do comando: a cor usa a selecao original e a
+  // restauracao nao passa a confiar no Range reposicionado pelo engine.
   root.focus();
+  const { startMarker, endMarker } = insertSelectionMarkers(currentRange, root.ownerDocument);
+  selectBetweenMarkers(selection, startMarker, endMarker);
   root.ownerDocument.execCommand(command, false, commandValue);
 
-  const rangeAfterCommand = selection.rangeCount > 0 ? selection.getRangeAt(0) : currentRange;
-  const { startMarker, endMarker } = insertSelectionMarkers(rangeAfterCommand, root.ownerDocument);
   normalizeNotebookTextColors(root);
   return restoreSelectionFromMarkers(selection, startMarker, endMarker);
 }

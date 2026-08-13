@@ -21,7 +21,31 @@ function selectContents(element: HTMLElement) {
   return selection;
 }
 
-function installExecCommandMock() {
+function selectText(element: HTMLElement, text: string) {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let textNode = walker.nextNode();
+
+  while (textNode) {
+    const startOffset = (textNode.textContent ?? "").indexOf(text);
+    if (startOffset >= 0) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStart(textNode, startOffset);
+      range.setEnd(textNode, startOffset + text.length);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      if (!selection) {
+        throw new Error("Selection indisponivel no teste.");
+      }
+      return selection;
+    }
+    textNode = walker.nextNode();
+  }
+
+  throw new Error(`Texto nao encontrado no teste: ${text}`);
+}
+
+function installExecCommandMock(onAfterCommand?: () => void) {
   Object.defineProperty(document, "execCommand", {
     configurable: true,
     value: vi.fn((command: string, _showUi: boolean, value: string) => {
@@ -46,6 +70,7 @@ function installExecCommandMock() {
       range.selectNodeContents(span);
       selection.removeAllRanges();
       selection.addRange(range);
+      onAfterCommand?.();
       return true;
     }),
   });
@@ -144,6 +169,130 @@ describe("applyNotebookTextColor", () => {
     expect(editor.querySelector("span")).toBeNull();
     expect(editor.innerHTML).not.toContain("010203");
   });
+
+  it.each([
+    ["highlight", "data-athenaeum-highlight"],
+    ["color", "data-athenaeum-color"],
+  ] as const)("aplica %s somente ao texto depois de blocos de codigo", (kind, attribute) => {
+    installExecCommandMock();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML =
+      '<div><code style="display:block;background:#1E2130;color:#F0E6DC">codigo um</code>&nbsp;</div>' +
+      '<div><code style="display:block;background:#1E2130;color:#F0E6DC">codigo dois</code>&nbsp;</div>' +
+      '<h2>titulo alvo abaixo</h2>';
+    document.body.append(editor);
+
+    const selection = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, selection, kind, "amber")).not.toBeNull();
+
+    expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
+    expect(selection.toString()).toBe("alvo");
+    expect(editor.querySelector("h2")?.textContent).toBe("titulo alvo abaixo");
+  });
+
+  it.each([
+    ["highlight", "data-athenaeum-highlight"],
+    ["color", "data-athenaeum-color"],
+  ] as const)("aplica %s somente ao texto dentro de bloco de codigo", (kind, attribute) => {
+    installExecCommandMock();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML =
+      '<div><code style="display:block;background:#1E2130;color:#F0E6DC">codigo alvo interno</code>&nbsp;</div>' +
+      '<h2>titulo abaixo</h2>';
+    document.body.append(editor);
+
+    const selection = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, selection, kind, "amber")).not.toBeNull();
+
+    expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
+    expect(selection.toString()).toBe("alvo");
+    expect(editor.querySelector("h2")?.textContent).toBe("titulo abaixo");
+  });
+
+  it.each([
+    ["highlight", "data-athenaeum-highlight"],
+    ["color", "data-athenaeum-color"],
+  ] as const)("aplica %s somente ao texto depois de citacoes em bloco", (kind, attribute) => {
+    installExecCommandMock();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML =
+      "<blockquote>citacao um</blockquote>" +
+      "<blockquote>citacao dois</blockquote>" +
+      "<h2>titulo alvo abaixo</h2>";
+    document.body.append(editor);
+
+    const selection = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, selection, kind, "amber")).not.toBeNull();
+
+    expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
+    expect(selection.toString()).toBe("alvo");
+    expect(editor.querySelector("h2")?.textContent).toBe("titulo alvo abaixo");
+  });
+
+  it.each([
+    ["highlight", "data-athenaeum-highlight"],
+    ["color", "data-athenaeum-color"],
+  ] as const)("aplica %s somente ao texto dentro de citacao em bloco", (kind, attribute) => {
+    installExecCommandMock();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML = "<blockquote>citacao alvo interna</blockquote><h2>titulo abaixo</h2>";
+    document.body.append(editor);
+
+    const selection = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, selection, kind, "amber")).not.toBeNull();
+
+    expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
+    expect(selection.toString()).toBe("alvo");
+    expect(editor.querySelector("h2")?.textContent).toBe("titulo abaixo");
+  });
+
+  it.each([
+    ["highlight", "data-athenaeum-highlight"],
+    ["color", "data-athenaeum-color"],
+  ] as const)("aplica %s somente ao texto sem blocos anteriores", (kind, attribute) => {
+    installExecCommandMock();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML = "<div>texto comum anterior</div><h2>titulo alvo abaixo</h2>";
+    document.body.append(editor);
+
+    const selection = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, selection, kind, "amber")).not.toBeNull();
+
+    expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
+    expect(selection.toString()).toBe("alvo");
+    expect(editor.querySelector("h2")?.textContent).toBe("titulo alvo abaixo");
+  });
+
+  it.each([
+    ["highlight", "data-athenaeum-highlight", "codigo", "<div><code>codigo anterior</code>&nbsp;</div>"],
+    ["color", "data-athenaeum-color", "codigo", "<div><code>codigo anterior</code>&nbsp;</div>"],
+    ["highlight", "data-athenaeum-highlight", "citacao", "<blockquote>citacao anterior</blockquote>"],
+    ["color", "data-athenaeum-color", "citacao", "<blockquote>citacao anterior</blockquote>"],
+  ] as const)(
+    "preserva a selecao original ao aplicar %s depois de %s",
+    (kind, attribute, _context, previousBlock) => {
+      const editor = document.createElement("div");
+      editor.contentEditable = "true";
+      editor.innerHTML = `${previousBlock}<h2>titulo alvo</h2><h3>selecao deslocada</h3>`;
+      document.body.append(editor);
+
+      installExecCommandMock(() => {
+        selectText(editor, "deslocada");
+      });
+
+      const selection = selectText(editor, "alvo");
+      const restoredRange = applyNotebookTextColor(editor, selection, kind, "amber");
+
+      expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
+      expect(restoredRange?.toString()).toBe("alvo");
+      expect(selection.toString()).toBe("alvo");
+    },
+  );
 });
 
 describe("renderNotebookTextColorStyles", () => {
