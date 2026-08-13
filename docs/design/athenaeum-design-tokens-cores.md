@@ -1,5 +1,16 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 13/08/2026 — Realce e cor de fonte no Caderno:** os dois
+> recursos reaproveitam os 9 tokens existentes de tag (`Violet`, `Indigo`,
+> `Blue`, `Teal`, `Rose`, `Amber`, `Green`, `Red` e `Slate`), sem introduzir
+> nenhum hex novo. O realce usa o tom pastel e a cor de fonte usa o tom
+> saturado/texto das tabelas documentadas abaixo.
+>
+> Este uso é uma exceção explícita à regra de que `Green`, `Red` e `Slate`
+> nunca devem representar tags de assunto: no Caderno eles não são tags, mas
+> destaques pontuais aplicados ao texto. A restrição continua integralmente
+> válida para tags de assunto.
+
 > **Changelog 15/07/2026 — Regra de chrome: docado vs. flutuante:**
 > o redesign do Caderno (trilho colapsável, drawer de Detalhes,
 > menu "/") tornou explícita uma distinção que já existia
