@@ -1,6 +1,7 @@
 export type EditorAction =
   | "bold"
   | "italic"
+  | "underline"
   | "h1"
   | "h2"
   | "h3"
@@ -15,6 +16,7 @@ export type BlockAction = (typeof blockActions)[number];
 export const execCommandByAction: Partial<Record<EditorAction, string>> = {
   bold: "bold",
   italic: "italic",
+  underline: "underline",
   "unordered-list": "insertUnorderedList",
   "ordered-list": "insertOrderedList",
 };
@@ -53,6 +55,34 @@ function ItalicIcon() {
       <line x1="19" x2="10" y1="4" y2="4" />
       <line x1="14" x2="5" y1="20" y2="20" />
       <line x1="15" x2="9" y1="4" y2="20" />
+    </svg>
+  );
+}
+
+function UnderlineIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M6 4v6a6 6 0 0 0 12 0V4" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
+export function HighlightIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="m9 11-6 6v4h4l6-6" />
+      <path d="m22 12-7.5 7.5L4.5 9.5 12 2z" />
+    </svg>
+  );
+}
+
+export function FontColorIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="m5 16 7-14 7 14" />
+      <path d="M8 10h8" />
+      <path d="M4 21h16" />
     </svg>
   );
 }
@@ -258,6 +288,7 @@ export const toolbarButtons: ToolbarButton[] = [
   { action: "ordered-list", title: "Lista numerada", icon: <OrderedListIcon /> },
   { action: "blockquote", title: "Citação", icon: <BlockquoteIcon /> },
   { action: "code", title: "Bloco de código", icon: <CodeIcon /> },
+  { action: "underline", title: "Sublinhado", icon: <UnderlineIcon /> },
 ];
 
 export const toolbarButtonGroups: ToolbarButton[][] = [

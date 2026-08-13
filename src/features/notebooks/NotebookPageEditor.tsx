@@ -66,6 +66,8 @@ import {
   CitationIcon,
   EquationIcon,
   FigureIcon,
+  FontColorIcon,
+  HighlightIcon,
   LinkIcon,
   MoreIcon,
   PdfToolbarIcon,
@@ -208,9 +210,10 @@ const notebookSpacingConfig: Record<NotebookSpacingMode, { lineHeight: number; p
 
 const diagramInsertSubtypes: Array<Exclude<FigureSubtype, "image">> = ["diagram", "graph-diagram", "flowchart"];
 
-// Largura aproximada da toolbar flutuante de selecao — usada so para clampar a
-// posicao horizontal dentro da viewport (a barra e centrada no trecho).
-const notebookSelectionToolbarWidth = 380;
+// Dimensoes da toolbar flutuante de selecao — usadas para manter a pilula de
+// duas linhas dentro da viewport e acima do trecho selecionado.
+const notebookSelectionToolbarWidth = 224;
+const notebookSelectionToolbarHeight = 80;
 
 const notebookSlashMenuWidth = 236;
 // Altura estimada (itens + rotulo + padding) usada so na decisao de flip
@@ -694,7 +697,6 @@ export function NotebookPageEditor({
   const [linkUrl, setLinkUrl] = useState("");
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
-  const [isListMenuOpen, setIsListMenuOpen] = useState(false);
   const [isReferenceMenuOpen, setIsReferenceMenuOpen] = useState(false);
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
   const [isCiteMenuOpen, setIsCiteMenuOpen] = useState(false);
@@ -737,7 +739,6 @@ export function NotebookPageEditor({
 
   useEffect(() => {
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsLinkPopoverOpen(false);
     setIsCiteMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -754,7 +755,7 @@ export function NotebookPageEditor({
   // popover junto. Ref (e nao state) porque syncActiveActions le no momento do
   // evento de selecao.
   const isToolbarUiOpen =
-    isTextMenuOpen || isListMenuOpen || isMoreMenuOpen || isLinkPopoverOpen || isCiteMenuOpen || showAttachmentNotice || Boolean(assetPasteError);
+    isTextMenuOpen || isMoreMenuOpen || isLinkPopoverOpen || isCiteMenuOpen || showAttachmentNotice || Boolean(assetPasteError);
   const isToolbarUiOpenRef = useRef(false);
   isToolbarUiOpenRef.current = isToolbarUiOpen;
 
@@ -985,7 +986,6 @@ export function NotebookPageEditor({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsTextMenuOpen(false);
-        setIsListMenuOpen(false);
         setIsReferenceMenuOpen(false);
         setIsLayoutMenuOpen(false);
         setIsLinkPopoverOpen(false);
@@ -1022,7 +1022,7 @@ export function NotebookPageEditor({
   }, []);
 
   useEffect(() => {
-    if (!isTextMenuOpen && !isListMenuOpen && !isReferenceMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError && !slashMenu) {
+    if (!isTextMenuOpen && !isReferenceMenuOpen && !isLayoutMenuOpen && !isLinkPopoverOpen && !isCiteMenuOpen && !isMoreMenuOpen && !showAttachmentNotice && !assetPasteError && !slashMenu) {
       return;
     }
 
@@ -1032,7 +1032,6 @@ export function NotebookPageEditor({
       }
 
       setIsTextMenuOpen(false);
-      setIsListMenuOpen(false);
       setIsReferenceMenuOpen(false);
       setIsLayoutMenuOpen(false);
       setIsLinkPopoverOpen(false);
@@ -1046,7 +1045,7 @@ export function NotebookPageEditor({
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isTextMenuOpen, isListMenuOpen, isReferenceMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError, slashMenu]);
+  }, [isTextMenuOpen, isReferenceMenuOpen, isLayoutMenuOpen, isLinkPopoverOpen, isCiteMenuOpen, isMoreMenuOpen, showAttachmentNotice, assetPasteError, slashMenu]);
 
   // Caret saindo da regiao da query (clique, setas, Home/End) fecha o menu
   // "/". A validacao le o DOM direto (nao o estado) para nao depender da
@@ -1431,7 +1430,6 @@ export function NotebookPageEditor({
     prepareBlockInsertionPoint();
     insertHtml(html, { placeCursorInTrailingBlock: true });
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -1546,7 +1544,6 @@ export function NotebookPageEditor({
   function openLocalImagePicker() {
     saveCurrentRangeOrEditorEnd();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -1622,7 +1619,6 @@ export function NotebookPageEditor({
   function openLocalAttachmentPicker() {
     saveCurrentRangeOrEditorEnd();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -2403,7 +2399,6 @@ export function NotebookPageEditor({
     saveCurrentRange();
     setLinkUrl("");
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsCiteMenuOpen(false);
@@ -2430,7 +2425,6 @@ export function NotebookPageEditor({
   function openCiteMenu() {
     saveCurrentRange();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -2454,7 +2448,6 @@ export function NotebookPageEditor({
     restoreSavedRange();
     insertHtml(`<span data-citation-document-id="${escapeHtml(document.id)}">${escapeHtml(citationText(document))}</span>`);
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsCiteMenuOpen(false);
@@ -2463,7 +2456,6 @@ export function NotebookPageEditor({
   function openPdfPickerFromToolbar() {
     saveCurrentRangeOrEditorEnd();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -2480,7 +2472,6 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -2492,7 +2483,6 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -2515,7 +2505,6 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -2527,7 +2516,6 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -2536,7 +2524,6 @@ export function NotebookPageEditor({
   function applySpacingMode(mode: NotebookSpacingMode) {
     onSpacingModeChange?.(mode);
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -2590,7 +2577,6 @@ export function NotebookPageEditor({
     emitChange();
     syncActiveActions();
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -2832,12 +2818,12 @@ export function NotebookPageEditor({
 
   const toolbarBaseTextClassName = "text-[var(--color-sidebar-muted)] hover:text-[var(--color-sidebar-text)]";
   const toolbarIconButtonClassName = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
+  const disabledToolbarIconButtonClassName = `${toolbarIconButtonClassName} disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-sidebar-muted)]`;
   const toolbarChipButtonClassName = `notebook-toolbar-focus-menu-button inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 text-xs font-semibold transition hover:bg-surface-muted ${toolbarBaseTextClassName}`;
   const activeToolbarButtonClassName = "bg-primary-soft text-[var(--color-sidebar-text)]";
   const focusToolbarSeparator = <span className="notebook-toolbar-focus-separator mx-1 h-6 w-px shrink-0 bg-border-subtle" aria-hidden="true" />;
   const menuPanelClassName = "absolute right-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg";
   const compactMenuPanelClassName = "absolute left-0 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-56 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg";
-  const centeredCompactMenuPanelClassName = "absolute left-1/2 top-[calc(100%+6px)] z-40 max-h-[calc(100vh-7rem)] w-56 max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg";
   const menuSectionLabelClassName = "px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-text-subtle";
   const menuItemClassName = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const plainMenuItemClassName = "block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
@@ -2846,6 +2832,7 @@ export function NotebookPageEditor({
   const menuIconButtonClassName = "inline-flex h-8 w-full items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const boldButton = getToolbarButton("bold");
   const italicButton = getToolbarButton("italic");
+  const underlineButton = getToolbarButton("underline");
   const unorderedListButton = getToolbarButton("unordered-list");
   const orderedListButton = getToolbarButton("ordered-list");
   const blockquoteButton = getToolbarButton("blockquote");
@@ -2854,7 +2841,6 @@ export function NotebookPageEditor({
 
   const closePeerToolbarMenus = () => {
     setIsTextMenuOpen(false);
-    setIsListMenuOpen(false);
     setIsReferenceMenuOpen(false);
     setIsLayoutMenuOpen(false);
     setIsLinkPopoverOpen(false);
@@ -2929,34 +2915,6 @@ export function NotebookPageEditor({
         onClick={() => applyMaintenanceCommand("clear-formatting")}
       >
         Limpar formatação
-      </button>
-    </div>
-  ) : null;
-
-  const listMenu = isListMenuOpen ? (
-    <div className={centeredCompactMenuPanelClassName} role="menu" aria-label="Listas">
-      <p className={menuSectionLabelClassName}>Listas</p>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={activeActions.has("unordered-list")}
-        className={`${menuItemClassName} ${activeActions.has("unordered-list") ? activeMenuItemClassName : ""}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyEditorActionFromMenu("unordered-list")}
-      >
-        {unorderedListButton.icon}
-        Lista com marcadores
-      </button>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={activeActions.has("ordered-list")}
-        className={`${menuItemClassName} ${activeActions.has("ordered-list") ? activeMenuItemClassName : ""}`}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => applyEditorActionFromMenu("ordered-list")}
-      >
-        {orderedListButton.icon}
-        Lista numerada
       </button>
     </div>
   ) : null;
@@ -3117,30 +3075,6 @@ export function NotebookPageEditor({
     </button>
   );
 
-  const listMenuButton = (
-    <button
-      type="button"
-      title="Listas"
-      aria-label="Listas"
-      aria-haspopup="menu"
-      aria-expanded={isListMenuOpen}
-      className={toolbarChipButtonClassName}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        saveCurrentRange();
-      }}
-      onClick={() => {
-        const shouldOpen = !isListMenuOpen;
-        closePeerToolbarMenus();
-        setIsListMenuOpen(shouldOpen);
-      }}
-    >
-      <span className="notebook-toolbar-focus-compact-icon" aria-hidden="true">{unorderedListButton.icon}</span>
-      <span className="notebook-toolbar-focus-label">Listas</span>
-      <span className="notebook-toolbar-focus-chevron"><ChevronDownIcon /></span>
-    </button>
-  );
-
   const moreMenuButton = (
     <div className="relative shrink-0">
       <button
@@ -3168,14 +3102,38 @@ export function NotebookPageEditor({
 
   const focusToolbarControls = (
     <>
-      {textMenuButton}
-      {focusToolbarSeparator}
-      {renderToolbarActionButton(boldButton)}
-      {renderToolbarActionButton(italicButton)}
-      {focusToolbarSeparator}
-      {listMenuButton}
-      <span className="min-w-2 flex-1" aria-hidden="true" />
-      {moreMenuButton}
+      <div className="flex w-full items-center justify-center gap-1">
+        {textMenuButton}
+        {focusToolbarSeparator}
+        {renderToolbarActionButton(boldButton)}
+        {renderToolbarActionButton(italicButton)}
+        {renderToolbarActionButton(underlineButton)}
+      </div>
+      <div className="flex w-full items-center justify-center gap-1">
+        <button
+          type="button"
+          disabled
+          title="Em breve"
+          aria-label="Realce (em breve)"
+          className={disabledToolbarIconButtonClassName}
+        >
+          <HighlightIcon />
+        </button>
+        <button
+          type="button"
+          disabled
+          title="Em breve"
+          aria-label="Cor da fonte (em breve)"
+          className={disabledToolbarIconButtonClassName}
+        >
+          <FontColorIcon />
+        </button>
+        {focusToolbarSeparator}
+        {renderToolbarActionButton(unorderedListButton)}
+        {renderToolbarActionButton(orderedListButton)}
+        {focusToolbarSeparator}
+        {moreMenuButton}
+      </div>
     </>
   );
 
@@ -3197,19 +3155,17 @@ export function NotebookPageEditor({
         onChange={(event) => void handleLocalAttachmentSelected(event)}
       />
       {/* Toolbar de formatacao FLUTUANTE: aparece ancorada acima do trecho
-          selecionado (nao ha mais barra fixa). Usa o conjunto compacto de
-          controles, cujo "..." mantem citacao/link/anexo/PDF/inserir/
-          alinhamento/manutencao acessiveis. */}
+          selecionado em duas linhas. O "..." mantem citacao/link/anexo/PDF/
+          inserir/alinhamento/manutencao acessiveis. */}
       {selectionToolbarRect ? (
         <div
           ref={toolbarRef}
           data-toolbar-variant="floating"
-          style={{ top: Math.max(8, selectionToolbarRect.top - 52), left: selectionToolbarRect.left }}
-          className="fixed z-[60] flex h-11 min-w-0 -translate-x-1/2 flex-nowrap items-center gap-1 overflow-visible rounded-lg border border-border-subtle bg-[var(--card)] px-1.5 shadow-lg"
+          style={{ top: Math.max(8, selectionToolbarRect.top - notebookSelectionToolbarHeight - 8), left: selectionToolbarRect.left }}
+          className="fixed z-[60] flex h-20 w-56 min-w-0 -translate-x-1/2 flex-col items-stretch gap-1 overflow-visible rounded-lg border border-border-subtle bg-[var(--card)] p-1.5 shadow-lg"
         >
           {focusToolbarControls}
           {textMenu}
-          {listMenu}
 
           {isLinkPopoverOpen ? (
             <div className={"absolute left-1/2 top-[calc(100%+6px)] z-40 flex w-72 -translate-x-1/2 items-center gap-2 rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg"}>
