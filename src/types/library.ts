@@ -9,6 +9,8 @@ export type DocumentStatus =
   | "error"
   | "trashed";
 
+export type AnnotationsFilterScope = "all" | "current_page";
+
 export type ReadingLocation = {
   scrollTop: number;
   scrollRatio: number;
@@ -38,6 +40,7 @@ export type LibraryDocument = {
   fileName?: string;
   filePath?: string;
   fileUrl?: string;
+  annotationsFilterScope: AnnotationsFilterScope;
   readingLocation?: ReadingLocation;
   notes?: string;
   timeSpentSeconds: number;

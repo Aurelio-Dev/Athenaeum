@@ -292,6 +292,7 @@ export function AddDocumentModal({
       fileName: item.fileName,
       filePath: item.filePath,
       notes: item.notes,
+      annotationsFilterScope: "all",
       timeSpentSeconds: 0,
     };
   }

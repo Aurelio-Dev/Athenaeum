@@ -220,6 +220,7 @@ const testDocument: LibraryDocument = {
   collection: "collection-1",
   updatedAt: "2026-08-12T00:00:00.000Z",
   fileUrl: "mock://document.pdf",
+  annotationsFilterScope: "all",
   timeSpentSeconds: 0,
 };
 

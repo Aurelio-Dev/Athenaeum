@@ -3507,6 +3507,17 @@ END;
             sql: include_str!("../migrations/0021_add_document_bookmarks.sql"),
             kind: MigrationKind::Up,
         },
+        // v22: cada documento guarda se a lista de anotacoes deve mostrar todas
+        // as paginas ou apenas a pagina atual. O DEFAULT `all` define o estado
+        // inicial inclusive para documentos antigos. O CHECK e uma regra do
+        // proprio SQLite: ele impede que qualquer caminho de escrita persista
+        // um texto fora dos dois valores que o TypeScript sabe representar.
+        Migration {
+            version: 22,
+            description: "add_document_annotations_filter_scope",
+            sql: include_str!("../migrations/0022_add_document_annotations_filter_scope.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

@@ -8,7 +8,7 @@ import { getSubjectTagTone, registerSubjectTagTone } from "../styles/designToken
 import { isAnnotationMarkStyle, isHighlightColor } from "../types/annotation";
 import type { Annotation, AnnotationMarkStyle, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { DocumentBookmark } from "../types/bookmark";
-import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
+import type { AnnotationsFilterScope, Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
 import type { NotebookExportManifest } from "../features/notebooks/notebookExportHtml";
@@ -176,6 +176,7 @@ type DocumentRow = {
   fileName: string | null;
   filePath: string | null;
   notes: string | null;
+  annotationsFilterScope: AnnotationsFilterScope;
   readingLocationJson: string | null;
   timeSpentSeconds: number;
   authors: string | null;
@@ -335,6 +336,7 @@ function mapDocumentRow(row: DocumentRow): LibraryDocument {
     deletedAt: row.deletedAt ?? undefined,
     fileName: row.fileName ?? undefined,
     filePath: row.filePath ?? undefined,
+    annotationsFilterScope: row.annotationsFilterScope,
     readingLocation: parseReadingLocation(row.readingLocationJson),
     notes: row.notes ?? "",
     timeSpentSeconds: row.timeSpentSeconds ?? 0,
@@ -499,8 +501,9 @@ async function insertDocument(database: Database, document: LibraryDocument) {
       file_path,
       notes,
       reading_location_json,
+      annotations_filter_scope,
       updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       document.id,
       document.title,
@@ -515,6 +518,7 @@ async function insertDocument(database: Database, document: LibraryDocument) {
       document.filePath ?? null,
       document.notes ?? "",
       document.readingLocation ? JSON.stringify(document.readingLocation) : null,
+      document.annotationsFilterScope,
       document.updatedAt,
     ],
   );
@@ -622,6 +626,7 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
         documents.file_name AS fileName,
         documents.file_path AS filePath,
         documents.notes,
+        documents.annotations_filter_scope AS annotationsFilterScope,
         documents.reading_location_json AS readingLocationJson,
         documents.time_spent_seconds AS timeSpentSeconds,
         document_author_list.authors,
@@ -1942,6 +1947,18 @@ export async function setDocumentReadingLocation(
     document.id,
   ]);
   await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, document.id);
+}
+
+export async function setDocumentAnnotationsFilterScope(
+  documentId: string,
+  scope: AnnotationsFilterScope,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const database = await getDatabase(source);
+  await database.execute(
+    "UPDATE documents SET annotations_filter_scope = $1 WHERE id = $2",
+    [scope, documentId],
+  );
 }
 
 export async function deleteDocument(documentId: string) {
