@@ -46,7 +46,9 @@ const pdfMocks = vi.hoisted(() => {
 
 vi.mock("../../lib/database", () => ({
   createAnnotation: databaseMocks.createAnnotation,
+  createBookmark: vi.fn(async () => undefined),
   deleteAnnotation: vi.fn(async () => undefined),
+  deleteBookmark: vi.fn(async () => undefined),
   getLatestLinkedNotebook: vi.fn(async () => null),
   getLibraryDocument: vi.fn(async () => null),
   getDocumentNotes: vi.fn(async () => ""),
@@ -57,6 +59,7 @@ vi.mock("../../lib/database", () => ({
   listAnnotations: databaseMocks.listAnnotations,
   listAvailableTags: vi.fn(async () => []),
   listAvailableTagsFromPreloadedDatabase: vi.fn(async () => []),
+  listBookmarks: vi.fn(async () => []),
   listNotebookOptions: vi.fn(async () => []),
   READER_ANNOTATIONS_CHANGED_EVENT: "reader-annotations-changed",
   READER_DETAILS_CHANGED_EVENT: "reader-details-changed",
@@ -74,6 +77,7 @@ vi.mock("../../lib/database", () => ({
   setSetting: databaseMocks.setSetting,
   updateAnnotationMark: databaseMocks.updateAnnotationMark,
   updateAnnotationNote: vi.fn(async () => undefined),
+  updateBookmarkLabel: vi.fn(async () => undefined),
 }));
 
 vi.mock("./anchor", () => ({

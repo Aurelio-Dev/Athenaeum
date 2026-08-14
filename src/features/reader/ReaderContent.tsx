@@ -3416,6 +3416,9 @@ export function ReaderContent({
             annotations={annotations}
             currentPage={currentPage}
             visiblePages={currentPageGroup}
+            annotationsFilterScope={document.annotationsFilterScope}
+            databaseSource={databaseSource}
+            isPdfLoading={isPdfLoading}
             pendingSelection={pendingSelection}
             saveStates={saveStates}
             composerFocusSignal={composerFocusSignal}

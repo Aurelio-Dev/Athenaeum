@@ -1,6 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { setDocumentAnnotationsFilterScope, type DatabaseHandleSource } from "../../lib/database";
 import { formatEditedAgo } from "../../lib/relativeTime";
 import type { Annotation, AnnotationSaveState } from "../../types/annotation";
+import type { AnnotationsFilterScope } from "../../types/library";
 import { highlightPalette } from "./highlightPalette";
 
 export type ReaderAnnotationsDockProps = {
@@ -9,6 +11,9 @@ export type ReaderAnnotationsDockProps = {
   annotations: Annotation[];
   currentPage: number;
   visiblePages?: readonly number[];
+  annotationsFilterScope?: AnnotationsFilterScope;
+  databaseSource?: DatabaseHandleSource;
+  isPdfLoading: boolean;
   pendingSelection: { text: string } | null;
   saveStates: ReadonlyMap<string, AnnotationSaveState>;
   composerFocusSignal: number;
@@ -107,13 +112,18 @@ type AnnotationCardProps = {
   onEdit: (annotation: Annotation) => void;
   onDelete: (annotationId: string) => void;
   onRetry: (annotationId: string) => void;
+  navigationDisabled: boolean;
 };
 
-function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onDelete, onRetry }: AnnotationCardProps) {
+function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onDelete, onRetry, navigationDisabled }: AnnotationCardProps) {
   const palette = highlightPalette[annotation.color];
 
   function handleCardKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
-    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+    if (
+      navigationDisabled ||
+      event.target !== event.currentTarget ||
+      (event.key !== "Enter" && event.key !== " ")
+    ) {
       return;
     }
 
@@ -121,13 +131,24 @@ function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onD
     onJumpToAnnotation(annotation);
   }
 
+  function handleCardClick() {
+    if (!navigationDisabled) {
+      onJumpToAnnotation(annotation);
+    }
+  }
+
   return (
     <article
       role="button"
-      tabIndex={0}
-      title={`Ir para a anotação na página ${annotation.page}`}
-      className="reader-annotation-border flex h-full cursor-pointer flex-col rounded-[11px] border bg-[var(--reader-annotation-card-bg)] px-3 py-2 outline-none transition hover:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-      onClick={() => onJumpToAnnotation(annotation)}
+      tabIndex={navigationDisabled ? -1 : 0}
+      aria-disabled={navigationDisabled}
+      title={navigationDisabled ? "Aguarde o PDF terminar de carregar." : `Ir para a anotação na página ${annotation.page}`}
+      className={`reader-annotation-border flex h-full flex-col rounded-[11px] border bg-[var(--reader-annotation-card-bg)] px-3 py-2 outline-none transition ${
+        navigationDisabled
+          ? "cursor-not-allowed opacity-60"
+          : "cursor-pointer hover:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+      }`}
+      onClick={handleCardClick}
       onKeyDown={handleCardKeyDown}
     >
       <blockquote
@@ -207,6 +228,9 @@ export function ReaderAnnotationsDock({
   annotations,
   currentPage,
   visiblePages,
+  annotationsFilterScope = "all",
+  databaseSource = "loaded",
+  isPdfLoading,
   pendingSelection,
   saveStates,
   composerFocusSignal,
@@ -221,6 +245,7 @@ export function ReaderAnnotationsDock({
   const [note, setNote] = useState("");
   const [composerFeedback, setComposerFeedback] = useState("");
   const [isOpeningPopout, setIsOpeningPopout] = useState(false);
+  const [filterScope, setFilterScope] = useState<AnnotationsFilterScope>(annotationsFilterScope);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastFocusSignalRef = useRef(composerFocusSignal);
   const feedbackId = useId();
@@ -232,12 +257,19 @@ export function ReaderAnnotationsDock({
   );
   const visiblePageSet = useMemo(() => new Set(effectiveVisiblePages), [effectiveVisiblePages]);
   const pageAnnotations = useMemo(
-    () =>
-      annotations
-        .filter((annotation) => visiblePageSet.has(annotation.page))
-        .sort(compareAnnotationPosition),
-    [annotations, visiblePageSet],
+    () => {
+      const scopedAnnotations = filterScope === "all"
+        ? annotations
+        : annotations.filter((annotation) => visiblePageSet.has(annotation.page));
+
+      return [...scopedAnnotations].sort(compareAnnotationPosition);
+    },
+    [annotations, filterScope, visiblePageSet],
   );
+
+  useEffect(() => {
+    setFilterScope(annotationsFilterScope);
+  }, [annotationsFilterScope, documentId]);
 
   useEffect(() => {
     setNote("");
@@ -272,6 +304,18 @@ export function ReaderAnnotationsDock({
     setComposerFeedback("Anotação adicionada.");
   }
 
+  function handleFilterScopeChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextScope = event.target.value;
+    if (nextScope !== "all" && nextScope !== "current_page") {
+      return;
+    }
+
+    setFilterScope(nextScope);
+    void setDocumentAnnotationsFilterScope(documentId, nextScope, databaseSource).catch((error) => {
+      console.warn("Nao foi possivel salvar o filtro de anotacoes do documento.", error);
+    });
+  }
+
   async function handleOpenPopout() {
     if (isOpeningPopout) {
       return;
@@ -291,14 +335,19 @@ export function ReaderAnnotationsDock({
   const pageLabel = isSpread
     ? `páginas ${effectiveVisiblePages[0]}–${effectiveVisiblePages[effectiveVisiblePages.length - 1]}`
     : `página ${effectiveVisiblePages[0] ?? currentPage}`;
-  const annotationCountLabel = pageAnnotations.length === 1
-    ? `1 marcação ${isSpread ? "nestas páginas" : "nesta página"}`
-    : `${pageAnnotations.length} marcações ${isSpread ? "nestas páginas" : "nesta página"}`;
+  const scopeLabel = filterScope === "all" ? "todas as páginas" : pageLabel;
+  const annotationCountLabel = filterScope === "all"
+    ? pageAnnotations.length === 1
+      ? "1 marcação no documento"
+      : `${pageAnnotations.length} marcações no documento`
+    : pageAnnotations.length === 1
+      ? `1 marcação ${isSpread ? "nestas páginas" : "nesta página"}`
+      : `${pageAnnotations.length} marcações ${isSpread ? "nestas páginas" : "nesta página"}`;
   const canSubmit = hasPendingSelection && note.trim().length > 0;
 
   return (
     <section
-      aria-label={`Anotações: ${pageLabel}`}
+      aria-label={`Anotações: ${scopeLabel}`}
       className="grid h-[158px] w-full grid-cols-[205px_minmax(0,1fr)_269px] overflow-hidden rounded-2xl border border-border-subtle bg-[var(--card)]"
       style={{ boxShadow: "var(--reader-dock-shadow)" }}
     >
@@ -319,14 +368,23 @@ export function ReaderAnnotationsDock({
           </button>
         </div>
         <p className="mt-1 truncate text-[11.5px] text-[var(--muted-foreground)]">{annotationCountLabel}</p>
-        <span className="mt-2.5 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary">
+        <label className="mt-2.5 inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-primary outline-none transition focus-within:ring-2 focus-within:ring-primary/60 focus-within:ring-offset-2 focus-within:ring-offset-[var(--card)]">
+          <span className="sr-only">Filtrar anotações</span>
           <FilterIcon />
-          {pageLabel}
-        </span>
+          <select
+            aria-label="Filtrar anotações"
+            value={filterScope}
+            className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-[11px] font-semibold text-primary outline-none"
+            onChange={handleFilterScopeChange}
+          >
+            <option value="current_page">Esta página</option>
+            <option value="all">Todas as páginas</option>
+          </select>
+        </label>
       </header>
 
       {pageAnnotations.length > 0 ? (
-        <ol className="flex min-w-0 gap-3 overflow-x-auto overflow-y-hidden px-4 py-3.5" aria-label={`Lista de anotações: ${pageLabel}`}>
+        <ol className="flex min-w-0 gap-3 overflow-x-auto overflow-y-hidden px-4 py-3.5" aria-label={`Lista de anotações: ${scopeLabel}`}>
           {pageAnnotations.map((annotation) => (
             <li key={annotation.id} className="h-full w-[278px] shrink-0">
               <AnnotationCard
@@ -336,6 +394,7 @@ export function ReaderAnnotationsDock({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onRetry={onRetry}
+                navigationDisabled={isPdfLoading}
               />
             </li>
           ))}
@@ -346,7 +405,11 @@ export function ReaderAnnotationsDock({
             <EmptyAnnotationIcon />
           </span>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-[var(--foreground)]">Nenhuma anotação {isSpread ? "nestas páginas" : "nesta página"}</p>
+            <p className="text-xs font-semibold text-[var(--foreground)]">
+              {filterScope === "all"
+                ? "Nenhuma anotação no documento"
+                : `Nenhuma anotação ${isSpread ? "nestas páginas" : "nesta página"}`}
+            </p>
             <p className="mt-0.5 text-[11px]">Selecione um trecho do PDF para começar.</p>
           </div>
         </div>
