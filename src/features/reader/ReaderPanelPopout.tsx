@@ -347,6 +347,14 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     });
   }
 
+  // Titulo junto: o Caderno abre como janela nativa (open_notebook_window
+  // exige o titulo para a barra da janela).
+  function requestOpenNotebook(notebookId: number, notebookTitle: string) {
+    void invoke("open_notebook_window", { notebookId, notebookTitle }).catch((error) => {
+      console.warn("Nao foi possivel abrir a janela do Caderno.", error);
+    });
+  }
+
   const notifyPopoutClosed = useCallback(async (closedDocumentId: string) => {
     await emit<ReaderDocumentPayload>(READER_POPOUT_CLOSED_EVENT, { documentId: closedDocumentId });
   }, []);
@@ -556,6 +564,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             onJumpToPage={handleJumpToPage}
             onDelete={handleDeleteAnnotation}
             onUpdateNote={handleUpdateAnnotationNote}
+            onOpenNotebook={requestOpenNotebook}
           />
         ) : (
           <AiTab />

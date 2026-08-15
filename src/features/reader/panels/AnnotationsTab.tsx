@@ -1,25 +1,36 @@
 import { Highlighter, Underline } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ContextMenu } from "../../../components/ui/ContextMenu";
 import { ContextMenuItem } from "../../../components/ui/ContextMenuItem";
+import { SegmentedControl, type SegmentedOption } from "../../../components/ui/SegmentedControl";
+import { ClearIcon, SearchIcon } from "../../../components/ui/SharedIcons";
 import { useContextMenu } from "../../../hooks/useContextMenu";
 import {
+  getLatestLinkedNotebook,
+  listNotebookOptions,
   setDocumentAnnotationsFilterScope,
   type DatabaseHandleSource,
+  type LatestLinkedNotebook,
+  type NotebookOption,
 } from "../../../lib/database";
-import type { Annotation } from "../../../types/annotation";
+import { highlightColors, type Annotation, type HighlightColor } from "../../../types/annotation";
 import type { AnnotationsFilterScope, LibraryDocument } from "../../../types/library";
 import { highlightPalette } from "../highlightPalette";
-import { MoreVerticalIcon } from "./readerPanelIcons";
+import { sendReaderPageToNotebook } from "../sendPageToNotebook";
+import { useReaderDetailsInvalidation } from "./DocumentInfoSections";
+import { BookOpenIcon, MoreVerticalIcon, SendIcon } from "./readerPanelIcons";
 
 type AnnotationsTabProps = {
-  document: Pick<LibraryDocument, "id" | "annotationsFilterScope">;
+  document: Pick<LibraryDocument, "id" | "title" | "annotationsFilterScope">;
   annotations: Annotation[];
   currentPage: number;
   databaseSource?: DatabaseHandleSource;
   onJumpToPage: (page: number, annotationId?: string) => void;
   onDelete: (annotationId: string) => void;
   onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
+  // Titulo junto: o Caderno abre como janela nativa (open_notebook_window
+  // exige o titulo para a barra da janela).
+  onOpenNotebook: (notebookId: number, notebookTitle: string) => void;
 };
 
 type AnnotationCardProps = {
@@ -37,14 +48,6 @@ function TrashIcon() {
       <path d="M4.66667 3.5V2.33334C4.66667 1.75 5.25 1.16667 5.83333 1.16667H8.16667C8.75 1.16667 9.33333 1.75 9.33333 2.33334V3.5" />
       <path d="M5.83333 6.41667V9.91667" />
       <path d="M8.16667 6.41667V9.91667" />
-    </svg>
-  );
-}
-
-function FilterIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M22 3H2l8 9.46V19l4 2v-8.54z" />
     </svg>
   );
 }
@@ -96,10 +99,26 @@ function compareAnnotationPosition(first: Annotation, second: Annotation) {
   return first.page - second.page || firstY - secondY || first.createdAt.localeCompare(second.createdAt);
 }
 
-const filterScopeOptions: readonly { value: AnnotationsFilterScope; label: string }[] = [
+const filterScopeOptions: SegmentedOption<AnnotationsFilterScope>[] = [
   { value: "current_page", label: "Esta página" },
-  { value: "all", label: "Todas as páginas" },
+  { value: "all", label: "Todas" },
 ];
+
+const highlightColorLabels: Record<HighlightColor, string> = {
+  amber: "âmbar",
+  violet: "violeta",
+  indigo: "índigo",
+  blue: "azul",
+  teal: "verde-azulado",
+  rose: "rosa",
+};
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLocaleLowerCase("pt-BR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
 function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: AnnotationCardProps) {
   const [note, setNote] = useState(annotation.note);
@@ -293,65 +312,316 @@ export function AnnotationsTab({
   onJumpToPage,
   onDelete,
   onUpdateNote,
+  onOpenNotebook,
 }: AnnotationsTabProps) {
   const [filterScope, setFilterScope] = useState<AnnotationsFilterScope>(document.annotationsFilterScope);
-  const currentPageAnnotations = useMemo(
-    () => annotations.filter((annotation) => annotation.page === currentPage),
-    [annotations, currentPage],
-  );
-  const scopedAnnotations = useMemo(() => {
-    if (filterScope === "all") {
-      return [...annotations].sort(compareAnnotationPosition);
-    }
-    return [...currentPageAnnotations].sort((first, second) => first.createdAt.localeCompare(second.createdAt));
-  }, [annotations, currentPageAnnotations, filterScope]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedColors, setSelectedColors] = useState<Set<HighlightColor>>(() => new Set());
+  const [notebooks, setNotebooks] = useState<NotebookOption[]>([]);
+  const [selectedNotebookId, setSelectedNotebookId] = useState<number | null>(null);
+  const [linkedNotebook, setLinkedNotebook] = useState<LatestLinkedNotebook | null>(null);
+  const [isNotebooksLoading, setIsNotebooksLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [notebookFeedback, setNotebookFeedback] = useState("");
+  const notebookLoadSequenceRef = useRef(0);
+  const utilityMenu = useContextMenu();
+  const usedHighlightColorCount = new Set(annotations.map((annotation) => annotation.color)).size;
+  const showColorFilter = usedHighlightColorCount > 1;
+
+  const visibleAnnotations = useMemo(() => {
+    const normalizedTerm = normalizeSearchText(searchTerm.trim());
+    const filtered = annotations.filter((annotation) => {
+      const matchesScope = filterScope === "all" || annotation.page === currentPage;
+      const matchesColor = selectedColors.size === 0 || selectedColors.has(annotation.color);
+      const searchableText = normalizeSearchText(`${annotation.selectedText} ${annotation.note}`);
+      const matchesSearch = normalizedTerm.length === 0 || searchableText.includes(normalizedTerm);
+      return matchesScope && matchesColor && matchesSearch;
+    });
+
+    return filtered.sort(
+      filterScope === "all"
+        ? compareAnnotationPosition
+        : (first, second) => first.createdAt.localeCompare(second.createdAt),
+    );
+  }, [annotations, currentPage, filterScope, searchTerm, selectedColors]);
+
+  const reloadNotebooks = useCallback(() => {
+    const requestSequence = ++notebookLoadSequenceRef.current;
+    setIsNotebooksLoading(true);
+
+    void Promise.all([
+      listNotebookOptions(databaseSource),
+      getLatestLinkedNotebook(document.id, databaseSource),
+    ])
+      .then(([loadedNotebooks, loadedLinkedNotebook]) => {
+        if (requestSequence !== notebookLoadSequenceRef.current) {
+          return;
+        }
+
+        setNotebooks(loadedNotebooks);
+        setLinkedNotebook(loadedLinkedNotebook);
+        setSelectedNotebookId((current) => {
+          if (current !== null && loadedNotebooks.some((notebook) => notebook.id === current)) {
+            return current;
+          }
+          return loadedLinkedNotebook?.id ?? loadedNotebooks[0]?.id ?? null;
+        });
+      })
+      .catch((error) => {
+        if (requestSequence !== notebookLoadSequenceRef.current) {
+          return;
+        }
+        console.warn("Não foi possível carregar os Cadernos.", error);
+        setNotebookFeedback("Não foi possível carregar os Cadernos.");
+      })
+      .finally(() => {
+        if (requestSequence === notebookLoadSequenceRef.current) {
+          setIsNotebooksLoading(false);
+        }
+      });
+  }, [databaseSource, document.id]);
 
   useEffect(() => {
     setFilterScope(document.annotationsFilterScope);
   }, [document.annotationsFilterScope, document.id]);
 
-  function handleFilterScopeToggle() {
-    const nextScope: AnnotationsFilterScope = filterScope === "all" ? "current_page" : "all";
+  useEffect(() => {
+    setSearchTerm("");
+    setSelectedColors(new Set());
+  }, [document.id]);
+
+  useEffect(() => {
+    setNotebooks([]);
+    setSelectedNotebookId(null);
+    setLinkedNotebook(null);
+    setNotebookFeedback("");
+    reloadNotebooks();
+  }, [reloadNotebooks]);
+
+  useReaderDetailsInvalidation(document.id, reloadNotebooks);
+
+  function handleFilterScopeChange(nextScope: AnnotationsFilterScope) {
+    if (nextScope === filterScope) {
+      return;
+    }
+
     setFilterScope(nextScope);
     void setDocumentAnnotationsFilterScope(document.id, nextScope, databaseSource).catch((error) => {
       console.warn("Não foi possível salvar o filtro de anotações do documento.", error);
     });
   }
 
+  function toggleColor(color: HighlightColor) {
+    setSelectedColors((current) => {
+      const next = new Set(current);
+      if (next.has(color)) {
+        next.delete(color);
+      } else {
+        next.add(color);
+      }
+      return next;
+    });
+  }
+
+  async function handleSendCurrentPage() {
+    const targetNotebook = notebooks.find((notebook) => notebook.id === selectedNotebookId);
+    const hasCurrentPageAnnotations = annotations.some((annotation) => annotation.page === currentPage);
+    if (!targetNotebook || !hasCurrentPageAnnotations || isSending) {
+      return;
+    }
+
+    utilityMenu.close();
+    setIsSending(true);
+    setNotebookFeedback("");
+
+    try {
+      await sendReaderPageToNotebook({
+        notebookId: targetNotebook.id,
+        documentId: document.id,
+        documentTitle: document.title,
+        page: currentPage,
+        databaseSource,
+      });
+      const notebookTitle = targetNotebook.title.trim() || "Caderno sem título";
+      setNotebookFeedback(`Página ${currentPage} enviada para "${notebookTitle}".`);
+    } catch (error) {
+      console.warn("Não foi possível enviar a página para o Caderno.", error);
+      setNotebookFeedback("Não foi possível enviar a página para o Caderno.");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
   const emptyMessage = filterScope === "all" ? "Nenhuma anotação no documento." : "Nenhuma anotação nesta página.";
-  const filterScopeToggleLabel = filterScope === "all"
-    ? "Filtro de anotações: mostrando todas as páginas"
-    : "Filtro de anotações: mostrando apenas a página atual";
+  const selectedNotebook = notebooks.find((notebook) => notebook.id === selectedNotebookId);
+  const selectedNotebookTitle = selectedNotebook ? selectedNotebook.title.trim() || "Caderno sem título" : null;
+  const linkedNotebookTitle = linkedNotebook ? linkedNotebook.title.trim() || "Caderno sem título" : null;
+  const hasCurrentPageAnnotations = annotations.some((annotation) => annotation.page === currentPage);
+  const sendPageLabel = selectedNotebookTitle
+    ? `Enviar página ${currentPage} para "${selectedNotebookTitle}"`
+    : `Enviar página ${currentPage} para o Caderno`;
+  const sendPageDisabledTitle = isNotebooksLoading
+    ? "Carregando Cadernos..."
+    : notebooks.length === 0
+      ? "Nenhum Caderno disponível. Crie um Caderno na biblioteca para enviar anotações."
+      : !selectedNotebook
+        ? "Nenhum Caderno disponível como destino."
+        : !hasCurrentPageAnnotations
+          ? "Nenhuma anotação nesta página para enviar."
+          : isSending
+            ? "Envio em andamento."
+            : undefined;
+  const pageGroups: Array<{ page: number; annotations: Annotation[] }> = [];
+
+  if (filterScope === "all") {
+    for (const annotation of visibleAnnotations) {
+      const currentGroup = pageGroups[pageGroups.length - 1];
+      if (!currentGroup || currentGroup.page !== annotation.page) {
+        pageGroups.push({ page: annotation.page, annotations: [annotation] });
+      } else {
+        currentGroup.annotations.push(annotation);
+      }
+    }
+  }
 
   return (
-    <div className="flex min-h-full flex-col px-4 py-5">
-      <div className="space-y-6">
-        <section>
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              aria-label={filterScopeToggleLabel}
-              title={filterScopeToggleLabel}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary outline-none transition hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
-              onClick={handleFilterScopeToggle}
-            >
-              <FilterIcon />
-              <span>{filterScopeOptions.find((option) => option.value === filterScope)?.label}</span>
-            </button>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-border-subtle bg-[var(--card)]">
+        <div className="flex h-11 items-center gap-2 px-3">
+          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-border-subtle bg-[var(--background)] px-2.5 text-[var(--muted-foreground)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
+            <SearchIcon className="shrink-0" size={15} />
+            <input
+              value={searchTerm}
+              type="text"
+              inputMode="search"
+              autoComplete="off"
+              aria-label="Buscar anotações"
+              placeholder="Buscar anotações..."
+              className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+            {searchTerm.length > 0 ? (
+              <button
+                type="button"
+                aria-label="Limpar busca de anotações"
+                title="Limpar busca"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md outline-none transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-primary/60"
+                onClick={() => setSearchTerm("")}
+              >
+                <ClearIcon size={14} />
+              </button>
+            ) : null}
+          </label>
+
+          <div className="shrink-0">
+            <SegmentedControl
+              options={filterScopeOptions}
+              value={filterScope}
+              onChange={handleFilterScopeChange}
+              ariaLabel="Escopo das anotações"
+            />
           </div>
 
-          {scopedAnnotations.length > 0 ? (
-            <div className="mt-3 space-y-4">
-              {scopedAnnotations.map((annotation) => (
-                <AnnotationCard
-                  key={annotation.id}
-                  annotation={annotation}
-                  onJumpToPage={onJumpToPage}
-                  onDelete={onDelete}
-                  onUpdateNote={onUpdateNote}
+          <button
+            type="button"
+            aria-label="Mais opções"
+            title="Mais opções"
+            aria-haspopup="menu"
+            aria-expanded={utilityMenu.isOpen}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] outline-none transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-primary/60"
+            onClick={utilityMenu.open}
+          >
+            <MoreVerticalIcon />
+          </button>
+          <ContextMenu isOpen={utilityMenu.isOpen} x={utilityMenu.x} y={utilityMenu.y} onClose={utilityMenu.close}>
+            <ContextMenuItem
+              icon={<SendIcon size={16} />}
+              label={sendPageLabel}
+              title={sendPageDisabledTitle ?? `Enviar as anotações da página ${currentPage} para "${selectedNotebookTitle}".`}
+              disabled={sendPageDisabledTitle !== undefined}
+              onSelect={() => void handleSendCurrentPage()}
+            />
+            <ContextMenuItem
+              icon={<BookOpenIcon size={16} />}
+              label="Abrir no Caderno"
+              title={linkedNotebook === null ? "Nenhum Caderno vinculado a este documento." : `Abrir "${linkedNotebookTitle}".`}
+              disabled={linkedNotebook === null}
+              onSelect={() => {
+                if (linkedNotebook && linkedNotebookTitle) {
+                  utilityMenu.close();
+                  onOpenNotebook(linkedNotebook.id, linkedNotebookTitle);
+                }
+              }}
+            />
+          </ContextMenu>
+        </div>
+
+        {showColorFilter ? (
+          <div role="group" aria-label="Filtrar por cor de realce" className="flex h-8 items-center gap-2 border-t border-border-subtle px-3">
+            {highlightColors.map((color) => {
+              const isSelected = selectedColors.has(color);
+              const colorLabel = highlightColorLabels[color];
+              return (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Filtrar pela cor ${colorLabel}`}
+                  aria-pressed={isSelected}
+                  title={`Cor ${colorLabel}`}
+                  className={`h-4 w-4 rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)] ${
+                    isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-[var(--card)]" : "hover:scale-110"
+                  }`}
+                  style={{ backgroundColor: highlightPalette[color].bg }}
+                  onClick={() => toggleColor(color)}
                 />
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      <p role="status" aria-live="polite" className="sr-only">{notebookFeedback}</p>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+        <section>
+          {visibleAnnotations.length > 0 ? (
+            filterScope === "all" ? (
+              <div className="mt-3 space-y-5">
+                {pageGroups.map((group) => (
+                  <section key={group.page} aria-labelledby={`annotations-page-${group.page}`}>
+                    <h2
+                      id={`annotations-page-${group.page}`}
+                      className="sticky top-0 z-10 bg-[var(--card)] py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]"
+                    >
+                      Página {group.page}
+                    </h2>
+                    <div className="mt-2 space-y-4">
+                      {group.annotations.map((annotation) => (
+                        <AnnotationCard
+                          key={annotation.id}
+                          annotation={annotation}
+                          onJumpToPage={onJumpToPage}
+                          onDelete={onDelete}
+                          onUpdateNote={onUpdateNote}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 space-y-4">
+                {visibleAnnotations.map((annotation) => (
+                  <AnnotationCard
+                    key={annotation.id}
+                    annotation={annotation}
+                    onJumpToPage={onJumpToPage}
+                    onDelete={onDelete}
+                    onUpdateNote={onUpdateNote}
+                  />
+                ))}
+              </div>
+            )
           ) : (
             <div className="mt-3 flex flex-col items-center rounded-lg border border-dashed border-border-subtle px-6 py-8 text-center text-[var(--muted-foreground)]">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle">

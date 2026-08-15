@@ -15,6 +15,7 @@ export interface ContextMenuItemProps {
   disabled?: boolean;
   checked?: boolean;
   selectionMode?: "radio" | "checkbox";
+  title?: string;
 }
 
 function CheckIcon() {
@@ -34,6 +35,7 @@ export function ContextMenuItem({
   disabled = false,
   checked,
   selectionMode = "checkbox",
+  title,
 }: ContextMenuItemProps) {
   const scope = useContext(ContextMenuScopeContext);
   const isAccessibleMenu = useContext(ContextMenuA11yContext);
@@ -51,9 +53,10 @@ export function ContextMenuItem({
       type="button"
       role={accessibleRole}
       aria-checked={checked === undefined ? undefined : checked}
+      title={title}
       disabled={disabled}
       className={`flex h-9 w-full items-center gap-2.5 px-[14px] text-left text-sm transition-colors duration-100 hover:bg-sidebar-raised ${toneClassName} ${
-        disabled ? "pointer-events-none opacity-40" : ""
+        disabled ? "cursor-not-allowed opacity-40" : ""
       }`}
       onMouseEnter={() => {
         if (scope === "root") {
