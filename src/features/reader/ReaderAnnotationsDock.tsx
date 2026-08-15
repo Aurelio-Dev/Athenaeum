@@ -148,7 +148,7 @@ function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onD
       tabIndex={navigationDisabled ? -1 : 0}
       aria-disabled={navigationDisabled}
       title={navigationDisabled ? "Aguarde o PDF terminar de carregar." : `Ir para a anotação na página ${annotation.page}`}
-      className={`reader-annotation-border flex h-full flex-col rounded-[11px] border bg-[var(--reader-annotation-card-bg)] px-3 py-2 outline-none transition ${
+      className={`reader-annotation-border group flex h-full flex-col rounded-[11px] border bg-[var(--reader-annotation-card-bg)] px-3 py-2 outline-none transition ${
         navigationDisabled
           ? "cursor-not-allowed opacity-60"
           : "cursor-pointer hover:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
@@ -200,7 +200,7 @@ function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onD
             aria-label="Editar anotação"
             title={saveState === "saved" ? "Editar anotação" : "Aguarde a anotação ser salva."}
             disabled={saveState !== "saved"}
-            className="rounded-md p-1.5 text-[var(--muted-foreground)] outline-none transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
+            className="rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 outline-none transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
             onClick={(event) => {
               event.stopPropagation();
               onEdit(annotation);
@@ -213,7 +213,7 @@ function AnnotationCard({ annotation, saveState, onJumpToAnnotation, onEdit, onD
             aria-label="Excluir anotação"
             title={saveState === "saving" ? "Aguarde a anotação ser salva." : "Excluir anotação"}
             disabled={saveState === "saving"}
-            className="rounded-md p-1.5 text-[var(--muted-foreground)] outline-none transition hover:bg-status-red hover:text-status-red-text focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
+            className="rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 outline-none transition hover:bg-status-red hover:text-status-red-text focus:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
             onClick={(event) => {
               event.stopPropagation();
               onDelete(annotation.id);
