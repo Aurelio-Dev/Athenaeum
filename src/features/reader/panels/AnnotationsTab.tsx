@@ -1,5 +1,7 @@
 import { Highlighter, Underline } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { SVGProps } from "react";
+import { EmptyState } from "../../../components/EmptyState";
 import { ContextMenu } from "../../../components/ui/ContextMenu";
 import { ContextMenuItem } from "../../../components/ui/ContextMenuItem";
 import { SegmentedControl, type SegmentedOption } from "../../../components/ui/SegmentedControl";
@@ -61,11 +63,38 @@ function JumpToPageIcon() {
   );
 }
 
-function EmptyIcon() {
+function EmptyAnnotationsIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M11 5H30L37 12V43H11V5Z"
+        stroke="var(--color-sidebar-muted)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M30 5V12H37"
+        stroke="var(--color-sidebar-muted)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <line x1="17" y1="21" x2="31" y2="21" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="17" y1="26" x2="29" y2="26" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="17" y1="31" x2="25" y2="31" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EmptyFilteredAnnotationsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <circle cx="20" cy="20" r="14" stroke="var(--color-sidebar-muted)" strokeWidth="2" />
+      <line x1="30" y1="30" x2="43" y2="43" stroke="var(--color-sidebar-muted)" strokeWidth="2" strokeLinecap="round" />
+      <line x1="12" y1="16" x2="28" y2="16" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="12" y1="20" x2="24" y2="20" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="12" y1="24" x2="20" y2="24" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -411,6 +440,12 @@ export function AnnotationsTab({
     });
   }
 
+  function handleClearFilters() {
+    setSearchTerm("");
+    setSelectedColors(new Set());
+    handleFilterScopeChange("all");
+  }
+
   function toggleColor(color: HighlightColor) {
     setSelectedColors((current) => {
       const next = new Set(current);
@@ -452,7 +487,23 @@ export function AnnotationsTab({
     }
   }
 
-  const emptyMessage = filterScope === "all" ? "Nenhuma anotação no documento." : "Nenhuma anotação nesta página.";
+  const trimmedSearchTerm = searchTerm.trim();
+  const selectedColorLabels = highlightColors
+    .filter((color) => selectedColors.has(color))
+    .map((color) => highlightColorLabels[color]);
+  const colorFilterDescription = selectedColorLabels.length === 1
+    ? `cor ${selectedColorLabels[0]}`
+    : selectedColorLabels.length > 1
+      ? `cores ${selectedColorLabels.slice(0, -1).join(", ")} e ${selectedColorLabels[selectedColorLabels.length - 1]}`
+      : null;
+  const activeFilterDescriptions = [
+    trimmedSearchTerm.length > 0 ? `"${trimmedSearchTerm}"` : null,
+    colorFilterDescription,
+    filterScope === "current_page" ? "esta página" : null,
+  ].filter((description): description is string => description !== null);
+  const filteredEmptyDescription = activeFilterDescriptions.length > 0
+    ? `Nenhuma anotação corresponde a ${activeFilterDescriptions.join(" · ")}.`
+    : "Nenhuma anotação corresponde aos filtros atuais.";
   const selectedNotebook = notebooks.find((notebook) => notebook.id === selectedNotebookId);
   const selectedNotebookTitle = selectedNotebook ? selectedNotebook.title.trim() || "Caderno sem título" : null;
   const linkedNotebookTitle = linkedNotebook ? linkedNotebook.title.trim() || "Caderno sem título" : null;
@@ -583,7 +634,7 @@ export function AnnotationsTab({
       <p role="status" aria-live="polite" className="sr-only">{notebookFeedback}</p>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-        <section>
+        <section className="h-full">
           {visibleAnnotations.length > 0 ? (
             filterScope === "all" ? (
               <div className="mt-3 space-y-5">
@@ -622,13 +673,23 @@ export function AnnotationsTab({
                 ))}
               </div>
             )
+          ) : annotations.length === 0 ? (
+            <EmptyState
+              icon={EmptyAnnotationsIcon}
+              iconClassName="h-12 w-12"
+              title="Nenhuma anotação ainda"
+              description="Selecione um trecho de texto no PDF para criar uma anotação."
+              verticalPosition="raised"
+            />
           ) : (
-            <div className="mt-3 flex flex-col items-center rounded-lg border border-dashed border-border-subtle px-6 py-8 text-center text-[var(--muted-foreground)]">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle">
-                <EmptyIcon />
-              </div>
-              <p className="text-sm leading-6">{emptyMessage}</p>
-            </div>
+            <EmptyState
+              icon={EmptyFilteredAnnotationsIcon}
+              iconClassName="h-12 w-12"
+              title="Nenhuma anotação encontrada"
+              description={filteredEmptyDescription}
+              verticalPosition="raised"
+              action={{ label: "Limpar filtros", onClick: handleClearFilters }}
+            />
           )}
         </section>
       </div>

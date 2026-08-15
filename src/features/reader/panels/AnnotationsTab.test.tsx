@@ -178,6 +178,21 @@ function buttonByText(text: string) {
   return button;
 }
 
+function getEmptyState(title: string) {
+  const heading = Array.from(container?.querySelectorAll<HTMLHeadingElement>("h2") ?? [])
+    .find((element) => element.textContent === title);
+  if (!heading || !heading.parentElement) {
+    throw new Error(`Estado vazio não encontrado: ${title}`);
+  }
+
+  const description = heading.nextElementSibling;
+  if (!(description instanceof HTMLParagraphElement)) {
+    throw new Error(`Descrição do estado vazio não encontrada: ${title}`);
+  }
+
+  return { root: heading.parentElement, description: description.textContent ?? "" };
+}
+
 beforeEach(() => {
   databaseMocks.getLatestLinkedNotebook.mockReset();
   databaseMocks.getLatestLinkedNotebook.mockResolvedValue(null);
@@ -461,15 +476,87 @@ describe("AnnotationsTab", () => {
     expect(sendButton.title).toBe("Nenhum Caderno disponível. Crie um Caderno na biblioteca para enviar anotações.");
   });
 
-  it("atualiza o estado vazio conforme o escopo", async () => {
-    await renderTab([], "current_page", 3);
+  it("mostra o estado do documento sem anotações e não oferece CTA", async () => {
+    await renderTab([], "all", 3);
 
-    expect(scopeOption("Esta página").getAttribute("aria-checked")).toBe("true");
-    expect(container?.textContent).toContain("Nenhuma anotação nesta página.");
+    const emptyState = getEmptyState("Nenhuma anotação ainda");
+    expect(emptyState.description).toBe("Selecione um trecho de texto no PDF para criar uma anotação.");
+    expect(emptyState.root.querySelector("button")).toBeNull();
+    expect(container?.textContent).not.toContain("Limpar filtros");
+  });
 
-    click(scopeOption("Todas"));
+  it("nomeia somente a busca no estado filtrado", async () => {
+    await renderTab([createAnnotation("existente", 2, 0.2)], "all");
 
+    changeInputValue(getElement('[aria-label="Buscar anotações"]') as HTMLInputElement, "inexistente");
+
+    const emptyState = getEmptyState("Nenhuma anotação encontrada");
+    expect(emptyState.description).toBe('Nenhuma anotação corresponde a "inexistente".');
+    expect(emptyState.description).not.toContain("cor azul");
+    expect(emptyState.description).not.toContain("esta página");
+  });
+
+  it("nomeia somente a cor no estado filtrado", async () => {
+    await renderTab([
+      createAnnotation("ambar", 2, 0.2),
+      { ...createAnnotation("azul", 2, 0.4), color: "blue" as const },
+    ], "all");
+
+    click(getElement('[aria-label="Filtrar pela cor rosa"]'));
+
+    const emptyState = getEmptyState("Nenhuma anotação encontrada");
+    expect(emptyState.description).toBe("Nenhuma anotação corresponde a cor rosa.");
+    expect(emptyState.description).not.toContain('"');
+    expect(emptyState.description).not.toContain("esta página");
+  });
+
+  it("nomeia somente o escopo da página no estado filtrado", async () => {
+    await renderTab([createAnnotation("outra-pagina", 1, 0.2)], "current_page", 2);
+
+    const emptyState = getEmptyState("Nenhuma anotação encontrada");
+    expect(emptyState.description).toBe("Nenhuma anotação corresponde a esta página.");
+    expect(emptyState.description).not.toContain('"');
+    expect(emptyState.description).not.toContain("cor azul");
+  });
+
+  it("nomeia busca, múltiplas cores e escopo juntos no estado filtrado", async () => {
+    await renderTab([
+      { ...createAnnotation("azul-pagina-1", 1, 0.2), color: "blue" as const, selectedText: "Café azul" },
+      { ...createAnnotation("ambar-pagina-1", 1, 0.4), selectedText: "Café âmbar" },
+      { ...createAnnotation("rosa-pagina-2", 2, 0.6), color: "rose" as const, selectedText: "Outro assunto" },
+    ], "current_page", 2);
+
+    changeInputValue(getElement('[aria-label="Buscar anotações"]') as HTMLInputElement, "cafe");
+    click(getElement('[aria-label="Filtrar pela cor âmbar"]'));
+    click(getElement('[aria-label="Filtrar pela cor azul"]'));
+
+    const emptyState = getEmptyState("Nenhuma anotação encontrada");
+    expect(emptyState.description).toBe('Nenhuma anotação corresponde a "cafe" · cores âmbar e azul · esta página.');
+    expect(emptyState.description).not.toContain("rosa");
+    expect(emptyState.description).not.toContain("violeta");
+  });
+
+  it("limpa todos os filtros, restaura a lista e persiste o escopo completo", async () => {
+    await renderTab([
+      { ...createAnnotation("azul-pagina-1", 1, 0.2), color: "blue" as const, selectedText: "Café azul" },
+      { ...createAnnotation("ambar-pagina-1", 1, 0.4), selectedText: "Café âmbar" },
+      { ...createAnnotation("rosa-pagina-2", 2, 0.6), color: "rose" as const, selectedText: "Outro assunto" },
+    ], "current_page", 2);
+
+    changeInputValue(getElement('[aria-label="Buscar anotações"]') as HTMLInputElement, "cafe");
+    click(getElement('[aria-label="Filtrar pela cor azul"]'));
+    expect(getEmptyState("Nenhuma anotação encontrada").description)
+      .toBe('Nenhuma anotação corresponde a "cafe" · cor azul · esta página.');
+
+    click(buttonByText("Limpar filtros"));
+
+    expect((getElement('[aria-label="Buscar anotações"]') as HTMLInputElement).value).toBe("");
     expect(scopeOption("Todas").getAttribute("aria-checked")).toBe("true");
-    expect(container?.textContent).toContain("Nenhuma anotação no documento.");
+    expect(visibleQuoteTexts()).toEqual(["“Café azul”", "“Café âmbar”", "“Outro assunto”"]);
+    expect(databaseMocks.setDocumentAnnotationsFilterScope).toHaveBeenCalledWith(
+      "document-1",
+      "all",
+      "preloaded",
+    );
   });
 });
