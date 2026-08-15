@@ -1,42 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ContextMenu } from "../../../components/ui/ContextMenu";
 import { ContextMenuItem } from "../../../components/ui/ContextMenuItem";
 import { useContextMenu } from "../../../hooks/useContextMenu";
 import {
-  getLatestLinkedNotebook,
-  listNotebookOptions,
-  openDocumentExternally,
   setDocumentAnnotationsFilterScope,
   type DatabaseHandleSource,
-  type NotebookOption,
 } from "../../../lib/database";
 import type { Annotation } from "../../../types/annotation";
-import type { AnnotationsFilterScope, LibraryDocument, ReaderDocumentDetails } from "../../../types/library";
+import type { AnnotationsFilterScope, LibraryDocument } from "../../../types/library";
 import { highlightPalette } from "../highlightPalette";
-import { sendReaderPageToNotebook } from "../sendPageToNotebook";
-import {
-  DocumentInfoCondensed,
-  DocumentTagsSection,
-  ReadingStatusCard,
-  RelatedDocumentsSection,
-  sectionLabelClassName,
-  useReaderDetailsInvalidation,
-} from "./DocumentInfoSections";
-import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon, SendIcon } from "./readerPanelIcons";
+import { MoreVerticalIcon } from "./readerPanelIcons";
 
 type AnnotationsTabProps = {
-  document: ReaderDocumentDetails & Pick<LibraryDocument, "annotationsFilterScope">;
+  document: Pick<LibraryDocument, "id" | "annotationsFilterScope">;
   annotations: Annotation[];
   currentPage: number;
-  progress: number;
   databaseSource?: DatabaseHandleSource;
   onJumpToPage: (page: number, annotationId?: string) => void;
   onDelete: (annotationId: string) => void;
   onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
-  // Titulo junto: o caderno abre como janela nativa (open_notebook_window
-  // exige o titulo pra barra da janela) e a lista de cadernos ja esta aqui.
-  onOpenNotebook: (notebookId: number, notebookTitle: string) => void;
-  onTagsChanged?: () => void;
 };
 
 type AnnotationCardProps = {
@@ -235,22 +217,12 @@ export function AnnotationsTab({
   document,
   annotations,
   currentPage,
-  progress,
   databaseSource = "loaded",
   onJumpToPage,
   onDelete,
   onUpdateNote,
-  onOpenNotebook,
-  onTagsChanged,
 }: AnnotationsTabProps) {
-  const [showCreateHint, setShowCreateHint] = useState(false);
   const [filterScope, setFilterScope] = useState<AnnotationsFilterScope>(document.annotationsFilterScope);
-  const [notebooks, setNotebooks] = useState<NotebookOption[]>([]);
-  const [selectedNotebookId, setSelectedNotebookId] = useState<number | null>(null);
-  const [linkedNotebookId, setLinkedNotebookId] = useState<number | null>(null);
-  const [isSending, setIsSending] = useState(false);
-  const [sendFeedback, setSendFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const footerMenu = useContextMenu();
   const currentPageAnnotations = useMemo(
     () => annotations.filter((annotation) => annotation.page === currentPage),
     [annotations, currentPage],
@@ -263,94 +235,8 @@ export function AnnotationsTab({
   }, [annotations, currentPageAnnotations, filterScope]);
 
   useEffect(() => {
-    setShowCreateHint(false);
-  }, [currentPage]);
-
-  useEffect(() => {
     setFilterScope(document.annotationsFilterScope);
   }, [document.annotationsFilterScope, document.id]);
-
-  useEffect(() => {
-    if (!showCreateHint) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => setShowCreateHint(false), 5000);
-    return () => window.clearTimeout(timer);
-  }, [showCreateHint]);
-
-  useEffect(() => {
-    if (!sendFeedback || sendFeedback.type !== "success") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => setSendFeedback(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [sendFeedback]);
-
-  // Cadernos disponiveis + caderno vinculado (pre-selecionado no envio e alvo
-  // do botao "Abrir no Caderno" do rodape).
-  const reloadNotebooks = useCallback(() => {
-    void Promise.all([
-      listNotebookOptions(databaseSource),
-      getLatestLinkedNotebook(document.id, databaseSource),
-    ])
-      .then(([loadedNotebooks, linkedNotebook]) => {
-        setNotebooks(loadedNotebooks);
-        setLinkedNotebookId(linkedNotebook?.id ?? null);
-        setSelectedNotebookId((current) => {
-          if (current !== null && loadedNotebooks.some((notebook) => notebook.id === current)) {
-            return current;
-          }
-          return linkedNotebook?.id ?? loadedNotebooks[0]?.id ?? null;
-        });
-      })
-      .catch((error) => {
-        console.warn("Não foi possível carregar os Cadernos.", error);
-      });
-  }, [databaseSource, document.id]);
-
-  useEffect(() => {
-    setNotebooks([]);
-    setSelectedNotebookId(null);
-    setLinkedNotebookId(null);
-    setSendFeedback(null);
-    reloadNotebooks();
-  }, [reloadNotebooks]);
-
-  useReaderDetailsInvalidation(document.id, reloadNotebooks);
-
-  async function handleSendPage() {
-    if (selectedNotebookId === null || isSending) {
-      return;
-    }
-
-    setIsSending(true);
-    setSendFeedback(null);
-
-    try {
-      await sendReaderPageToNotebook({
-        notebookId: selectedNotebookId,
-        documentId: document.id,
-        documentTitle: document.title,
-        page: currentPage,
-        databaseSource,
-      });
-      setSendFeedback({ type: "success", message: `Página ${currentPage} enviada para o Caderno.` });
-    } catch (error) {
-      console.warn("Não foi possível enviar a página para o Caderno.", error);
-      setSendFeedback({ type: "error", message: "Não foi possível enviar para o Caderno. Tente novamente." });
-    } finally {
-      setIsSending(false);
-    }
-  }
-
-  function handleOpenExternally() {
-    footerMenu.close();
-    void openDocumentExternally(document.id).catch((error) => {
-      console.warn("Não foi possível abrir o PDF externamente.", error);
-    });
-  }
 
   function handleFilterScopeToggle() {
     const nextScope: AnnotationsFilterScope = filterScope === "all" ? "current_page" : "all";
@@ -360,36 +246,16 @@ export function AnnotationsTab({
     });
   }
 
-  const sectionTitle = filterScope === "all" ? "Todas as anotações" : `Anotações na página ${currentPage}`;
   const emptyMessage = filterScope === "all" ? "Nenhuma anotação no documento." : "Nenhuma anotação nesta página.";
   const filterScopeToggleLabel = filterScope === "all"
     ? "Filtro de anotações: mostrando todas as páginas"
     : "Filtro de anotações: mostrando apenas a página atual";
-  const canSend = notebooks.length > 0 && selectedNotebookId !== null && currentPageAnnotations.length > 0 && !isSending;
 
   return (
     <div className="flex min-h-full flex-col px-4 py-5">
       <div className="space-y-6">
-        <div>
-          <button
-            type="button"
-            title="Selecione um trecho do PDF para criar uma anotação."
-            className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-3 text-sm font-bold text-white shadow-button transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-            onClick={() => setShowCreateHint(true)}
-          >
-            + Criar anotação
-          </button>
-
-          {showCreateHint ? (
-            <p role="status" className="mt-2 rounded-lg border border-border-subtle bg-[var(--muted)] px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]">
-              Selecione um trecho de texto no PDF. A barra de anotação aparecerá junto à seleção.
-            </p>
-          ) : null}
-        </div>
-
         <section>
           <div className="flex items-center justify-between gap-3">
-            <h2 className={sectionLabelClassName}>{sectionTitle}</h2>
             <button
               type="button"
               aria-label={filterScopeToggleLabel}
@@ -424,99 +290,7 @@ export function AnnotationsTab({
             </div>
           )}
         </section>
-
-        <section className="border-t border-border-subtle pt-5">
-          <h2 className={sectionLabelClassName}>Enviar para Caderno</h2>
-          {notebooks.length > 0 ? (
-            <>
-              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                <select
-                  aria-label="Selecionar Caderno"
-                  value={selectedNotebookId ?? ""}
-                  disabled={isSending}
-                  className="w-full min-w-0 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
-                  onChange={(event) => setSelectedNotebookId(Number(event.target.value))}
-                >
-                  {notebooks.map((notebook) => (
-                    <option key={notebook.id} value={notebook.id}>
-                      {notebook.title}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={!canSend}
-                  title={currentPageAnnotations.length === 0 ? "Crie uma anotação nesta página para enviar." : undefined}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => void handleSendPage()}
-                >
-                  <SendIcon size={13} />
-                  <span>{isSending ? "Enviando..." : `Enviar página ${currentPage}`}</span>
-                </button>
-              </div>
-              {sendFeedback ? (
-                <p
-                  role="status"
-                  className={`mt-2 text-xs font-semibold ${sendFeedback.type === "success" ? "text-primary" : "text-status-red-text"}`}
-                >
-                  {sendFeedback.message}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="mt-3 text-xs text-[var(--muted-foreground)]">Nenhum Caderno disponível. Crie um Caderno na biblioteca para enviar anotações.</p>
-          )}
-        </section>
-
-        <DocumentInfoCondensed document={document} />
-
-        <DocumentTagsSection
-          documentId={document.id}
-          tags={document.tags}
-          databaseSource={databaseSource}
-          onTagsChanged={onTagsChanged}
-        />
-
-        <ReadingStatusCard status={document.status} progress={progress} />
-
-        <RelatedDocumentsSection documentId={document.id} databaseSource={databaseSource} />
       </div>
-
-      <footer className="sticky bottom-0 -mx-4 mt-6 border-t border-border-subtle bg-[var(--card)] px-4 pb-4 pt-3">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <button
-            type="button"
-            disabled={linkedNotebookId === null}
-            title={linkedNotebookId === null ? "Nenhum Caderno vinculado a este documento." : undefined}
-            className="inline-flex min-w-0 items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={() => {
-              if (linkedNotebookId !== null) {
-                // listNotebookOptions cobre todos os cadernos vivos, entao o
-                // vinculado esta na lista; o fallback e so rede de seguranca.
-                const linkedTitle = notebooks.find((notebook) => notebook.id === linkedNotebookId)?.title ?? "Caderno";
-                onOpenNotebook(linkedNotebookId, linkedTitle);
-              }
-            }}
-          >
-            <BookOpenIcon size={13} />
-            <span>Abrir no Caderno</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Mais opções"
-            title="Mais opções"
-            aria-haspopup="menu"
-            aria-expanded={footerMenu.isOpen}
-            className="rounded-md border border-border-subtle p-2 text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-            onClick={footerMenu.open}
-          >
-            <MoreVerticalIcon />
-          </button>
-        </div>
-        <ContextMenu isOpen={footerMenu.isOpen} x={footerMenu.x} y={footerMenu.y} onClose={footerMenu.close}>
-          <ContextMenuItem icon={<ExternalLinkIcon />} label="Abrir externamente" onSelect={handleOpenExternally} />
-        </ContextMenu>
-      </footer>
     </div>
   );
 }

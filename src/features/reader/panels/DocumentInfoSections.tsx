@@ -25,10 +25,8 @@ import type { ReaderDocumentDetails, SubjectTag } from "../../../types/library";
 import { statusTokens } from "../../../styles/designTokens";
 import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon } from "./readerPanelIcons";
 
-// Secoes de informacao do documento compartilhadas entre as abas Detalhes e
-// Anotacoes do painel do leitor (mesmo layout nas duas, conforme referencia).
-// Cada secao e autossuficiente em dados quando precisa do banco, para poder
-// ser montada tanto na janela principal quanto na popout.
+// Secoes de informacao do documento usadas pelo painel Detalhes do leitor.
+// Cada secao e autossuficiente em dados quando precisa do banco.
 
 export const sectionLabelClassName = "text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]";
 
@@ -389,38 +387,6 @@ export function RelatedDocumentsSection({ documentId, databaseSource = "loaded" 
         <ContextMenuItem icon={<BookOpenIcon />} label="Abrir no leitor" onSelect={openInReader} />
         <ContextMenuItem icon={<ExternalLinkIcon />} label="Abrir externamente" onSelect={openExternally} />
       </ContextMenu>
-    </section>
-  );
-}
-
-type DocumentInfoCondensedProps = {
-  document: ReaderDocumentDetails;
-};
-
-// Bloco condensado da aba Anotacoes (referencia): rotulo sobre o valor, com
-// Autor/disciplina e Ano lado a lado.
-export function DocumentInfoCondensed({ document }: DocumentInfoCondensedProps) {
-  const author = document.authors.length > 0 ? document.authors.join(", ") : "Sem autor";
-
-  return (
-    <section>
-      <h2 className={sectionLabelClassName}>Informações do documento</h2>
-      <dl className="mt-3 grid gap-3 text-xs">
-        <div>
-          <dt className="font-medium text-[var(--muted-foreground)]">Título</dt>
-          <dd className="mt-0.5 min-w-0 break-words text-[var(--foreground)]">{document.title}</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.6fr)] gap-3">
-          <div>
-            <dt className="font-medium text-[var(--muted-foreground)]">Autor / disciplina</dt>
-            <dd className="mt-0.5 min-w-0 break-words text-[var(--foreground)]">{author}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-[var(--muted-foreground)]">Ano</dt>
-            <dd className="mt-0.5 text-[var(--foreground)]">{document.year}</dd>
-          </div>
-        </div>
-      </dl>
     </section>
   );
 }

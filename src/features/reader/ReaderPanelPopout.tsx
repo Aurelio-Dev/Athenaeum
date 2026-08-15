@@ -45,22 +45,12 @@ const tabs: Array<{ id: ReaderTab; label: string }> = [
   { id: "ai", label: "ASK IA" },
 ];
 
-function CloseIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <line x1="18" x2="6" y1="6" y2="18" />
-      <line x1="6" x2="18" y1="6" y2="18" />
-    </svg>
-  );
-}
-
 export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanelPopoutProps) {
   const [documentId, setDocumentId] = useState(initialDocumentId);
   const documentIdRef = useRef(initialDocumentId);
   const [activeTab, setActiveTab] = useState<ReaderTab>("annotations");
   const [documentDetails, setDocumentDetails] = useState<LibraryDocument | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [progress, setProgress] = useState(0);
   const [, setNotesText] = useState("");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +64,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
   const documentSwitchPromiseRef = useRef<Promise<void>>(Promise.resolve());
   const preloadedSwitchDocumentIdRef = useRef<string | null>(null);
   const closeWindowPromiseRef = useRef<Promise<void> | null>(null);
-  const [isClosing, setIsClosing] = useState(false);
 
   const loadDocumentNotes = useCallback(
     (targetDocumentId: string) => getDocumentNotes(targetDocumentId, "preloaded"),
@@ -98,7 +87,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
   const applyLoadedDocument = useCallback((loadedDocument: LibraryDocument) => {
     setDocumentDetails(loadedDocument);
     setCurrentPage(loadedDocument.readingLocation?.page ?? 1);
-    setProgress(loadedDocument.progress);
   }, []);
 
   useEffect(() => {
@@ -272,7 +260,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       }
 
       setCurrentPage(payload.page);
-      setProgress(payload.progress);
     }, () => {
       void emitTo<ReaderDocumentPayload>(READER_WINDOW_LABEL, READER_PAGE_STATE_REQUESTED_EVENT, { documentId })
         .catch((error) => {
@@ -360,29 +347,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     });
   }
 
-  // Caderno abre como janela nativa direto daqui (open_notebook_window foca a
-  // existente ou cria uma nova) — sem saltar pela main, que nem precisa estar
-  // aberta.
-  function requestOpenNotebook(notebookId: number, notebookTitle: string) {
-    void invoke("open_notebook_window", { notebookId, notebookTitle }).catch((error) => {
-      console.warn("Nao foi possivel abrir a janela do Caderno.", error);
-    });
-  }
-
-  // Eventos da propria janela sao ignorados pelo anti-eco, entao a popout
-  // recarrega os detalhes dela mesma apos editar tags.
-  function handleTagsChanged() {
-    void loadDocumentDetails(documentId)
-      .then((loadedDocument) => {
-        if (loadedDocument) {
-          setDocumentDetails(loadedDocument);
-        }
-      })
-      .catch((error) => {
-        console.warn("Nao foi possivel recarregar os detalhes apos editar as tags.", error);
-      });
-  }
-
   const notifyPopoutClosed = useCallback(async (closedDocumentId: string) => {
     await emit<ReaderDocumentPayload>(READER_POPOUT_CLOSED_EVENT, { documentId: closedDocumentId });
   }, []);
@@ -403,7 +367,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             return;
           }
 
-          setIsClosing(true);
           setIsLoading(true);
           setErrorMessage("");
 
@@ -444,7 +407,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             throw error;
           } finally {
             setIsLoading(false);
-            setIsClosing(false);
           }
         });
 
@@ -499,13 +461,11 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     }
 
     const closePromise = (async () => {
-      setIsClosing(true);
       try {
         await flushNotes();
         await notifyPopoutClosed(documentIdRef.current);
         await invoke("close_reader_panel_window");
       } catch (error) {
-        setIsClosing(false);
         console.warn("Nao foi possivel fechar a popout.", error);
         throw error;
       }
@@ -572,19 +532,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             </button>
           ))}
         </nav>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="Fechar janela"
-            title="Fechar janela"
-            className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-            disabled={isClosing}
-            onClick={() => void closeWindow().catch(() => undefined)}
-          >
-            <CloseIcon />
-          </button>
-        </div>
       </header>
 
       {errorMessage ? (
@@ -605,13 +552,10 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             document={documentDetails}
             annotations={annotations}
             currentPage={currentPage}
-            progress={progress}
             databaseSource="preloaded"
             onJumpToPage={handleJumpToPage}
             onDelete={handleDeleteAnnotation}
             onUpdateNote={handleUpdateAnnotationNote}
-            onOpenNotebook={requestOpenNotebook}
-            onTagsChanged={handleTagsChanged}
           />
         ) : (
           <AiTab />

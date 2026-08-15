@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Annotation } from "../../../types/annotation";
-import type { AnnotationsFilterScope, LibraryDocument, ReaderDocumentDetails } from "../../../types/library";
+import type { AnnotationsFilterScope, LibraryDocument } from "../../../types/library";
 import { AnnotationsTab } from "./AnnotationsTab";
 
 const databaseMocks = vi.hoisted(() => ({
@@ -12,9 +12,6 @@ const databaseMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../lib/database", () => ({
-  getLatestLinkedNotebook: vi.fn(async () => null),
-  listNotebookOptions: vi.fn(async () => []),
-  openDocumentExternally: vi.fn(async () => undefined),
   setDocumentAnnotationsFilterScope: databaseMocks.setDocumentAnnotationsFilterScope,
 }));
 
@@ -36,32 +33,10 @@ vi.mock("../../../components/ui/ContextMenuItem", () => ({
   ContextMenuItem: () => null,
 }));
 
-vi.mock("../sendPageToNotebook", () => ({
-  sendReaderPageToNotebook: vi.fn(async () => undefined),
-}));
-
-vi.mock("./DocumentInfoSections", () => ({
-  DocumentInfoCondensed: () => null,
-  DocumentTagsSection: () => null,
-  ReadingStatusCard: () => null,
-  RelatedDocumentsSection: () => null,
-  sectionLabelClassName: "text-xs",
-  useReaderDetailsInvalidation: () => undefined,
-}));
-
-type AnnotationsDocument = ReaderDocumentDetails & Pick<LibraryDocument, "annotationsFilterScope">;
+type AnnotationsDocument = Pick<LibraryDocument, "id" | "annotationsFilterScope">;
 
 const baseDocument: AnnotationsDocument = {
   id: "document-1",
-  title: "Documento de teste",
-  description: "",
-  authors: [],
-  source: "",
-  year: 2026,
-  tags: [],
-  status: "in-progress",
-  progress: 20,
-  favorite: false,
   annotationsFilterScope: "current_page",
 };
 
@@ -96,11 +71,9 @@ async function renderTab(
         document={document}
         annotations={annotations}
         currentPage={currentPage}
-        progress={20}
         databaseSource="preloaded"
         onJumpToPage={onJumpToPage}
         onDelete={vi.fn()}
-        onOpenNotebook={vi.fn()}
       />,
     );
     await Promise.resolve();
@@ -146,7 +119,7 @@ describe("AnnotationsTab", () => {
       createAnnotation("pagina-2", 2, 0.4),
     ]);
 
-    expect(container?.textContent).toContain("Anotações na página 2");
+    expect(container?.textContent).toContain("Esta página");
     expect(container?.textContent).toContain("Trecho pagina-2");
     expect(container?.textContent).not.toContain("Trecho pagina-1");
   });
@@ -165,7 +138,7 @@ describe("AnnotationsTab", () => {
       "all",
       "preloaded",
     );
-    expect(container?.textContent).toContain("Todas as anotações");
+    expect(container?.textContent).toContain("Todas as páginas");
     expect(Array.from(container?.querySelectorAll("blockquote") ?? []).map((element) => element.textContent)).toEqual([
       "“Trecho pagina-1-acima”",
       "“Trecho pagina-1-abaixo”",
@@ -178,15 +151,15 @@ describe("AnnotationsTab", () => {
     expect(onJumpToPage).toHaveBeenCalledWith(1, "pagina-1-acima");
   });
 
-  it("atualiza os textos de cabeçalho e estado vazio conforme o escopo", async () => {
+  it("atualiza o estado vazio conforme o escopo", async () => {
     await renderTab([], "current_page", 3);
 
-    expect(container?.textContent).toContain("Anotações na página 3");
+    expect(container?.textContent).toContain("Esta página");
     expect(container?.textContent).toContain("Nenhuma anotação nesta página.");
 
     click(toggleScope());
 
-    expect(container?.textContent).toContain("Todas as anotações");
+    expect(container?.textContent).toContain("Todas as páginas");
     expect(container?.textContent).toContain("Nenhuma anotação no documento.");
   });
 });
