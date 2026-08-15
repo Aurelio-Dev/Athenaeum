@@ -24,25 +24,23 @@ import {
   READER_SET_DOCUMENT_EVENT,
   READER_WINDOW_LABEL,
   setDocumentNote,
-  setDocumentFavorite,
-  openDocumentExternally,
   updateAnnotationNote,
 } from "../../lib/database";
 import type { ReaderDocumentPayload, ReaderJumpToPagePayload } from "../../lib/database";
 import type { Annotation } from "../../types/annotation";
 import type { LibraryDocument } from "../../types/library";
+import { AiTab } from "./panels/AiTab";
 import { AnnotationsTab } from "./panels/AnnotationsTab";
-import { DetailsTab } from "./panels/DetailsTab";
 
 type ReaderPanelPopoutProps = {
   documentId: string;
 };
 
-type ReaderTab = "details" | "annotations";
+type ReaderTab = "annotations" | "ai";
 
 const tabs: Array<{ id: ReaderTab; label: string }> = [
-  { id: "details", label: "Detalhes" },
   { id: "annotations", label: "Anotações" },
+  { id: "ai", label: "ASK IA" },
 ];
 
 function CloseIcon() {
@@ -57,13 +55,10 @@ function CloseIcon() {
 export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanelPopoutProps) {
   const [documentId, setDocumentId] = useState(initialDocumentId);
   const documentIdRef = useRef(initialDocumentId);
-  const [activeTab, setActiveTab] = useState<ReaderTab>("details");
+  const [activeTab, setActiveTab] = useState<ReaderTab>("annotations");
   const [documentDetails, setDocumentDetails] = useState<LibraryDocument | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [progress, setProgress] = useState(0);
-  const [totalPages, setTotalPages] = useState<number | null>(null);
-  const [fileSizeBytes, setFileSizeBytes] = useState<number | null>(null);
-  const metricsDocumentIdRef = useRef<string | null>(null);
   const [, setNotesText] = useState("");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,10 +97,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     setDocumentDetails(loadedDocument);
     setCurrentPage(loadedDocument.readingLocation?.page ?? 1);
     setProgress(loadedDocument.progress);
-    if (metricsDocumentIdRef.current !== loadedDocument.id) {
-      setTotalPages(null);
-      setFileSizeBytes(null);
-    }
   }, []);
 
   useEffect(() => {
@@ -119,10 +110,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
     const annotationsRequestSequence = ++annotationsReloadSequenceRef.current;
     setIsLoading(true);
     setErrorMessage("");
-    if (metricsDocumentIdRef.current !== documentId) {
-      setTotalPages(null);
-      setFileSizeBytes(null);
-    }
 
     if (!documentId) {
       setIsLoading(false);
@@ -269,9 +256,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
 
       setCurrentPage(payload.page);
       setProgress(payload.progress);
-      metricsDocumentIdRef.current = payload.documentId;
-      setTotalPages(payload.totalPages);
-      setFileSizeBytes(payload.fileSizeBytes);
     }, () => {
       void emitTo<ReaderDocumentPayload>(READER_WINDOW_LABEL, READER_PAGE_STATE_REQUESTED_EVENT, { documentId })
         .catch((error) => {
@@ -401,9 +385,6 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
           setIsClosing(true);
           setIsLoading(true);
           setErrorMessage("");
-          metricsDocumentIdRef.current = null;
-          setTotalPages(null);
-          setFileSizeBytes(null);
 
           try {
             await flushNotes();
@@ -612,23 +593,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             onTagsChanged={handleTagsChanged}
           />
         ) : (
-          <DetailsTab
-            document={documentDetails}
-            progress={progress}
-            totalPages={totalPages}
-            fileSizeBytes={fileSizeBytes}
-            databaseSource="preloaded"
-            onOpenNotebook={requestOpenNotebook}
-            onToggleFavorite={async () => {
-              const nextFavorite = !documentDetails.favorite;
-              await setDocumentFavorite(documentId, nextFavorite, "preloaded");
-              setDocumentDetails((current) =>
-                current?.id === documentId ? { ...current, favorite: nextFavorite } : current,
-              );
-            }}
-            onOpenExternally={() => openDocumentExternally(documentId)}
-            onTagsChanged={handleTagsChanged}
-          />
+          <AiTab />
         )}
       </section>
     </main>
