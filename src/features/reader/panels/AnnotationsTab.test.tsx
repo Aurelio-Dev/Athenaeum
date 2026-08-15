@@ -34,6 +34,9 @@ vi.mock("../../../components/ui/ContextMenuItem", () => ({
 }));
 
 type AnnotationsDocument = Pick<LibraryDocument, "id" | "annotationsFilterScope">;
+type RenderTabOptions = {
+  onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
+};
 
 const baseDocument: AnnotationsDocument = {
   id: "document-1",
@@ -58,11 +61,29 @@ function createAnnotation(id: string, page: number, rectY: number): Annotation {
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 const onJumpToPage = vi.fn<(page: number, annotationId?: string) => void>();
+let quoteIsTruncated = false;
+let notifyQuoteResize: (() => void) | null = null;
+
+const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+
+class ResizeObserverMock {
+  constructor(callback: () => void) {
+    notifyQuoteResize = callback;
+  }
+
+  disconnect() {}
+
+  observe() {}
+
+  unobserve() {}
+}
 
 async function renderTab(
   annotations: Annotation[],
   annotationsFilterScope: AnnotationsFilterScope = "current_page",
   currentPage = 2,
+  { onUpdateNote }: RenderTabOptions = {},
 ) {
   const document: AnnotationsDocument = { ...baseDocument, annotationsFilterScope };
   await act(async () => {
@@ -74,6 +95,7 @@ async function renderTab(
         databaseSource="preloaded"
         onJumpToPage={onJumpToPage}
         onDelete={vi.fn()}
+        onUpdateNote={onUpdateNote}
       />,
     );
     await Promise.resolve();
@@ -92,6 +114,19 @@ function click(element: HTMLElement) {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
+function changeTextareaValue(textarea: HTMLTextAreaElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  valueSetter?.call(textarea, value);
+  act(() => textarea.dispatchEvent(new Event("input", { bubbles: true })));
+}
+
+async function blur(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await Promise.resolve();
+  });
+}
+
 function toggleScope() {
   return getElement('[aria-label="Filtro de anotações: mostrando apenas a página atual"]');
 }
@@ -99,6 +134,24 @@ function toggleScope() {
 beforeEach(() => {
   databaseMocks.setDocumentAnnotationsFilterScope.mockClear();
   onJumpToPage.mockClear();
+  quoteIsTruncated = false;
+  notifyQuoteResize = null;
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get() {
+      return this.hasAttribute("data-annotation-quote-measure") ? 72 : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get() {
+      if (!this.hasAttribute("data-annotation-quote-measure")) {
+        return 0;
+      }
+      return quoteIsTruncated ? 96 : 72;
+    },
+  });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -110,6 +163,17 @@ afterEach(() => {
   root = null;
   container = null;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
+  if (originalClientHeight) {
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+  }
+  if (originalScrollHeight) {
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+  }
 });
 
 describe("AnnotationsTab", () => {
@@ -139,16 +203,68 @@ describe("AnnotationsTab", () => {
       "preloaded",
     );
     expect(container?.textContent).toContain("Todas as páginas");
-    expect(Array.from(container?.querySelectorAll("blockquote") ?? []).map((element) => element.textContent)).toEqual([
+    expect(Array.from(container?.querySelectorAll("blockquote[data-annotation-quote]") ?? []).map((element) => element.textContent)).toEqual([
       "“Trecho pagina-1-acima”",
       "“Trecho pagina-1-abaixo”",
       "“Trecho pagina-2”",
     ]);
-    expect(container?.textContent).toContain("Página 1");
-    expect(container?.textContent).toContain("Página 2");
 
     click(getElement('button[title="Ir para a página 1"]'));
     expect(onJumpToPage).toHaveBeenCalledWith(1, "pagina-1-acima");
+  });
+
+  it("mostra a anatomia do card e navega somente pelo badge de página", async () => {
+    const annotation = {
+      ...createAnnotation("sublinhada", 2, 0.2),
+      color: "blue" as const,
+      markStyle: "underline" as const,
+    };
+    await renderTab([annotation]);
+
+    expect(getElement("[data-annotation-color-stripe]").style.backgroundColor).toBe("rgb(29, 78, 216)");
+    expect(getElement('[role="img"][aria-label="Sublinhado"]')).toBeTruthy();
+    expect(getElement("[data-annotation-quote]").className).toContain("font-serif");
+    expect(getElement("[data-annotation-quote]").className).toContain("text-[var(--muted-foreground)]");
+    expect(getElement('[aria-label="Opções da anotação"]').className).toContain("opacity-0");
+    expect(getElement('[aria-label="Opções da anotação"]').className).toContain("group-focus-within:opacity-100");
+
+    click(getElement("[data-annotation-quote]"));
+    expect(onJumpToPage).not.toHaveBeenCalled();
+
+    click(getElement('button[aria-label="Ir para a página 2"]'));
+    expect(onJumpToPage).toHaveBeenCalledWith(2, "sublinhada");
+  });
+
+  it("exibe o controle de expansão somente para trecho truncado e o recalcula ao redimensionar", async () => {
+    await renderTab([createAnnotation("trecho-responsivo", 2, 0.2)]);
+
+    expect(container?.querySelector('button[type="button"]')?.textContent).not.toBe("Mostrar mais");
+    expect(container?.textContent).not.toContain("Mostrar mais");
+
+    quoteIsTruncated = true;
+    await act(async () => {
+      notifyQuoteResize?.();
+      await Promise.resolve();
+    });
+
+    const expandButton = getElement('button:not([aria-label])[type="button"]');
+    expect(expandButton.textContent).toBe("Mostrar mais");
+
+    click(expandButton);
+    expect(expandButton.textContent).toBe("Mostrar menos");
+    expect(onJumpToPage).not.toHaveBeenCalled();
+  });
+
+  it("persiste a edição inline da nota ao perder o foco", async () => {
+    const onUpdateNote = vi.fn<(annotationId: string, note: string) => Promise<void>>(async () => undefined);
+    const annotation = { ...createAnnotation("com-nota", 2, 0.2), note: "Nota inicial" };
+    await renderTab([annotation], "current_page", 2, { onUpdateNote });
+
+    const textarea = getElement("textarea") as HTMLTextAreaElement;
+    changeTextareaValue(textarea, "Nota atualizada");
+    await blur(textarea);
+
+    expect(onUpdateNote).toHaveBeenCalledWith("com-nota", "Nota atualizada");
   });
 
   it("atualiza o estado vazio conforme o escopo", async () => {

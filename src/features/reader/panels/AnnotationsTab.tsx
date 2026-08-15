@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Highlighter, Underline } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ContextMenu } from "../../../components/ui/ContextMenu";
 import { ContextMenuItem } from "../../../components/ui/ContextMenuItem";
 import { useContextMenu } from "../../../hooks/useContextMenu";
@@ -23,7 +24,6 @@ type AnnotationsTabProps = {
 
 type AnnotationCardProps = {
   annotation: Annotation;
-  showPageNumber: boolean;
   onJumpToPage: (page: number, annotationId?: string) => void;
   onDelete: (annotationId: string) => void;
   onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
@@ -101,10 +101,13 @@ const filterScopeOptions: readonly { value: AnnotationsFilterScope; label: strin
   { value: "all", label: "Todas as páginas" },
 ];
 
-function AnnotationCard({ annotation, showPageNumber, onJumpToPage, onDelete, onUpdateNote }: AnnotationCardProps) {
+function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: AnnotationCardProps) {
   const [note, setNote] = useState(annotation.note);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isQuoteExpanded, setIsQuoteExpanded] = useState(false);
+  const [isQuoteTruncated, setIsQuoteTruncated] = useState(false);
+  const quoteMeasureRef = useRef<HTMLQuoteElement | null>(null);
   const palette = highlightPalette[annotation.color];
   const canEdit = Boolean(onUpdateNote);
   const menu = useContextMenu();
@@ -112,6 +115,33 @@ function AnnotationCard({ annotation, showPageNumber, onJumpToPage, onDelete, on
   useEffect(() => {
     setNote(annotation.note);
   }, [annotation.note]);
+
+  useEffect(() => {
+    setIsQuoteExpanded(false);
+  }, [annotation.id, annotation.selectedText]);
+
+  useLayoutEffect(() => {
+    const quoteMeasure = quoteMeasureRef.current;
+    if (!quoteMeasure) {
+      return;
+    }
+    const quoteMeasureElement = quoteMeasure;
+
+    function updateQuoteTruncation() {
+      setIsQuoteTruncated(quoteMeasureElement.scrollHeight > quoteMeasureElement.clientHeight);
+    }
+
+    updateQuoteTruncation();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateQuoteTruncation);
+    resizeObserver.observe(quoteMeasureElement);
+
+    return () => resizeObserver.disconnect();
+  }, [annotation.selectedText]);
 
   async function saveNote() {
     if (!onUpdateNote || note === annotation.note || isSaving) {
@@ -132,24 +162,49 @@ function AnnotationCard({ annotation, showPageNumber, onJumpToPage, onDelete, on
   }
 
   return (
-    <article className="overflow-hidden rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
-      <header className="flex items-center justify-between gap-2 px-4 pt-3">
+    <article className="group relative overflow-hidden rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
+      <span
+        data-annotation-color-stripe
+        className="pointer-events-none absolute inset-y-0 left-0 w-[3px]"
+        style={{ backgroundColor: palette.bg }}
+        aria-hidden="true"
+      />
+
+      <header className="flex items-center gap-2 px-4 pt-3">
         <div className="flex min-w-0 items-center gap-2">
-          {/* Bolinha na cor do highlight: e o unico indicador de cor do card
-              (a citacao nao e mais tingida, como na referencia). */}
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: palette.bg }} aria-hidden="true" />
-          <p className="truncate text-xs text-[var(--muted-foreground)]">
-            <span className="font-semibold text-[var(--foreground)]">Você</span> · {formatRelativeTime(annotation.updatedAt)}
-          </p>
+          <button
+            type="button"
+            aria-label={`Ir para a página ${annotation.page}`}
+            title={`Ir para a página ${annotation.page}`}
+            className="inline-flex shrink-0 items-center rounded-full border border-border-subtle bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--muted-foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+            onClick={() => onJumpToPage(annotation.page, annotation.id)}
+          >
+            p. {annotation.page}
+          </button>
+          <span
+            role="img"
+            aria-label={annotation.markStyle === "underline" ? "Sublinhado" : "Marca-texto"}
+            title={annotation.markStyle === "underline" ? "Sublinhado" : "Marca-texto"}
+            className="shrink-0 text-[var(--muted-foreground)]"
+          >
+            {annotation.markStyle === "underline" ? <Underline size={15} aria-hidden="true" /> : <Highlighter size={15} aria-hidden="true" />}
+          </span>
         </div>
+        <time dateTime={annotation.updatedAt} className="ml-auto truncate text-xs text-[var(--muted-foreground)]">
+          {formatRelativeTime(annotation.updatedAt)}
+        </time>
         <button
           type="button"
           aria-label="Opções da anotação"
           title="Opções da anotação"
           aria-haspopup="menu"
           aria-expanded={menu.isOpen}
-          className="-mr-1.5 rounded-md p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-          onClick={menu.open}
+          className="-mr-1.5 rounded-md p-1.5 text-[var(--muted-foreground)] opacity-0 outline-none transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 group-focus-within:opacity-100"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            menu.open(event);
+          }}
         >
           <MoreVerticalIcon />
         </button>
@@ -174,20 +229,37 @@ function AnnotationCard({ annotation, showPageNumber, onJumpToPage, onDelete, on
         </ContextMenu>
       </header>
 
-      <button
-        type="button"
-        className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-        title={`Ir para a página ${annotation.page}`}
-        onClick={() => onJumpToPage(annotation.page, annotation.id)}
-      >
-        <blockquote className="px-4 pt-2 text-sm italic leading-6 text-[var(--foreground)]">
+      <div className="relative px-4 pt-3">
+        <blockquote
+          data-annotation-quote
+          className={`font-serif text-sm italic leading-6 text-[var(--muted-foreground)] ${isQuoteExpanded ? "" : "line-clamp-3"}`}
+        >
           “{annotation.selectedText}”
         </blockquote>
-      </button>
 
-      {showPageNumber ? (
-        <p className="px-4 pt-2 text-xs text-[var(--muted-foreground)]">Página {annotation.page}</p>
-      ) : null}
+        <blockquote
+          ref={quoteMeasureRef}
+          data-annotation-quote-measure
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute inset-x-4 top-3 line-clamp-3 font-serif text-sm italic leading-6"
+        >
+          “{annotation.selectedText}”
+        </blockquote>
+
+        {isQuoteTruncated ? (
+          <button
+            type="button"
+            className="mt-1 text-xs font-semibold text-primary outline-none transition hover:text-primary-hover focus-visible:ring-2 focus-visible:ring-primary/60"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsQuoteExpanded((current) => !current);
+            }}
+          >
+            {isQuoteExpanded ? "Mostrar menos" : "Mostrar mais"}
+          </button>
+        ) : null}
+      </div>
 
       {canEdit ? (
         <textarea
@@ -195,14 +267,14 @@ function AnnotationCard({ annotation, showPageNumber, onJumpToPage, onDelete, on
           rows={2}
           placeholder="Escreva uma nota sobre este trecho..."
           disabled={isSaving}
-          className="block w-full resize-none bg-transparent px-4 pt-2 text-sm leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:cursor-wait disabled:opacity-70"
+          className="block w-full resize-none bg-transparent px-4 pt-2 font-sans text-sm font-normal leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:cursor-wait disabled:opacity-70"
           onChange={(event) => setNote(event.target.value)}
           onBlur={() => void saveNote()}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         />
       ) : annotation.note.trim().length > 0 ? (
-        <p className="px-4 pt-2 text-sm leading-6 text-[var(--foreground)]">{annotation.note}</p>
+        <p className="px-4 pt-2 font-sans text-sm font-normal leading-6 text-[var(--foreground)]">{annotation.note}</p>
       ) : null}
 
       {errorMessage.length > 0 ? <p className="px-4 pt-2 text-xs font-semibold text-status-red-text">{errorMessage}</p> : null}
@@ -274,7 +346,6 @@ export function AnnotationsTab({
                 <AnnotationCard
                   key={annotation.id}
                   annotation={annotation}
-                  showPageNumber={filterScope === "all"}
                   onJumpToPage={onJumpToPage}
                   onDelete={onDelete}
                   onUpdateNote={onUpdateNote}
