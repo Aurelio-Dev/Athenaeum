@@ -67,21 +67,9 @@ function renderDock(overrides: Partial<ReaderAnnotationsDockProps> = {}) {
 }
 
 function filterTrigger() {
-  const element = container?.querySelector<HTMLButtonElement>('button[aria-label="Filtrar anotações"]');
+  const element = container?.querySelector<HTMLButtonElement>('button[title^="Filtro de anotações:"]');
   if (!element) {
     throw new Error("Controle de filtro nao encontrado.");
-  }
-  return element;
-}
-
-function filterMenu() {
-  return container?.querySelector<HTMLUListElement>('ul[role="listbox"][aria-label="Filtrar anotações"]') ?? null;
-}
-
-function filterOption(scope: "all" | "current_page") {
-  const element = container?.querySelector<HTMLButtonElement>(`li[data-filter-scope="${scope}"] button`);
-  if (!element) {
-    throw new Error(`Opcao de filtro ${scope} nao encontrada.`);
   }
   return element;
 }
@@ -92,12 +80,6 @@ function annotationCards() {
 
 function cardTexts() {
   return annotationCards().map((card) => card.querySelector("blockquote")?.textContent ?? "");
-}
-
-function pressKey(element: HTMLElement, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
 }
 
 function click(element: HTMLElement) {
@@ -122,80 +104,40 @@ afterEach(() => {
 });
 
 describe("ReaderAnnotationsDock", () => {
-  it("mantem o menu fechado por padrao e usa todas as paginas sem preferencia anterior", () => {
+  it("usa todas as paginas como escopo padrao sem preferencia anterior", () => {
     renderDock({ annotationsFilterScope: undefined });
 
-    expect(filterTrigger().getAttribute("aria-expanded")).toBe("false");
-    expect(filterMenu()).toBeNull();
     expect(filterTrigger().textContent).toContain("Todas as páginas");
+    expect(filterTrigger().getAttribute("aria-label")).toBe("Filtro de anotações: mostrando todas as páginas");
     expect(annotationCards()).toHaveLength(3);
     expect(container?.textContent).toContain("3 marcações no documento");
     expect(databaseMocks.setDocumentAnnotationsFilterScope).not.toHaveBeenCalled();
   });
 
-  it("abre o menu com as duas opcoes de filtro", () => {
-    renderDock({ annotationsFilterScope: "all" });
-
-    click(filterTrigger());
-
-    expect(filterTrigger().getAttribute("aria-expanded")).toBe("true");
-    expect(filterMenu()).not.toBeNull();
-    expect(filterMenu()?.textContent).toContain("Esta página");
-    expect(filterMenu()?.textContent).toContain("Todas as páginas");
-  });
-
-  it("atualiza o escopo de forma otimista, persiste e fecha o menu ao escolher outra opcao", () => {
+  it("alterna os escopos e atualiza o texto e o rotulo acessivel do botao", () => {
     databaseMocks.setDocumentAnnotationsFilterScope.mockImplementation(() => new Promise(() => undefined));
     renderDock({ annotationsFilterScope: "all", visiblePages: [1, 2] });
+    const trigger = filterTrigger();
 
-    click(filterTrigger());
-    click(filterOption("current_page"));
+    click(trigger);
 
-    expect(filterMenu()).toBeNull();
     expect(filterTrigger().textContent).toContain("Esta página");
+    expect(filterTrigger().getAttribute("aria-label")).toBe("Filtro de anotações: mostrando apenas a página atual");
     expect(annotationCards()).toHaveLength(2);
     expect(databaseMocks.setDocumentAnnotationsFilterScope).toHaveBeenCalledWith(
       "document-1",
       "current_page",
       "loaded",
     );
-  });
-
-  it("fecha o menu ao clicar fora sem persistir alteracoes", () => {
-    renderDock({ annotationsFilterScope: "all" });
-
-    click(filterTrigger());
-    act(() => document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
-
-    expect(filterMenu()).toBeNull();
-    expect(databaseMocks.setDocumentAnnotationsFilterScope).not.toHaveBeenCalled();
-  });
-
-  it("fecha o menu com Escape e devolve o foco ao trigger", () => {
-    renderDock({ annotationsFilterScope: "all" });
-    const trigger = filterTrigger();
-    trigger.focus();
     click(trigger);
 
-    pressKey(trigger, "Escape");
-
-    expect(filterMenu()).toBeNull();
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it("seleciona a opcao destacada com seta e Enter", () => {
-    renderDock({ annotationsFilterScope: "all" });
-    const trigger = filterTrigger();
-
-    click(trigger);
-    pressKey(trigger, "ArrowUp");
-    pressKey(trigger, "Enter");
-
-    expect(filterMenu()).toBeNull();
-    expect(filterTrigger().textContent).toContain("Esta página");
-    expect(databaseMocks.setDocumentAnnotationsFilterScope).toHaveBeenCalledWith(
+    expect(filterTrigger().textContent).toContain("Todas as páginas");
+    expect(filterTrigger().getAttribute("aria-label")).toBe("Filtro de anotações: mostrando todas as páginas");
+    expect(annotationCards()).toHaveLength(3);
+    expect(databaseMocks.setDocumentAnnotationsFilterScope).toHaveBeenNthCalledWith(
+      2,
       "document-1",
-      "current_page",
+      "all",
       "loaded",
     );
   });
