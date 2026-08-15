@@ -27,6 +27,22 @@ const anchorMocks = vi.hoisted(() => ({
   captureSelection: vi.fn(),
 }));
 
+const eventMocks = vi.hoisted(() => {
+  const handlers = new Map<string, (event: { payload: unknown }) => void>();
+  return {
+    handlers,
+    emitTo: vi.fn(async () => undefined),
+    listen: vi.fn(async (eventName: string, handler: (event: { payload: unknown }) => void) => {
+      handlers.set(eventName, handler);
+      return () => handlers.delete(eventName);
+    }),
+  };
+});
+
+const queryClientMocks = vi.hoisted(() => ({
+  queryClient: { invalidateQueries: vi.fn(async () => undefined) },
+}));
+
 const pdfMocks = vi.hoisted(() => {
   const pdfDocument = {
     numPages: 2,
@@ -55,7 +71,19 @@ vi.mock("../../lib/database", () => ({
   openDocumentExternally: vi.fn(async () => undefined),
   isReaderDocumentPayload: vi.fn(() => false),
   isReaderInvalidationPayload: vi.fn(() => false),
-  isReaderJumpToPagePayload: vi.fn(() => false),
+  isReaderJumpToPagePayload: (payload: unknown) => {
+    if (typeof payload !== "object" || payload === null) {
+      return false;
+    }
+    const candidate = payload as Record<string, unknown>;
+    return (
+      typeof candidate.documentId === "string" &&
+      typeof candidate.page === "number" &&
+      Number.isInteger(candidate.page) &&
+      candidate.page > 0 &&
+      (!("annotationId" in candidate) || typeof candidate.annotationId === "string")
+    );
+  },
   listAnnotations: databaseMocks.listAnnotations,
   listAvailableTags: vi.fn(async () => []),
   listAvailableTagsFromPreloadedDatabase: vi.fn(async () => []),
@@ -92,14 +120,14 @@ vi.mock("pdfjs-dist", () => ({
 vi.mock("pdfjs-dist/build/pdf.worker.mjs?url", () => ({ default: "pdf-worker.js" }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn(async () => undefined) }),
+  useQueryClient: () => queryClientMocks.queryClient,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined) }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  emitTo: vi.fn(async () => undefined),
-  listen: vi.fn(async () => () => undefined),
+  emitTo: eventMocks.emitTo,
+  listen: eventMocks.listen,
 }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
@@ -281,6 +309,24 @@ async function waitFor(assertion: () => void, timeoutMs = 2_000) {
   throw latestError;
 }
 
+async function waitForListenerRegistrationsToSettle() {
+  let previousCallCount = -1;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    const currentCallCount = eventMocks.listen.mock.calls.length;
+    if (currentCallCount === previousCallCount) {
+      return;
+    }
+    previousCallCount = currentCallCount;
+  }
+
+  throw new Error("Os registros de listeners nao estabilizaram.");
+}
+
 function getElement(selector: string): HTMLElement {
   const element = container?.querySelector<HTMLElement>(selector);
   if (!element) {
@@ -295,6 +341,46 @@ function click(element: HTMLElement) {
 
 function annotationForPage(page: number) {
   return getElement(`[data-annotation-page="${page}"]`);
+}
+
+function dispatchReaderEvent(eventName: string, payload: unknown) {
+  const handler = eventMocks.handlers.get(eventName);
+  if (!handler) {
+    throw new Error(`Listener nao registrado para ${eventName}.`);
+  }
+  act(() => handler({ payload }));
+}
+
+function configureReaderScroll(page: number) {
+  const readerSurface = getElement("main") as HTMLElement & { scrollTo: ReturnType<typeof vi.fn> };
+  const scrollTo = vi.fn();
+  Object.defineProperty(readerSurface, "scrollTo", { configurable: true, value: scrollTo });
+
+  const pageElement = container?.querySelectorAll<HTMLElement>("[data-reader-page-group] > div")[page - 1];
+  if (!pageElement) {
+    throw new Error(`Pagina ${page} nao encontrada.`);
+  }
+  Object.defineProperties(pageElement, {
+    offsetHeight: { configurable: true, value: 600 },
+    offsetTop: { configurable: true, value: 1000 },
+  });
+
+  return scrollTo;
+}
+
+function existingAnnotation(id: string, page: number, rectY: number): Annotation {
+  return {
+    id,
+    documentId: testDocument.id,
+    page,
+    markStyle: "highlight",
+    color: "amber",
+    selectedText: "Trecho existente",
+    note: "",
+    rects: [{ x: 0.1, y: rectY, w: 0.3, h: 0.04 }],
+    createdAt: "2026-08-12T00:00:00.000Z",
+    updatedAt: "2026-08-12T00:00:00.000Z",
+  };
 }
 
 async function mountReader(pageCount: number) {
@@ -335,6 +421,9 @@ async function mountReader(pageCount: number) {
 }
 
 beforeEach(() => {
+  eventMocks.handlers.clear();
+  eventMocks.emitTo.mockClear();
+  eventMocks.listen.mockClear();
   databaseMocks.createAnnotation.mockReset();
   databaseMocks.createAnnotation.mockImplementation(async (payload: NewAnnotation) => savedAnnotation(payload));
   databaseMocks.updateAnnotationMark.mockReset();
@@ -484,5 +573,58 @@ describe("sessao de selecao do Reader", () => {
       "blue",
       "loaded",
     );
+  });
+});
+
+describe("navegacao precisa da popout de anotacoes", () => {
+  it("usa a anotacao criada depois da montagem sem registrar novamente os listeners", async () => {
+    await mountReader(1);
+    await waitFor(() => expect(eventMocks.handlers.has("reader-jump-to-page")).toBe(true));
+    await waitForListenerRegistrationsToSettle();
+    const listenCallCountBeforeAnnotation = eventMocks.listen.mock.calls.length;
+    const scrollTo = configureReaderScroll(1);
+
+    act(() => click(getElement('[data-testid="apply-amber"]')));
+    await waitFor(() => expect(annotationForPage(1).dataset.annotationId).toBe("saved-1"));
+
+    expect(eventMocks.listen).toHaveBeenCalledTimes(listenCallCountBeforeAnnotation);
+
+    dispatchReaderEvent("reader-jump-to-page", {
+      documentId: testDocument.id,
+      page: 1,
+      annotationId: "saved-1",
+    });
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1034, behavior: "smooth" });
+  });
+
+  it("usa a posicao do destaque quando o evento traz annotationId", async () => {
+    const annotation = existingAnnotation("annotation-2", 2, 0.4);
+    databaseMocks.listAnnotations.mockResolvedValue([annotation]);
+    await mountReader(1);
+    await waitFor(() => expect(eventMocks.handlers.has("reader-jump-to-page")).toBe(true));
+    const scrollTo = configureReaderScroll(2);
+
+    dispatchReaderEvent("reader-jump-to-page", {
+      documentId: testDocument.id,
+      page: 2,
+      annotationId: annotation.id,
+    });
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1154, behavior: "smooth" });
+  });
+
+  it("mantem o alinhamento da pagina quando o payload nao traz annotationId", async () => {
+    databaseMocks.listAnnotations.mockResolvedValue([existingAnnotation("annotation-2", 2, 0.4)]);
+    await mountReader(1);
+    await waitFor(() => expect(eventMocks.handlers.has("reader-jump-to-page")).toBe(true));
+    const scrollTo = configureReaderScroll(2);
+
+    dispatchReaderEvent("reader-jump-to-page", {
+      documentId: testDocument.id,
+      page: 2,
+    });
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 914, behavior: "smooth" });
   });
 });

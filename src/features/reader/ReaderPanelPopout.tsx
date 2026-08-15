@@ -350,8 +350,12 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       });
   }
 
-  function handleJumpToPage(page: number) {
-    void emitTo<ReaderJumpToPagePayload>(READER_WINDOW_LABEL, READER_JUMP_TO_PAGE_EVENT, { documentId, page }).catch((error) => {
+  function handleJumpToPage(page: number, annotationId?: string) {
+    const payload: ReaderJumpToPagePayload = annotationId
+      ? { documentId, page, annotationId }
+      : { documentId, page };
+
+    void emitTo<ReaderJumpToPagePayload>(READER_WINDOW_LABEL, READER_JUMP_TO_PAGE_EVENT, payload).catch((error) => {
       console.warn("Nao foi possivel solicitar a navegacao para a pagina.", error);
     });
   }

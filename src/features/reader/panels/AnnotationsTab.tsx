@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ContextMenu } from "../../../components/ui/ContextMenu";
 import { ContextMenuItem } from "../../../components/ui/ContextMenuItem";
 import { useContextMenu } from "../../../hooks/useContextMenu";
@@ -6,11 +6,12 @@ import {
   getLatestLinkedNotebook,
   listNotebookOptions,
   openDocumentExternally,
+  setDocumentAnnotationsFilterScope,
   type DatabaseHandleSource,
   type NotebookOption,
 } from "../../../lib/database";
 import type { Annotation } from "../../../types/annotation";
-import type { ReaderDocumentDetails } from "../../../types/library";
+import type { AnnotationsFilterScope, LibraryDocument, ReaderDocumentDetails } from "../../../types/library";
 import { highlightPalette } from "../highlightPalette";
 import { sendReaderPageToNotebook } from "../sendPageToNotebook";
 import {
@@ -24,12 +25,12 @@ import {
 import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon, SendIcon } from "./readerPanelIcons";
 
 type AnnotationsTabProps = {
-  document: ReaderDocumentDetails;
+  document: ReaderDocumentDetails & Pick<LibraryDocument, "annotationsFilterScope">;
   annotations: Annotation[];
   currentPage: number;
   progress: number;
   databaseSource?: DatabaseHandleSource;
-  onJumpToPage: (page: number) => void;
+  onJumpToPage: (page: number, annotationId?: string) => void;
   onDelete: (annotationId: string) => void;
   onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
   // Titulo junto: o caderno abre como janela nativa (open_notebook_window
@@ -40,7 +41,8 @@ type AnnotationsTabProps = {
 
 type AnnotationCardProps = {
   annotation: Annotation;
-  onJumpToPage: (page: number) => void;
+  showPageNumber: boolean;
+  onJumpToPage: (page: number, annotationId?: string) => void;
   onDelete: (annotationId: string) => void;
   onUpdateNote?: (annotationId: string, note: string) => Promise<void>;
 };
@@ -53,6 +55,14 @@ function TrashIcon() {
       <path d="M4.66667 3.5V2.33334C4.66667 1.75 5.25 1.16667 5.83333 1.16667H8.16667C8.75 1.16667 9.33333 1.75 9.33333 2.33334V3.5" />
       <path d="M5.83333 6.41667V9.91667" />
       <path d="M8.16667 6.41667V9.91667" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 3H2l8 9.46V19l4 2v-8.54z" />
     </svg>
   );
 }
@@ -98,7 +108,18 @@ function formatRelativeTime(value: string) {
   return days === 1 ? "ontem" : `há ${days} dias`;
 }
 
-function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: AnnotationCardProps) {
+function compareAnnotationPosition(first: Annotation, second: Annotation) {
+  const firstY = first.rects.reduce((lowest, rect) => Math.min(lowest, rect.y), Number.POSITIVE_INFINITY);
+  const secondY = second.rects.reduce((lowest, rect) => Math.min(lowest, rect.y), Number.POSITIVE_INFINITY);
+  return first.page - second.page || firstY - secondY || first.createdAt.localeCompare(second.createdAt);
+}
+
+const filterScopeOptions: readonly { value: AnnotationsFilterScope; label: string }[] = [
+  { value: "current_page", label: "Esta página" },
+  { value: "all", label: "Todas as páginas" },
+];
+
+function AnnotationCard({ annotation, showPageNumber, onJumpToPage, onDelete, onUpdateNote }: AnnotationCardProps) {
   const [note, setNote] = useState(annotation.note);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -156,7 +177,7 @@ function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: An
             label={`Ir para a página ${annotation.page}`}
             onSelect={() => {
               menu.close();
-              onJumpToPage(annotation.page);
+              onJumpToPage(annotation.page, annotation.id);
             }}
           />
           <ContextMenuItem
@@ -175,12 +196,16 @@ function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: An
         type="button"
         className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         title={`Ir para a página ${annotation.page}`}
-        onClick={() => onJumpToPage(annotation.page)}
+        onClick={() => onJumpToPage(annotation.page, annotation.id)}
       >
         <blockquote className="px-4 pt-2 text-sm italic leading-6 text-[var(--foreground)]">
           “{annotation.selectedText}”
         </blockquote>
       </button>
+
+      {showPageNumber ? (
+        <p className="px-4 pt-2 text-xs text-[var(--muted-foreground)]">Página {annotation.page}</p>
+      ) : null}
 
       {canEdit ? (
         <textarea
@@ -219,19 +244,31 @@ export function AnnotationsTab({
   onTagsChanged,
 }: AnnotationsTabProps) {
   const [showCreateHint, setShowCreateHint] = useState(false);
+  const [filterScope, setFilterScope] = useState<AnnotationsFilterScope>(document.annotationsFilterScope);
   const [notebooks, setNotebooks] = useState<NotebookOption[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState<number | null>(null);
   const [linkedNotebookId, setLinkedNotebookId] = useState<number | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendFeedback, setSendFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const footerMenu = useContextMenu();
-  const pageAnnotations = annotations
-    .filter((annotation) => annotation.page === currentPage)
-    .sort((first, second) => first.createdAt.localeCompare(second.createdAt));
+  const currentPageAnnotations = useMemo(
+    () => annotations.filter((annotation) => annotation.page === currentPage),
+    [annotations, currentPage],
+  );
+  const scopedAnnotations = useMemo(() => {
+    if (filterScope === "all") {
+      return [...annotations].sort(compareAnnotationPosition);
+    }
+    return [...currentPageAnnotations].sort((first, second) => first.createdAt.localeCompare(second.createdAt));
+  }, [annotations, currentPageAnnotations, filterScope]);
 
   useEffect(() => {
     setShowCreateHint(false);
   }, [currentPage]);
+
+  useEffect(() => {
+    setFilterScope(document.annotationsFilterScope);
+  }, [document.annotationsFilterScope, document.id]);
 
   useEffect(() => {
     if (!showCreateHint) {
@@ -315,7 +352,20 @@ export function AnnotationsTab({
     });
   }
 
-  const canSend = notebooks.length > 0 && selectedNotebookId !== null && pageAnnotations.length > 0 && !isSending;
+  function handleFilterScopeToggle() {
+    const nextScope: AnnotationsFilterScope = filterScope === "all" ? "current_page" : "all";
+    setFilterScope(nextScope);
+    void setDocumentAnnotationsFilterScope(document.id, nextScope, databaseSource).catch((error) => {
+      console.warn("Não foi possível salvar o filtro de anotações do documento.", error);
+    });
+  }
+
+  const sectionTitle = filterScope === "all" ? "Todas as anotações" : `Anotações na página ${currentPage}`;
+  const emptyMessage = filterScope === "all" ? "Nenhuma anotação no documento." : "Nenhuma anotação nesta página.";
+  const filterScopeToggleLabel = filterScope === "all"
+    ? "Filtro de anotações: mostrando todas as páginas"
+    : "Filtro de anotações: mostrando apenas a página atual";
+  const canSend = notebooks.length > 0 && selectedNotebookId !== null && currentPageAnnotations.length > 0 && !isSending;
 
   return (
     <div className="flex min-h-full flex-col px-4 py-5">
@@ -338,12 +388,31 @@ export function AnnotationsTab({
         </div>
 
         <section>
-          <h2 className={sectionLabelClassName}>Anotações na página {currentPage}</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className={sectionLabelClassName}>{sectionTitle}</h2>
+            <button
+              type="button"
+              aria-label={filterScopeToggleLabel}
+              title={filterScopeToggleLabel}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary outline-none transition hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
+              onClick={handleFilterScopeToggle}
+            >
+              <FilterIcon />
+              <span>{filterScopeOptions.find((option) => option.value === filterScope)?.label}</span>
+            </button>
+          </div>
 
-          {pageAnnotations.length > 0 ? (
+          {scopedAnnotations.length > 0 ? (
             <div className="mt-3 space-y-4">
-              {pageAnnotations.map((annotation) => (
-                <AnnotationCard key={annotation.id} annotation={annotation} onJumpToPage={onJumpToPage} onDelete={onDelete} onUpdateNote={onUpdateNote} />
+              {scopedAnnotations.map((annotation) => (
+                <AnnotationCard
+                  key={annotation.id}
+                  annotation={annotation}
+                  showPageNumber={filterScope === "all"}
+                  onJumpToPage={onJumpToPage}
+                  onDelete={onDelete}
+                  onUpdateNote={onUpdateNote}
+                />
               ))}
             </div>
           ) : (
@@ -351,7 +420,7 @@ export function AnnotationsTab({
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle">
                 <EmptyIcon />
               </div>
-              <p className="text-sm leading-6">Nenhuma anotação nesta página.</p>
+              <p className="text-sm leading-6">{emptyMessage}</p>
             </div>
           )}
         </section>
@@ -377,7 +446,7 @@ export function AnnotationsTab({
                 <button
                   type="button"
                   disabled={!canSend}
-                  title={pageAnnotations.length === 0 ? "Crie uma anotação nesta página para enviar." : undefined}
+                  title={currentPageAnnotations.length === 0 ? "Crie uma anotação nesta página para enviar." : undefined}
                   className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => void handleSendPage()}
                 >

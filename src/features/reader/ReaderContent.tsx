@@ -707,6 +707,8 @@ export function ReaderContent({
   const notesSaveTimerRef = useRef<number | null>(null);
   const latestNotesRef = useRef(document.notes ?? "");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const annotationsRef = useRef<Annotation[]>(annotations);
+  annotationsRef.current = annotations;
   const [bookmarks, setBookmarks] = useState<DocumentBookmark[]>([]);
   const [isBookmarksLoading, setIsBookmarksLoading] = useState(true);
   const [saveStates, setSaveStates] = useState<Map<string, AnnotationSaveState>>(new Map());
@@ -1897,6 +1899,14 @@ export function ReaderContent({
         return;
       }
 
+      const annotation = payload.annotationId
+        ? annotationsRef.current.find((item) => item.id === payload.annotationId)
+        : undefined;
+      if (annotation) {
+        scrollToAnnotation(annotation);
+        return;
+      }
+
       scrollToPage(payload.page);
     });
 
@@ -1926,7 +1936,7 @@ export function ReaderContent({
       isDisposed = true;
       unlistenCallbacks.splice(0).forEach((unlisten) => unlisten());
     };
-  }, [databaseSource, document.id, loadDocumentAnnotations, onNotesReloaded, queryClient, scrollToPage, updatePopoutDocumentId]);
+  }, [databaseSource, document.id, loadDocumentAnnotations, onNotesReloaded, queryClient, scrollToAnnotation, scrollToPage, updatePopoutDocumentId]);
 
   useEffect(() => {
     let isDisposed = false;

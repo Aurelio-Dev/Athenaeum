@@ -86,10 +86,29 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
 vi.mock("./panels/AnnotationsTab", async () => {
   const { createElement } = await import("react");
   return {
-    AnnotationsTab: ({ document }: { document: LibraryDocument }) => createElement(
-      "output",
-      { "data-testid": "filter-scope" },
-      document.annotationsFilterScope,
+    AnnotationsTab: ({
+      document,
+      onJumpToPage,
+    }: {
+      document: LibraryDocument;
+      onJumpToPage: (page: number, annotationId?: string) => void;
+    }) => createElement(
+      "div",
+      null,
+      createElement(
+        "output",
+        { "data-testid": "filter-scope" },
+        document.annotationsFilterScope,
+      ),
+      createElement(
+        "button",
+        {
+          type: "button",
+          "data-testid": "jump-to-annotation",
+          onClick: () => onJumpToPage(2, "annotation-2"),
+        },
+        "Ir para anotação",
+      ),
     ),
   };
 });
@@ -133,6 +152,10 @@ function dispatchFilterScope(payload: unknown) {
   act(() => handler({ payload }));
 }
 
+function click(element: HTMLElement) {
+  act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+}
+
 beforeEach(() => {
   eventMocks.handlers.clear();
   eventMocks.emit.mockClear();
@@ -165,5 +188,22 @@ describe("ReaderPanelPopout - sincronizacao do filtro de anotacoes", () => {
     dispatchFilterScope({ documentId: "document-1", scope: "current_page", origin: "reader-window" });
     expect(container?.querySelector('[data-testid="filter-scope"]')?.textContent).toBe("current_page");
     expect(databaseMocks.setDocumentAnnotationsFilterScope).not.toHaveBeenCalled();
+  });
+
+  it("envia annotationId ao solicitar a navegacao a partir de uma anotacao", async () => {
+    await renderPopout();
+    eventMocks.emitTo.mockClear();
+
+    const button = container?.querySelector<HTMLElement>('[data-testid="jump-to-annotation"]');
+    if (!button) {
+      throw new Error("Botao de navegacao nao encontrado.");
+    }
+    click(button);
+
+    expect(eventMocks.emitTo).toHaveBeenCalledWith(
+      "reader-window",
+      "reader:jump-to-page",
+      { documentId: "document-1", page: 2, annotationId: "annotation-2" },
+    );
   });
 });

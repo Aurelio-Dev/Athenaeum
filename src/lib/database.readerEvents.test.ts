@@ -30,6 +30,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
+  isReaderJumpToPagePayload,
   READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT,
   setDocumentAnnotationsFilterScope,
 } from "./database";
@@ -72,5 +73,13 @@ describe("eventos do filtro de anotacoes", () => {
     ).rejects.toThrow("falha no SQLite");
 
     expect(eventMocks.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("payload de navegacao do Reader", () => {
+  it("aceita emissões legadas sem annotationId e as novas com annotationId", () => {
+    expect(isReaderJumpToPagePayload({ documentId: "document-1", page: 2 })).toBe(true);
+    expect(isReaderJumpToPagePayload({ documentId: "document-1", page: 2, annotationId: "annotation-2" })).toBe(true);
+    expect(isReaderJumpToPagePayload({ documentId: "document-1", page: 2, annotationId: 2 })).toBe(false);
   });
 });

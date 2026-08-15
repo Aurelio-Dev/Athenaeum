@@ -51,6 +51,7 @@ export type ReaderAnnotationsFilterScopeChangedPayload = ReaderInvalidationPaylo
 export type ReaderJumpToPagePayload = {
   documentId: string;
   page: number;
+  annotationId?: string;
 };
 
 export type ReaderPageStatePayload = ReaderJumpToPagePayload & {
@@ -118,7 +119,8 @@ export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJu
     typeof candidate.documentId === "string" &&
     typeof candidate.page === "number" &&
     Number.isInteger(candidate.page) &&
-    candidate.page > 0
+    candidate.page > 0 &&
+    (!("annotationId" in candidate) || typeof candidate.annotationId === "string")
   );
 }
 
