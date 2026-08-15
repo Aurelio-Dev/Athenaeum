@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+﻿import { invoke } from "@tauri-apps/api/core";
 import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -7,12 +7,14 @@ import {
   deleteAnnotation,
   getLibraryDocument,
   getDocumentNotes,
+  isReaderAnnotationsFilterScopeChangedPayload,
   isReaderDocumentPayload,
   isReaderInvalidationPayload,
   isReaderPageStatePayload,
   listAnnotations,
   listAvailableTagsFromPreloadedDatabase,
   READER_ANNOTATIONS_CHANGED_EVENT,
+  READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT,
   READER_DETAILS_CHANGED_EVENT,
   READER_JUMP_TO_PAGE_EVENT,
   READER_NOTES_CHANGED_EVENT,
@@ -227,6 +229,21 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
         .catch((error) => {
           console.warn("Nao foi possivel recarregar as anotacoes da popout.", error);
         });
+    });
+
+    registerListener<unknown>(READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT, (payload) => {
+      if (
+        !isReaderAnnotationsFilterScopeChangedPayload(payload) ||
+        payload.documentId !== documentId
+      ) {
+        return;
+      }
+
+      setDocumentDetails((current) =>
+        current?.id === payload.documentId
+          ? { ...current, annotationsFilterScope: payload.scope }
+          : current,
+      );
     });
 
     registerListener<unknown>(READER_DETAILS_CHANGED_EVENT, (payload) => {

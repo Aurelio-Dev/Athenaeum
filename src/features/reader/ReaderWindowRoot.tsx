@@ -7,7 +7,9 @@ import {
   getDocumentNotes,
   getLibraryDocument,
   getReaderOpensMaximized,
+  isReaderAnnotationsFilterScopeChangedPayload,
   isReaderDocumentPayload,
+  READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT,
   READER_SWITCH_DOCUMENT_EVENT,
   setDocumentFavorite,
   setDocumentNote,
@@ -116,6 +118,43 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
       })
       .catch((error) => {
         console.warn("Nao foi possivel escutar pedidos de troca do Reader.", error);
+      });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen<unknown>(READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT, (event) => {
+      if (!isReaderAnnotationsFilterScopeChangedPayload(event.payload)) {
+        return;
+      }
+
+      const { documentId: changedDocumentId, scope } = event.payload;
+      setBootstrap((current) => {
+        if (!current || current.document.id !== changedDocumentId) {
+          return current;
+        }
+
+        const document = { ...current.document, annotationsFilterScope: scope };
+        documentRef.current = document;
+        return { ...current, document };
+      });
+    })
+      .then((removeListener) => {
+        if (isDisposed) {
+          removeListener();
+          return;
+        }
+        unlisten = removeListener;
+      })
+      .catch((error) => {
+        console.warn("Nao foi possivel sincronizar o filtro de anotacoes no Reader.", error);
       });
 
     return () => {

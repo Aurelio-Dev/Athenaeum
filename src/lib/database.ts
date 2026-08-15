@@ -25,6 +25,7 @@ const defaultCollectionName = "Sem título";
 
 export const READER_NOTES_CHANGED_EVENT = "reader:notes-changed";
 export const READER_ANNOTATIONS_CHANGED_EVENT = "reader:annotations-changed";
+export const READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT = "reader:annotations-filter-scope-changed";
 export const READER_JUMP_TO_PAGE_EVENT = "reader:jump-to-page";
 export const READER_PAGE_STATE_CHANGED_EVENT = "reader:page-state-changed";
 export const READER_PAGE_STATE_REQUESTED_EVENT = "reader:page-state-requested";
@@ -41,6 +42,10 @@ export const READER_WINDOW_LABEL = "reader-window";
 export type ReaderInvalidationPayload = {
   documentId: string;
   origin: string;
+};
+
+export type ReaderAnnotationsFilterScopeChangedPayload = ReaderInvalidationPayload & {
+  scope: AnnotationsFilterScope;
 };
 
 export type ReaderJumpToPagePayload = {
@@ -91,6 +96,16 @@ export function isReaderInvalidationPayload(payload: unknown): payload is Reader
 
   const candidate = payload as Record<string, unknown>;
   return typeof candidate.documentId === "string" && typeof candidate.origin === "string";
+}
+
+export function isReaderAnnotationsFilterScopeChangedPayload(
+  payload: unknown,
+): payload is ReaderAnnotationsFilterScopeChangedPayload {
+  return (
+    isReaderInvalidationPayload(payload) &&
+    "scope" in payload &&
+    (payload.scope === "all" || payload.scope === "current_page")
+  );
 }
 
 export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJumpToPagePayload {
@@ -380,6 +395,23 @@ async function emitReaderInvalidation(
     // O SQLite ja confirmou a escrita. Falhar apenas a notificacao nao pode
     // fazer o chamador repetir uma operacao que ja foi persistida.
     console.warn("Nao foi possivel emitir a invalidacao do Reader.", error);
+  }
+}
+
+async function emitReaderAnnotationsFilterScopeChanged(
+  documentId: string,
+  scope: AnnotationsFilterScope,
+) {
+  try {
+    await emit<ReaderAnnotationsFilterScopeChangedPayload>(READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT, {
+      documentId,
+      scope,
+      origin: getCurrentWebviewWindow().label,
+    });
+  } catch (error) {
+    // O SQLite ja confirmou a escrita; a falha de sincronizacao entre janelas
+    // nao pode fazer o chamador repetir uma operacao que ja foi persistida.
+    console.warn("Nao foi possivel emitir a mudanca do filtro de anotacoes.", error);
   }
 }
 
@@ -1959,6 +1991,7 @@ export async function setDocumentAnnotationsFilterScope(
     "UPDATE documents SET annotations_filter_scope = $1 WHERE id = $2",
     [scope, documentId],
   );
+  await emitReaderAnnotationsFilterScopeChanged(documentId, scope);
 }
 
 export async function deleteDocument(documentId: string) {
