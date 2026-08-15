@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { setDocumentAnnotationsFilterScope, type DatabaseHandleSource } from "../../lib/database";
 import { formatEditedAgo } from "../../lib/relativeTime";
 import type { Annotation, AnnotationSaveState } from "../../types/annotation";
@@ -30,6 +30,14 @@ function FilterIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M22 3H2l8 9.46V19l4 2v-8.54z" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
@@ -104,6 +112,11 @@ function compareAnnotationPosition(first: Annotation, second: Annotation) {
   const secondY = second.rects.reduce((lowest, rect) => Math.min(lowest, rect.y), Number.POSITIVE_INFINITY);
   return first.page - second.page || firstY - secondY || first.createdAt.localeCompare(second.createdAt);
 }
+
+const filterScopeOptions: readonly { value: AnnotationsFilterScope; label: string }[] = [
+  { value: "current_page", label: "Esta página" },
+  { value: "all", label: "Todas as páginas" },
+];
 
 type AnnotationCardProps = {
   annotation: Annotation;
@@ -246,9 +259,14 @@ export function ReaderAnnotationsDock({
   const [composerFeedback, setComposerFeedback] = useState("");
   const [isOpeningPopout, setIsOpeningPopout] = useState(false);
   const [filterScope, setFilterScope] = useState<AnnotationsFilterScope>(annotationsFilterScope);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [activeFilterScope, setActiveFilterScope] = useState<AnnotationsFilterScope>(annotationsFilterScope);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
   const lastFocusSignalRef = useRef(composerFocusSignal);
   const feedbackId = useId();
+  const filterMenuId = useId();
   const pendingSelectionText = pendingSelection?.text ?? null;
   const hasPendingSelection = Boolean(pendingSelectionText?.trim());
   const effectiveVisiblePages = useMemo(
@@ -269,7 +287,23 @@ export function ReaderAnnotationsDock({
 
   useEffect(() => {
     setFilterScope(annotationsFilterScope);
+    setActiveFilterScope(annotationsFilterScope);
   }, [annotationsFilterScope, documentId]);
+
+  useEffect(() => {
+    if (!isFilterMenuOpen) {
+      return;
+    }
+
+    function handleDocumentMouseDown(event: MouseEvent) {
+      if (event.target instanceof Node && !filterDropdownRef.current?.contains(event.target)) {
+        setIsFilterMenuOpen(false);
+      }
+    }
+
+    window.document.addEventListener("mousedown", handleDocumentMouseDown);
+    return () => window.document.removeEventListener("mousedown", handleDocumentMouseDown);
+  }, [isFilterMenuOpen]);
 
   useEffect(() => {
     setNote("");
@@ -304,16 +338,68 @@ export function ReaderAnnotationsDock({
     setComposerFeedback("Anotação adicionada.");
   }
 
-  function handleFilterScopeChange(event: ChangeEvent<HTMLSelectElement>) {
-    const nextScope = event.target.value;
-    if (nextScope !== "all" && nextScope !== "current_page") {
-      return;
-    }
-
+  function handleFilterScopeChange(nextScope: AnnotationsFilterScope) {
     setFilterScope(nextScope);
     void setDocumentAnnotationsFilterScope(documentId, nextScope, databaseSource).catch((error) => {
       console.warn("Nao foi possivel salvar o filtro de anotacoes do documento.", error);
     });
+  }
+
+  function closeFilterMenu(restoreFocus = false) {
+    setIsFilterMenuOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => filterTriggerRef.current?.focus({ preventScroll: true }));
+    }
+  }
+
+  function toggleFilterMenu() {
+    if (isFilterMenuOpen) {
+      closeFilterMenu();
+      return;
+    }
+
+    setActiveFilterScope(filterScope);
+    setIsFilterMenuOpen(true);
+  }
+
+  function handleFilterScopeOptionSelect(nextScope: AnnotationsFilterScope) {
+    handleFilterScopeChange(nextScope);
+    setActiveFilterScope(nextScope);
+    closeFilterMenu(true);
+  }
+
+  function handleFilterMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!isFilterMenuOpen) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFilterMenu(true);
+      return;
+    }
+
+    if (event.key === "Tab") {
+      closeFilterMenu();
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const activeIndex = filterScopeOptions.findIndex((option) => option.value === activeFilterScope);
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex = activeIndex < 0
+        ? direction === 1 ? 0 : filterScopeOptions.length - 1
+        : (activeIndex + direction + filterScopeOptions.length) % filterScopeOptions.length;
+
+      setActiveFilterScope(filterScopeOptions[nextIndex].value);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleFilterScopeOptionSelect(activeFilterScope);
+    }
   }
 
   async function handleOpenPopout() {
@@ -348,7 +434,7 @@ export function ReaderAnnotationsDock({
   return (
     <section
       aria-label={`Anotações: ${scopeLabel}`}
-      className="grid h-[158px] w-full grid-cols-[205px_minmax(0,1fr)_269px] overflow-hidden rounded-2xl border border-border-subtle bg-[var(--card)]"
+      className="grid h-[158px] w-full grid-cols-[205px_minmax(0,1fr)_269px] overflow-visible rounded-2xl border border-border-subtle bg-[var(--card)]"
       style={{ boxShadow: "var(--reader-dock-shadow)" }}
     >
       <header className="reader-annotation-border flex min-w-0 flex-col justify-center border-r px-[18px] py-4">
@@ -368,19 +454,56 @@ export function ReaderAnnotationsDock({
           </button>
         </div>
         <p className="mt-1 truncate text-[11.5px] text-[var(--muted-foreground)]">{annotationCountLabel}</p>
-        <label className="mt-2.5 inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-primary outline-none transition focus-within:ring-2 focus-within:ring-primary/60 focus-within:ring-offset-2 focus-within:ring-offset-[var(--card)]">
-          <span className="sr-only">Filtrar anotações</span>
-          <FilterIcon />
-          <select
+        <div ref={filterDropdownRef} className="relative mt-2.5 w-fit max-w-full" onKeyDown={handleFilterMenuKeyDown}>
+          <button
+            ref={filterTriggerRef}
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={isFilterMenuOpen}
+            aria-controls={filterMenuId}
             aria-label="Filtrar anotações"
-            value={filterScope}
-            className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-[11px] font-semibold text-primary outline-none"
-            onChange={handleFilterScopeChange}
+            className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
+            onClick={toggleFilterMenu}
           >
-            <option value="current_page">Esta página</option>
-            <option value="all">Todas as páginas</option>
-          </select>
-        </label>
+            <FilterIcon />
+            <span className="min-w-0 truncate">
+              {filterScopeOptions.find((option) => option.value === filterScope)?.label}
+            </span>
+            <ChevronDownIcon />
+          </button>
+
+          {isFilterMenuOpen ? (
+            <ul
+              id={filterMenuId}
+              role="listbox"
+              aria-label="Filtrar anotações"
+              className="absolute left-0 top-[calc(100%+6px)] z-20 m-0 w-max min-w-[148px] max-w-[169px] list-none rounded-xl bg-[var(--surface-elevated)] py-1 shadow-2xl ring-1 ring-white/10"
+            >
+              {filterScopeOptions.map((option) => {
+                const isSelected = option.value === filterScope;
+                const isNavigationActive = option.value === activeFilterScope;
+
+                return (
+                  <li key={option.value} role="option" aria-selected={isSelected} data-filter-scope={option.value}>
+                    <button
+                      type="button"
+                      className={`flex w-full items-center px-3 py-2 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                        isSelected
+                          ? "bg-white/10 font-semibold text-white"
+                          : isNavigationActive
+                            ? "bg-white/5 text-white"
+                            : "text-[#9E8878] hover:bg-white/5 hover:text-white"
+                      }`}
+                      onClick={() => handleFilterScopeOptionSelect(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
       </header>
 
       {pageAnnotations.length > 0 ? (
