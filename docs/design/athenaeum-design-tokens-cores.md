@@ -1,5 +1,34 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 16/08/2026 — Corolário do chrome flutuante e novo valor
+> escuro de `--color-empty-state-detail`:** um bug no Reader mostrou que
+> a regra de chrome flutuante do changelog de 15/07/2026 ("sem competir
+> pelo espaço do documento") tem um corolário de hit-testing que ainda
+> não estava explícito: a área *clicável* de uma ilha flutuante não pode
+> exceder a pílula visível, mesmo quando o wrapper é transparente. O
+> header do Reader (`ReaderChrome.tsx`) cobria os 84px superiores da
+> janela inteira — incluindo a faixa da barra de rolagem vertical na
+> borda direita — porque o wrapper `absolute inset-x-0 top-0` não tinha
+> `pointer-events-none`. Corrigido com `pointer-events-none` no wrapper
+> e `pointer-events-auto` nos contêineres interativos (a pílula de
+> título e a pílula de controles), preservando o estado oculto do modo
+> de leitura via seletor de especificidade composta
+> (`.reader-reading-island.reader-reading-island--hidden *`), que não
+> depende de ordem de origem no CSS gerado.
+>
+> Nesta mesma correção, `--color-empty-state-detail` (linhas internas
+> secundárias dos ícones de estado vazio) ganhou valor no tema escuro:
+> `#463A31`. O token só existia em `:root` (`#D9C5B4`, claro) e, sem
+> redefinição em `.dark`, herdava o valor claro. O novo valor foi
+> derivado por interpolação proporcional entre `--card` escuro
+> (`#231C16`) e o token de texto secundário escuro (`#9E8878`),
+> preservando a mesma razão de contraste (~1.55:1) que o par claro já
+> tinha (`#D9C5B4` sobre `--card` claro `#FAF5EF`). Ver a tabela "Cores
+> de interface" abaixo para os dois valores lado a lado.
+>
+> Nenhuma alteração na paleta de tags, tipografia ou demais tokens
+> nesta entrada.
+
 > **Changelog 13/08/2026 — Realce e cor de fonte no Caderno:** os dois
 > recursos reaproveitam os 9 tokens existentes de tag (`Violet`, `Indigo`,
 > `Blue`, `Teal`, `Rose`, `Amber`, `Green`, `Red` e `Slate`), sem introduzir
@@ -566,6 +595,7 @@ são dois sistemas sobrepostos).
 | `document-cover-swatch`      | claro `hsl(hue 28% 74%)`; escuro `hsl(hue 30% 18%)`               | Fundo principal da área de preview dos cards de documento.                                                                                                                                                                       |
 | `document-cover-line`        | claro `hsl(hue 28% 34% / 0.24)`; escuro `rgb(255 255 255 / 0.08)` | Linhas secundárias internas das miniaturas.                                                                                                                                                                                      |
 | `document-cover-line-strong` | claro `hsl(hue 30% 30% / 0.34)`; escuro `rgb(255 255 255 / 0.15)` | Linhas internas mais fortes das miniaturas.                                                                                                                                                                                      |
+| `empty-state-detail`         | claro `#D9C5B4`; escuro `#463A31`                                 | Linhas internas secundárias das ilustrações de ícone de estado vazio (busca sem resultados, coleção/painel de anotações vazios). Contraste baixo é intencional — é detalhe decorativo, não texto.                              |
 
 Regra: `accent-icon-amber` não substitui o par `tag-amber-bg`/`tag-amber-text`
 documentado acima — são usos diferentes (ícone vívido vs. texto sobre fundo

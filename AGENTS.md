@@ -91,6 +91,51 @@ seleção pelos mesmos marcadores. O WebView2 troca os nós extremos após
 que impede o deslocamento. Alterar a ordem dos marcadores reintroduz o
 bug.
 
+## Notas de arquitetura do Reader
+
+### Wrapper de ilha flutuante deve ser pointer-events-none
+
+Um wrapper de chrome flutuante do Reader (ex.: o header,
+`absolute inset-x-0 top-0`) costuma ser maior que a pílula visível
+dentro dele — cobre 100% da largura da janela, mas só uma faixa
+central tem conteúdo real. Se esse wrapper não for
+`pointer-events-none`, a área transparente ao redor da pílula fica
+hit-testável e intercepta ponteiro destinado ao que está por baixo.
+
+Bug corrigido: o header do Reader (`ReaderChrome.tsx`) cobria os 84px
+superiores da janela inteira, incluindo a faixa de 11px da barra de
+rolagem vertical na borda direita. Como o header ficava em `z-30`
+contra o `z-auto` do workspace, a scrollbar nativa ficava morta sempre
+que o thumb estava nesses primeiros 84px — sintoma reportado como
+"scrollbar quebrada", sem relação com lógica de scroll.
+
+Regra: o wrapper leva `pointer-events-none`; os contêineres realmente
+interativos dentro dele (a pílula inteira, não botão a botão) levam
+`pointer-events-auto`. Nunca deixar a área transparente hit-testável.
+
+Se o wrapper tiver um estado oculto (`--hidden`) que também depende de
+`pointer-events: none`, um seletor de especificidade simples
+(`.classe--hidden *`) empata em especificidade com
+`.pointer-events-auto` e a vitória passa a depender da ordem de
+origem no CSS gerado — frágil a mudanças no pipeline de build. Use
+especificidade composta (`.classe.classe--hidden *`) para vencer por
+especificidade em vez de depender de ordem.
+
+### Header do Reader não arrasta a janela
+
+O wrapper do header (`ReaderChrome.tsx`) tem um `onMouseDown`
+condicionado a uma prop `draggable`, mas essa prop nunca é `true` em
+produção: o único consumidor de `ReaderContent`
+(`ReaderWindowRoot.tsx`) chama `renderHeader()` sem passar
+`startDragging`. As decorações da janela do Reader são nativas do
+Tauri (`decorations(true)` em `src-tauri/src/lib.rs`); não há arraste
+por chrome customizado hoje.
+
+Se o arraste por chrome customizado for retomado no futuro, a faixa
+arrastável precisa de um contêiner próprio com `pointer-events-auto`
+— depois da regra acima, o restante do wrapper é
+`pointer-events-none` e não repassa mais eventos de mouse.
+
 ## Fixed stack
 
 The technology stack is a closed project decision:
