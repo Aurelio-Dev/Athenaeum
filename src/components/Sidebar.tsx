@@ -43,8 +43,8 @@ type CollectionContextMenuState = {
 // inteira de uma vez.
 const navItems: NavItem[] = [
   { label: "Todos os itens", icon: "list", route: { type: "all" } },
+  { label: "Em andamento", icon: "bookmark", route: { type: "reading-list" } },
   { label: "Recentes", icon: "clock", route: { type: "recent" } },
-  { label: "Reading List", icon: "bookmark", route: { type: "reading-list" } },
   { label: "Favoritos", icon: "heart", route: { type: "favorites" } },
   { label: "Lixeira", icon: "trash", route: { type: "trash" } },
 ];

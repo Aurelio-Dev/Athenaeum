@@ -18,6 +18,7 @@ import {
   createDocument,
   createNotebook as createPersistedNotebook,
   deleteCollection as deletePersistedCollection,
+  dismissDocumentFromReadingList,
   emptyTrash,
   getDocumentFilePaths,
   getTrashFilePaths,
@@ -199,6 +200,27 @@ function EmptySearchIcon(props: SVGProps<SVGSVGElement>) {
       <line x1="12" y1="16" x2="28" y2="16" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
       <line x1="12" y1="20" x2="24" y2="20" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
       <line x1="12" y1="24" x2="20" y2="24" stroke="var(--color-empty-state-detail)" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EmptyReadingListIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 52 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M13 4.5h26a3.5 3.5 0 0 1 3.5 3.5v34.5H9.5V8A3.5 3.5 0 0 1 13 4.5Z"
+        stroke="var(--primary)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M17 15h18" stroke="var(--color-empty-state-detail)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M17 21h13" stroke="var(--color-empty-state-detail)" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M21 42.5V31h10v11.5l-5-3.5-5 3.5Z"
+        fill="var(--primary)"
+        stroke="var(--primary)"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -509,6 +531,15 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
+  async function dismissFromReadingList(documentId: string) {
+    try {
+      await dismissDocumentFromReadingList(documentId);
+      await invalidateLibraryQueries();
+    } catch (error) {
+      console.warn("Nao foi possivel dispensar o documento de Em andamento.", error);
+    }
+  }
+
   async function moveDocumentToCollection(documentId: string, collectionId: string) {
     const document = allDocuments.find((currentDocument) => currentDocument.id === documentId);
     const collection = collections.find((currentCollection) => currentCollection.id === collectionId);
@@ -793,6 +824,7 @@ export function LibraryView() {
                 {documents.map((document) => (
                   <DocumentCard
                     key={document.id}
+                    activeRoute={activeRoute}
                     document={document}
                     collections={collections}
                     mode={isTrashRoute ? "trash" : "library"}
@@ -802,6 +834,7 @@ export function LibraryView() {
                     onOpenDetails={(selectedDocument) => setSelectedDocumentId(selectedDocument.id)}
                     onToggleFavorite={(nextDocumentId) => void toggleFavorite(nextDocumentId)}
                     onMoveToCollection={(nextDocumentId, collectionId) => void moveDocumentToCollection(nextDocumentId, collectionId)}
+                    onDismissFromReadingList={(nextDocumentId) => void dismissFromReadingList(nextDocumentId)}
                     onDelete={(nextDocumentId) => void moveToTrash(nextDocumentId)}
                   />
                 ))}
@@ -811,6 +844,15 @@ export function LibraryView() {
                 icon={EmptySearchIcon}
                 title="Nenhum resultado encontrado"
                 description="Tente outro termo, autor ou palavra-chave."
+                verticalPosition="raised"
+              />
+            ) : activeRoute.type === "reading-list" ? (
+              <EmptyState
+                icon={EmptyReadingListIcon}
+                iconClassName="h-12 w-[52px]"
+                title="Nada em andamento"
+                titleClassName="text-text-secondary"
+                description="Documentos que você abrir aparecem aqui até você marcá-los como concluídos."
                 verticalPosition="raised"
               />
             ) : activeRoute.type === "collection" ? (
@@ -1006,7 +1048,7 @@ function getRouteTitle(route: LibraryRoute) {
   }
 
   if (route.type === "reading-list") {
-    return "Reading List";
+    return "Em andamento";
   }
 
   if (route.type === "collection") {

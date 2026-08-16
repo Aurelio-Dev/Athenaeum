@@ -1987,6 +1987,24 @@ export async function updateDocumentReadingStatus(
   await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, documentId);
 }
 
+export async function dismissDocumentFromReadingList(
+  documentId: string,
+  source: DatabaseHandleSource = "loaded",
+) {
+  const database = await getDatabase(source);
+  const result = await database.execute(
+    `UPDATE documents
+     SET reading_list_dismissed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [documentId],
+  );
+  if (result.rowsAffected === 0) {
+    throw new Error("Documento nao encontrado para dispensar de Em andamento.");
+  }
+
+  await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, documentId);
+}
+
 export async function setDocumentReadingLocation(
   document: LibraryDocument,
   readingLocation: ReadingLocation,

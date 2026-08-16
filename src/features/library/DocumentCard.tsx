@@ -5,11 +5,11 @@ import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { IconContextAbrir, IconContextMoverColecao, IconContextVerDetalhes } from "../../components/ui/ContextMenuIcons";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
 import { ContextMenuSubmenu } from "../../components/ui/ContextMenuSubmenu";
-import { HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
+import { ClearIcon, HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
 import { TagPill } from "../../components/ui/TagPill";
 import { deriveCoverHue } from "../../lib/documentColor";
 import { useContextMenu } from "../../hooks/useContextMenu";
-import type { LibraryCollection, LibraryDocument, ViewMode } from "../../types/library";
+import type { LibraryCollection, LibraryDocument, LibraryRoute, ViewMode } from "../../types/library";
 
 const MAX_VISIBLE_TAGS = 2;
 
@@ -18,6 +18,7 @@ type DocumentCoverStyle = CSSProperties & {
 };
 
 type DocumentCardProps = {
+  activeRoute: LibraryRoute;
   document: LibraryDocument;
   isSelected: boolean;
   mode?: "library" | "trash";
@@ -27,6 +28,7 @@ type DocumentCardProps = {
   onOpenDetails: (document: LibraryDocument) => void;
   onToggleFavorite: (documentId: string) => void;
   onMoveToCollection: (documentId: string, collectionId: string) => void;
+  onDismissFromReadingList: (documentId: string) => void;
   onDelete: (documentId: string) => void;
 };
 
@@ -92,16 +94,25 @@ export function DocumentCard(props: DocumentCardProps) {
 
 type DocumentCardContextMenuProps = Pick<
   DocumentCardProps,
-  "collections" | "document" | "onDelete" | "onMoveToCollection" | "onOpenDetails" | "onToggleFavorite"
+  | "activeRoute"
+  | "collections"
+  | "document"
+  | "onDelete"
+  | "onDismissFromReadingList"
+  | "onMoveToCollection"
+  | "onOpenDetails"
+  | "onToggleFavorite"
 > & {
   contextMenu: ReturnType<typeof useContextMenu>;
 };
 
 function DocumentCardContextMenu({
+  activeRoute,
   collections,
   contextMenu,
   document,
   onDelete,
+  onDismissFromReadingList,
   onMoveToCollection,
   onOpenDetails,
   onToggleFavorite,
@@ -153,6 +164,20 @@ function DocumentCardContextMenu({
 
       <ContextMenuDivider />
 
+      {activeRoute.type === "reading-list" ? (
+        <>
+          <ContextMenuItem
+            icon={<ClearIcon size={16} />}
+            label="Dispensar"
+            onSelect={() => {
+              onDismissFromReadingList(document.id);
+              contextMenu.close();
+            }}
+          />
+          <ContextMenuDivider />
+        </>
+      ) : null}
+
       <ContextMenuItem
         icon={<TrashIcon size={16} />}
         label="Mover para lixeira"
@@ -171,7 +196,7 @@ function DocumentCardContextMenu({
 // linha — por isso a linha nao tem borda/shadow propria. Selecao e hover usam o
 // fundo surface-muted (token de hover canonico do projeto), ja que o grid usa um
 // lift via translate, nao um fundo destacado.
-function DocumentListRow({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onSelect, onToggleFavorite }: DocumentCardProps) {
+function DocumentListRow({ activeRoute, collections, document, isSelected, mode = "library", onDelete, onDismissFromReadingList, onMoveToCollection, onOpenDetails, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const coverStyle = getCoverStyle(document.id);
@@ -270,10 +295,12 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
         )}
       </article>
       <DocumentCardContextMenu
+        activeRoute={activeRoute}
         collections={collections}
         contextMenu={contextMenu}
         document={document}
         onDelete={onDelete}
+        onDismissFromReadingList={onDismissFromReadingList}
         onMoveToCollection={onMoveToCollection}
         onOpenDetails={onOpenDetails}
         onToggleFavorite={onToggleFavorite}
@@ -283,7 +310,7 @@ function DocumentListRow({ collections, document, isSelected, mode = "library", 
 }
 
 // Card vertical (grid): thumbnail com cor derivada + area de texto abaixo.
-function DocumentGridCard({ collections, document, isSelected, mode = "library", onDelete, onMoveToCollection, onOpenDetails, onSelect, onToggleFavorite }: DocumentCardProps) {
+function DocumentGridCard({ activeRoute, collections, document, isSelected, mode = "library", onDelete, onDismissFromReadingList, onMoveToCollection, onOpenDetails, onSelect, onToggleFavorite }: DocumentCardProps) {
   const contextMenu = useContextMenu();
   const isTrashMode = mode === "trash";
   const coverStyle = getCoverStyle(document.id);
@@ -392,10 +419,12 @@ function DocumentGridCard({ collections, document, isSelected, mode = "library",
       </div>
       </article>
       <DocumentCardContextMenu
+        activeRoute={activeRoute}
         collections={collections}
         contextMenu={contextMenu}
         document={document}
         onDelete={onDelete}
+        onDismissFromReadingList={onDismissFromReadingList}
         onMoveToCollection={onMoveToCollection}
         onOpenDetails={onOpenDetails}
         onToggleFavorite={onToggleFavorite}

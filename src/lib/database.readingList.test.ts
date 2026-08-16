@@ -32,6 +32,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
+  dismissDocumentFromReadingList,
   listDocuments,
   READER_PROGRESS_CHANGED_EVENT,
   setDocumentReadingStarted,
@@ -119,7 +120,41 @@ describe("atualizacao manual do status de leitura", () => {
   });
 });
 
-describe("query da Reading List", () => {
+describe("dispensa de Em andamento", () => {
+  it("escreve somente o timestamp de dispensa e emite depois do UPDATE", async () => {
+    await dismissDocumentFromReadingList("document-1", "preloaded");
+
+    const [sql, bindValues] = databaseMocks.execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain(
+      "SET reading_list_dismissed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+    );
+    expect(sql).toContain("WHERE id = $1 AND deleted_at IS NULL");
+    expect(sql).not.toMatch(/\bstatus\s*=/);
+    expect(sql).not.toMatch(/\bprogress\s*=/);
+    expect(sql).not.toMatch(/\bupdated_at\s*=/);
+    expect(sql).not.toMatch(/\blast_opened_at\s*=/);
+    expect(bindValues).toEqual(["document-1"]);
+    expect(eventMocks.emit).toHaveBeenCalledWith(READER_PROGRESS_CHANGED_EVENT, {
+      documentId: "document-1",
+      origin: "reader-window",
+    });
+    expect(databaseMocks.execute.mock.invocationCallOrder[0]).toBeLessThan(
+      eventMocks.emit.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it("falha e nao emite invalidacao quando nenhuma linha e atualizada", async () => {
+    databaseMocks.execute.mockResolvedValueOnce({ rowsAffected: 0 });
+
+    await expect(
+      dismissDocumentFromReadingList("document-na-lixeira", "preloaded"),
+    ).rejects.toThrow("Documento nao encontrado para dispensar de Em andamento.");
+
+    expect(eventMocks.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("query de Em andamento", () => {
   async function getQuery(sortMode: "recentes" | "titulo" | "progresso") {
     const select = vi.fn().mockResolvedValue([]);
     const database = { select } as unknown as Database;
