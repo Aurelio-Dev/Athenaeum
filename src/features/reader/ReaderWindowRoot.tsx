@@ -363,5 +363,7 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
     );
   }
 
-  return <ThemeProvider>{content}</ThemeProvider>;
+  // databaseSource="preloaded" pelo mesmo motivo de todo acesso SQLite desta
+  // arvore: a janela nao pode chamar Database.load.
+  return <ThemeProvider databaseSource="preloaded">{content}</ThemeProvider>;
 }

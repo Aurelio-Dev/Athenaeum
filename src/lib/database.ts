@@ -38,6 +38,18 @@ export const READER_SET_DOCUMENT_EVENT = "reader:set-document";
 export const READER_SWITCH_DOCUMENT_EVENT = "reader-window:switch-document";
 export const READER_PANEL_WINDOW_LABEL = "reader-annotations-panel";
 export const READER_WINDOW_LABEL = "reader-window";
+// Preferencia global (nao pertence a um documento): o material das superficies
+// do app. Emitido para TODAS as janelas nativas, nao so para o Reader.
+export const MATERIAL_VARIANT_CHANGED_EVENT = "app:material-variant-changed";
+
+// Eixo ortogonal ao tema claro/escuro: descreve como as superficies sao
+// pintadas, nao qual e a paleta. "flat" e o material historico do app.
+export type MaterialVariant = "flat" | "glass";
+
+export type MaterialVariantChangedPayload = {
+  material: MaterialVariant;
+  origin: string;
+};
 
 export type ReaderInvalidationPayload = {
   documentId: string;
@@ -108,6 +120,19 @@ export function isReaderAnnotationsFilterScopeChangedPayload(
     "scope" in payload &&
     (payload.scope === "all" || payload.scope === "current_page")
   );
+}
+
+export function isMaterialVariant(value: unknown): value is MaterialVariant {
+  return value === "flat" || value === "glass";
+}
+
+export function isMaterialVariantChangedPayload(payload: unknown): payload is MaterialVariantChangedPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  return isMaterialVariant(candidate.material) && typeof candidate.origin === "string";
 }
 
 export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJumpToPagePayload {
@@ -416,6 +441,20 @@ async function emitReaderAnnotationsFilterScopeChanged(
     // O SQLite ja confirmou a escrita; a falha de sincronizacao entre janelas
     // nao pode fazer o chamador repetir uma operacao que ja foi persistida.
     console.warn("Nao foi possivel emitir a mudanca do filtro de anotacoes.", error);
+  }
+}
+
+async function emitMaterialVariantChanged(material: MaterialVariant) {
+  try {
+    await emit<MaterialVariantChangedPayload>(MATERIAL_VARIANT_CHANGED_EVENT, {
+      material,
+      origin: getCurrentWebviewWindow().label,
+    });
+  } catch (error) {
+    // Mesmo racional das emissoes do Reader: o SQLite ja confirmou a escrita,
+    // entao a falha de sincronizacao entre janelas nao pode fazer o chamador
+    // repetir uma operacao que ja foi persistida.
+    console.warn("Nao foi possivel emitir a mudanca de material.", error);
   }
 }
 
@@ -2368,4 +2407,27 @@ export async function setReaderOpensMaximized(
   source: DatabaseHandleSource = "loaded",
 ): Promise<void> {
   await setSetting(READER_MAXIMIZED_SETTING_KEY, maximized ? "true" : "false", source);
+}
+
+// Material das superficies do app (eixo ortogonal ao tema claro/escuro).
+// Vive em app_settings, como show_divider_lines e icon_variant, e nao em
+// localStorage: e uma preferencia global compartilhada por todas as janelas
+// nativas, e a emissao abaixo e o que as mantem em sincronia.
+const MATERIAL_VARIANT_SETTING_KEY = "material_variant";
+
+export async function getMaterialVariant(source: DatabaseHandleSource = "loaded"): Promise<MaterialVariant> {
+  const value = await getSetting(MATERIAL_VARIANT_SETTING_KEY, source);
+  // Sem valor persistido (ou valor invalido escrito por uma versao futura) o
+  // app volta ao material historico.
+  return isMaterialVariant(value) ? value : "flat";
+}
+
+// Persiste antes de emitir, na mesma ordem de setDocumentAnnotationsFilterScope:
+// nenhuma janela deve pintar um material que o SQLite ainda nao confirmou.
+export async function setMaterialVariant(
+  material: MaterialVariant,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(MATERIAL_VARIANT_SETTING_KEY, material, source);
+  await emitMaterialVariantChanged(material);
 }

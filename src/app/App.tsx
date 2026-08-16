@@ -45,7 +45,10 @@ export function App() {
     const documentId = searchParams.get("documentId") ?? "";
 
     return (
-      <ThemeProvider>
+      // databaseSource="preloaded": a janela nao chama Database.load (ver o
+      // cabecalho da ReaderPanelPopout), e o ThemeProvider le o material do
+      // banco na montagem.
+      <ThemeProvider databaseSource="preloaded">
         <Suspense fallback={<LoadingScreen />}>
           <ReaderPanelPopout documentId={documentId} />
         </Suspense>
@@ -59,7 +62,7 @@ export function App() {
     const notebookId = Number(searchParams.get("notebookId") ?? "");
 
     return (
-      <ThemeProvider>
+      <ThemeProvider databaseSource="preloaded">
         <Suspense fallback={<LoadingScreen />}>
           <NotebookWindowRoot notebookId={notebookId} />
         </Suspense>
@@ -68,9 +71,10 @@ export function App() {
   }
 
   return (
-    // ThemeProvider por fora: a preferencia de tema (claro/escuro) e fonte unica
-    // compartilhada pela sidebar e pelo SettingsPanel, e precisa envolver toda a
-    // arvore para aplicar a classe .dark no <html>.
+    // ThemeProvider por fora: as preferencias de tema (claro/escuro) e de
+    // material sao fonte unica compartilhada pela sidebar e pelo SettingsPanel,
+    // e precisam envolver toda a arvore para aplicar a classe .dark e o
+    // data-material no <html>.
     <ThemeProvider>
       <AppearancePreferencesProvider>
         <DividerLinesProvider>
