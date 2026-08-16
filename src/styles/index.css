@@ -311,6 +311,8 @@
   /* No escuro o muted volta ao #9E8878 (a escurecida e so no tema claro). */
   --color-sidebar-muted: #9E8878;
   --color-sidebar-text: #F0E8DF;
+  /* Linhas internas secundarias do icone de busca sem resultados. */
+  --color-empty-state-detail: #463A31;
 
   --foreground: #F0E8DF;
   --card-foreground: #F0E8DF;
