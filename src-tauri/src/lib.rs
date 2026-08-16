@@ -3518,6 +3518,12 @@ END;
             sql: include_str!("../migrations/0022_add_document_annotations_filter_scope.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 23,
+            description: "add_document_reading_list_dismissed_at",
+            sql: include_str!("../migrations/0023_add_document_reading_list_dismissed_at.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
