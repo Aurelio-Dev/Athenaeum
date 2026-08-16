@@ -382,37 +382,47 @@
    da paleta de tags e de tipografia sao os mesmos nos dois materiais.
 
    REGRA DE CONTRASTE (ver docs/design/athenaeum-design-tokens-cores.md):
-   a superficie glass nao pode ser mais escura que #F2EAE0 no claro nem
-   mais clara que #2A2622 no escuro. E esse teto/piso que mantem
-   --muted-foreground (#7A6558 no claro, #9E8878 no escuro) legivel
-   sobre o gradiente, sem precisar de um token de texto novo.
+   nenhuma superficie glass pode ser mais escura que #F2EAE0 no claro nem
+   MAIS CLARA que #292521 no escuro. O vinculo e o ponto mais claro da
+   superficie mais clara — nao a base do gradiente: quem decide o
+   contraste e a parada de maior luminancia que o texto atravessa. E esse
+   teto que mantem --muted-foreground (#7A6558 no claro, #9E8878 no
+   escuro) em AA sobre o gradiente, sem precisar de um token de texto
+   novo.
 
-   ATENCAO — medicao real (nao apagar sem reavaliar): no claro a regra
-   fecha (#7A6558 sobre #F4ECE3 da 4.69:1, e 4.60:1 no proprio teto
-   #F2EAE0). No ESCURO ela ainda nao: #9E8878 sobre o piso #2A2622 da
-   4.47:1, e a parada superior de --glass-surface-elevated (#332E29) e
-   mais clara que o piso e da 4.00:1 — as duas abaixo de 4.5:1. Nenhuma
-   tela consome estes tokens ainda, entao nada esta fora de AA hoje;
-   antes do primeiro consumo escuro, escurecer o piso para ~#292521
-   (4.52:1) e as paradas escuras junto, ou aceitar o desvio de forma
-   explicita. */
+   Medicao (pior caso de cada tema): #7A6558 sobre #F4ECE3 = 4.69:1;
+   #9E8878 sobre #292521 = 4.52:1. As duas acima de 4.5:1.
+
+   No ESCURO a familia inteira fica comprimida abaixo do teto, entao nao
+   sobra faixa de luminancia para hierarquia: a ELEVACAO e expressa por
+   --glass-border-top-elevated e --glass-shadow-elevated, nao por um
+   fundo mais claro. Ao criar uma superficie glass nova, escureca e use
+   borda/sombra — clarear o fundo para "elevar" quebra os dois tons
+   secundarios de uma vez. */
 [data-material="glass"] {
   --glass-surface: linear-gradient(180deg, #FDFAF7 0%, #F4ECE3 100%);
   --glass-surface-elevated: linear-gradient(180deg, #FFFDFA 0%, #F7F0E8 100%);
   --glass-border-top: rgb(255 255 255 / 0.65);
   --glass-border: rgb(44 26 16 / 0.08);
   --glass-shadow: 0 8px 24px -8px rgb(44 26 16 / 0.18);
+  --glass-border-top-elevated: rgb(255 255 255 / 0.85);
+  --glass-shadow-elevated: 0 16px 40px -12px rgb(44 26 16 / 0.24);
 }
 
 /* Vence o bloco acima por especificidade (0,2,0 contra 0,1,0), nao por
    ordem de origem — mesmo racional da especificidade composta usada no
    chrome flutuante do Reader. */
 .dark[data-material="glass"] {
-  --glass-surface: linear-gradient(180deg, #2A2622 0%, #1F1B17 100%);
-  --glass-surface-elevated: linear-gradient(180deg, #332E29 0%, #252019 100%);
+  --glass-surface: linear-gradient(180deg, #262220 0%, #1C1815 100%);
+  --glass-surface-elevated: linear-gradient(180deg, #292521 0%, #201C19 100%);
   --glass-border-top: rgb(255 255 255 / 0.10);
   --glass-border: rgb(0 0 0 / 0.35);
   --glass-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.55);
+  /* Portadores da elevacao no escuro (ver o comentario do bloco acima): a
+     faixa de luminancia abaixo do teto #292521 nao comporta hierarquia, e
+     o fundo de elevated fica praticamente colado no de surface. */
+  --glass-border-top-elevated: rgb(255 255 255 / 0.16);
+  --glass-shadow-elevated: 0 16px 40px -12px rgb(0 0 0 / 0.70);
 }
 
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam

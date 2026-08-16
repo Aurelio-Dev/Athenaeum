@@ -17,43 +17,45 @@
 >
 > | Token | Claro | Escuro |
 > | --- | --- | --- |
-> | `--glass-surface` | `linear-gradient(180deg, #FDFAF7 0%, #F4ECE3 100%)` | `linear-gradient(180deg, #2A2622 0%, #1F1B17 100%)` |
-> | `--glass-surface-elevated` | `linear-gradient(180deg, #FFFDFA 0%, #F7F0E8 100%)` | `linear-gradient(180deg, #332E29 0%, #252019 100%)` |
+> | `--glass-surface` | `linear-gradient(180deg, #FDFAF7 0%, #F4ECE3 100%)` | `linear-gradient(180deg, #262220 0%, #1C1815 100%)` |
+> | `--glass-surface-elevated` | `linear-gradient(180deg, #FFFDFA 0%, #F7F0E8 100%)` | `linear-gradient(180deg, #292521 0%, #201C19 100%)` |
 > | `--glass-border-top` | `rgb(255 255 255 / 0.65)` | `rgb(255 255 255 / 0.10)` |
+> | `--glass-border-top-elevated` | `rgb(255 255 255 / 0.85)` | `rgb(255 255 255 / 0.16)` |
 > | `--glass-border` | `rgb(44 26 16 / 0.08)` | `rgb(0 0 0 / 0.35)` |
 > | `--glass-shadow` | `0 8px 24px -8px rgb(44 26 16 / 0.18)` | `0 8px 24px -8px rgb(0 0 0 / 0.55)` |
+> | `--glass-shadow-elevated` | `0 16px 40px -12px rgb(44 26 16 / 0.24)` | `0 16px 40px -12px rgb(0 0 0 / 0.70)` |
 >
-> **REGRA (limite de luminância das superfícies glass):** a superfície
-> glass **não pode ser mais escura que `#F2EAE0` no tema claro nem mais
-> clara que `#2A2622` no tema escuro** — isso vale para as duas paradas
-> de cada gradiente, não só para a média. O propósito do teto/piso é
-> manter `--muted-foreground` legível **sem introduzir nenhum token de
-> texto novo**: são `#7A6558` (claro) e `#9E8878` (escuro) que teriam de
-> ganhar uma variante paralela se a superfície escorregasse. Qualquer
-> superfície glass futura que estoure o limite quebra os dois tons
-> secundários de uma vez, em todas as telas. Ao propor uma nova
-> superfície glass, verifique o limite antes de verificar o gosto.
+> **REGRA (limite de luminância das superfícies glass):** nenhuma
+> superfície glass pode ser **mais escura que `#F2EAE0` no tema claro nem
+> mais clara que `#292521` no tema escuro**. O vínculo é o **ponto mais
+> claro da superfície mais clara** — não a base do gradiente, e não a
+> média: quem decide o contraste é a parada de maior luminância que o
+> texto atravessa, e ela costuma estar na superfície *elevada*, não na
+> comum. O propósito do teto é manter `--muted-foreground` em AA **sem
+> introduzir nenhum token de texto novo**: são `#7A6558` (claro) e
+> `#9E8878` (escuro) que teriam de ganhar uma variante paralela se a
+> superfície escorregasse. Qualquer superfície glass futura que estoure o
+> limite quebra os dois tons secundários de uma vez, em todas as telas.
+> Ao propor uma nova superfície glass, verifique o limite antes de
+> verificar o gosto.
 >
-> **Medição desta leva (o lado escuro ainda não fecha em AA).** Os
-> valores acima foram medidos, não estimados:
+> **Medição (pior caso de cada tema, medido e não estimado):**
 >
 > | Texto sobre superfície | Contraste | AA (4.5:1) |
 > | --- | --- | --- |
-> | `#7A6558` sobre `#F4ECE3` (parada mais escura, claro) | 4.69:1 | ✅ |
-> | `#7A6558` sobre o próprio teto `#F2EAE0` | 4.60:1 | ✅ |
-> | `#9E8878` sobre `#2A2622` (piso escuro) | **4.47:1** | ❌ |
-> | `#9E8878` sobre `#332E29` (parada superior de `--glass-surface-elevated`) | **4.00:1** | ❌ |
+> | `#7A6558` sobre `#F4ECE3` (parada mais escura do claro) | 4.69:1 | ✅ |
+> | `#9E8878` sobre `#292521` (parada mais clara do escuro, no próprio teto) | 4.52:1 | ✅ |
 >
-> No claro a regra fecha com folga. No escuro há duas pendências: o piso
-> `#2A2622` fica marginalmente abaixo de 4.5:1, e a parada superior de
-> `--glass-surface-elevated` (`#332E29`) é **mais clara que o próprio
-> piso**, contrariando a regra que ela deveria respeitar. **Nada está
-> fora de AA hoje** — esta leva é só infraestrutura e nenhuma tela
-> consome os tokens. Antes do primeiro consumo em tema escuro é preciso
-> escolher: escurecer o piso para `~#292521` (4.52:1) e trazer as
-> paradas escuras junto, ou aceitar o desvio de forma explícita e
-> registrada aqui. Os tokens não foram alterados por conta própria nesta
-> entrada; ficam exatamente como especificados.
+> **No escuro a elevação não é luminância — é borda e sombra.** Comprimir
+> a família inteira abaixo de `#292521` não deixa faixa de luminância
+> suficiente para hierarquia: `--glass-surface-elevated` fica praticamente
+> colada em `--glass-surface`. Por isso o escuro ganhou
+> `--glass-border-top-elevated` e `--glass-shadow-elevated`, que passam a
+> ser os portadores da elevação. Os dois existem também no claro, por
+> simetria de API — lá a luminância ainda ajudaria, mas um consumidor não
+> deve precisar saber em qual tema está para escolher o token. **Clarear
+> o fundo para "elevar" no escuro é justamente o que a regra proíbe:**
+> escureça e use borda/sombra.
 >
 > **Glass altera apenas superfícies, bordas e sombras.** `--primary` /
 > `--accent` (`#9C5A2E`), a paleta de 9 tags, os tokens de status e toda
@@ -66,9 +68,14 @@
 > (valores `'flat' | 'glass'`, default `'flat'`), como
 > `show_divider_lines` e `icon_variant`, e é propagada às janelas
 > nativas separadas (Reader, Anotações, Caderno) pelo evento
-> `app:material-variant-changed`. Esta entrada cobre só a
-> infraestrutura: nenhuma tela consome os tokens ainda, e não há
-> controle na tela de Ajustes.
+> `app:material-variant-changed`. O SQLite é a fonte de verdade; há um
+> espelho write-through em `localStorage` (`athenaeum-material`) usado só
+> para o bootstrap aplicar `data-material` antes do primeiro paint, sem
+> o qual as 4 janelas piscavam em `flat` até o IPC responder. Quando os
+> dois divergem, o SQLite vence e o cache é corrigido.
+>
+> Esta entrada cobre só a infraestrutura: nenhuma tela consome os tokens
+> ainda, e não há controle na tela de Ajustes.
 
 > **Changelog 16/08/2026 — Corolário do chrome flutuante e novo valor
 > escuro de `--color-empty-state-detail`:** um bug no Reader mostrou que

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { listen } from "@tauri-apps/api/event";
 import {
   getMaterialVariant,
+  isMaterialVariant,
   isMaterialVariantChangedPayload,
   MATERIAL_VARIANT_CHANGED_EVENT,
   setMaterialVariant,
@@ -15,22 +16,36 @@ import {
 // dois useState independentes desincronizariam (um trocaria o tema sem o outro
 // perceber).
 //
-// Os dois eixos sao ortogonais e persistem em lugares diferentes de proposito:
+// Os dois eixos sao ortogonais e persistem de formas diferentes:
 //
-// - MODO em localStorage (nao em app_settings/SQLite): a leitura sincrona antes
-//   do primeiro paint evita o flash de tema errado na abertura, que uma leitura
-//   assincrona via IPC do banco traria.
+// - MODO so em localStorage. A leitura sincrona antes do primeiro paint evita o
+//   flash de tema errado na abertura, que uma leitura assincrona via IPC do
+//   banco traria.
 // - MATERIAL em app_settings (chave material_variant), como show_divider_lines e
-//   icon_variant. Ele nao cabe no localStorage: e uma preferencia unica que
-//   precisa chegar as janelas nativas separadas (Reader, Anotacoes, Caderno)
-//   pelo evento MATERIAL_VARIANT_CHANGED_EVENT, e cada janela tem seu proprio
-//   localStorage.
+//   icon_variant, com ESPELHO write-through em localStorage. O SQLite continua
+//   sendo a FONTE DE VERDADE: e o unico lugar compartilhado pelas 4 janelas
+//   nativas (cada uma tem o seu proprio localStorage) e o unico que sobrevive a
+//   uma troca feita com a janela fechada. O espelho existe so para o bootstrap
+//   ter um valor antes do primeiro paint — pelo mesmo motivo do modo, e porque
+//   sem ele as 4 janelas piscavam em 'flat' ate o IPC responder.
+//
+// Divergencia entre os dois e esperada (outra janela trocou o material enquanto
+// esta estava fechada): quem chega depois nao ganha — o SQLite vence e o
+// localStorage e corrigido na reconciliacao.
 export type Theme = "light" | "dark";
 
 const themeStorageKey = "athenaeum-theme";
+const materialStorageKey = "athenaeum-material";
 
 function readStoredTheme(): Theme {
   return window.localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
+}
+
+// Palpite de bootstrap, nao verdade: vale ate o SQLite responder. Valor ausente
+// ou invalido (escrito por uma versao futura) volta ao material historico.
+function readCachedMaterial(): MaterialVariant {
+  const cachedMaterial = window.localStorage.getItem(materialStorageKey);
+  return isMaterialVariant(cachedMaterial) ? cachedMaterial : "flat";
 }
 
 type ThemeContextValue = {
@@ -53,7 +68,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
-  const [material, setMaterialState] = useState<MaterialVariant>("flat");
+  // Inicializador sincrono (mesmo padrao do modo acima): o primeiro commit ja
+  // sai com o material em cache, entao nao ha janela pintada em 'flat'.
+  const [material, setMaterialState] = useState<MaterialVariant>(readCachedMaterial);
   // Um valor vindo do evento (ou do proprio setMaterial local) e mais recente
   // que a leitura de montagem em voo. Sem esta marca, uma troca feita em outra
   // janela durante o bootstrap seria sobrescrita pelo valor antigo do SQLite.
@@ -70,8 +87,14 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
   // Eixo ortogonal ao .dark: o material entra por data-material no mesmo
   // elemento raiz, para que [data-material="glass"] e .dark[data-material="glass"]
   // se combinem sem duplicar a paleta.
+  //
+  // O espelho no localStorage e escrito AQUI, e nao dentro de setMaterial, para
+  // que TODO caminho que muda o material passe por ele: troca local, evento de
+  // outra janela e a reconciliacao com o SQLite. E isso que corrige o cache
+  // quando ele diverge da fonte de verdade.
   useEffect(() => {
     window.document.documentElement.dataset.material = material;
+    window.localStorage.setItem(materialStorageKey, material);
   }, [material]);
 
   const applyMaterial = useCallback((nextMaterial: MaterialVariant) => {
@@ -79,16 +102,23 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
     setMaterialState(nextMaterial);
   }, []);
 
-  // Leitura na MONTAGEM: toda janela precisa do material persistido mesmo que
-  // nenhum evento chegue (abrir o Reader com o app ja em glass, por exemplo).
+  // RECONCILIACAO na montagem: toda janela precisa do material persistido mesmo
+  // que nenhum evento chegue (abrir o Reader com o app ja em glass, por
+  // exemplo). O valor do SQLite vence o cache; se forem iguais, o setState e
+  // no-op e o efeito acima nao reescreve nada.
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      const storedMaterial = await getMaterialVariant(databaseSource).catch(() => "flat" as const);
-      if (!cancelled && !hasFresherMaterialRef.current) {
-        setMaterialState(storedMaterial);
+      // Falha de leitura devolve null em vez de 'flat': sem resposta da fonte de
+      // verdade nao ha o que reconciliar, e descartar o cache aqui traria de
+      // volta exatamente o flash que ele existe para evitar.
+      const storedMaterial = await getMaterialVariant(databaseSource).catch(() => null);
+      if (cancelled || storedMaterial === null || hasFresherMaterialRef.current) {
+        return;
       }
+
+      setMaterialState(storedMaterial);
     })();
 
     return () => {
