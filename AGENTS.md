@@ -31,6 +31,18 @@ unless an existing file consistently uses another language.
 
 ---
 
+## Limitações conhecidas de plataforma
+
+**Clique duplo necessário após a janela do Reader ganhar foco (Windows).**
+Em janelas Tauri/WebView2, o primeiro clique após a janela sair de
+segundo plano é consumido pelo próprio SO só para trazer foco — não
+chega como evento de clique ao React. Isso NÃO é um bug do Athenaeum
+nem tem relação com scrollToPage/handleReaderScroll/qualquer lógica
+de navegação. É uma limitação de engine sem correção oficial até
+agosto/2026 (tauri-apps/wry#637). Se reportado de novo, não investigar
+como bug de estado/scroll — confirmar primeiro se o problema
+desaparece quando a janela já está em foco antes do clique.
+
 ## Fixed stack
 
 The technology stack is a closed project decision:
