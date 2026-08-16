@@ -43,6 +43,54 @@ agosto/2026 (tauri-apps/wry#637). Se reportado de novo, não investigar
 como bug de estado/scroll — confirmar primeiro se o problema
 desaparece quando a janela já está em foco antes do clique.
 
+## Limitações conhecidas do editor de Caderno
+
+### Blocos de código perdem estilo até o reload
+
+Ao aplicar realce ou cor em qualquer ponto da página,
+`normalizeTextColorElement` interpreta todo elemento com `background` ou
+`color` inline como carrier transitório e chama
+`removeInlineColorStyles`. O estilo semântico do próprio `<code>` é
+atingido, inclusive em blocos distantes da seleção, porque
+`normalizeNotebookTextColors` percorre todo o editor.
+
+O efeito é visual e temporário: `prepareCodeElements` restaura o estilo
+ao trocar de página ou recarregar. O HTML persistido perde as
+propriedades inline `background` e `color`, mas preserva a tag `<code>`,
+o conteúdo e os spans de realce/cor. A exportação gera `<pre><code>`
+com CSS próprio e não depende dessas propriedades. Não há corrupção de
+conteúdo.
+
+### Fonte de equação rejeita realce silenciosamente
+
+`execCommand` dispara `input` de forma síncrona. Assim,
+`handleInput` → `emitChange` → `normalizeEquations` executa
+`source.textContent = source.textContent` e achata o `<figcaption>`
+antes que `applyNotebookTextColor` restaure a seleção.
+
+A operação é descartada sem feedback; o LaTeX persistido fica intacto e
+não há corrupção. Há uma inconsistência deliberadamente ainda não
+resolvida: a fonte de diagrama, que também é uma linguagem de sintaxe
+consumida por parser, aceita realce hoje. A decisão de produto de
+unificar os comportamentos permanece pendente.
+
+### Bug histórico de realce em texto errado — não reabrir
+
+O relato de que o realce caía no texto errado em páginas com blocos de
+código foi corrigido em `6c02f78`, que moveu a criação dos marcadores de
+seleção para antes de `execCommand`. O diagnóstico no `5f0f731` executou
+21 aplicações de realce, incluindo arraste real de ponteiro, sem nenhum
+deslocamento. Callout, tabela, diagrama, figura e anexo também ficaram
+exatos.
+
+O caminho atual deve ser preservado: clona a `Range`, insere marcadores
+DOM nos extremos, reconstrói a seleção entre eles, executa
+`hiliteColor`/`foreColor`, normaliza o markup transitório e restaura a
+seleção pelos mesmos marcadores. O WebView2 troca os nós extremos após
+`execCommand`, mas os marcadores permanecem na posição original; é isso
+que impede o deslocamento. Alterar a ordem dos marcadores reintroduz o
+bug.
+
 ## Fixed stack
 
 The technology stack is a closed project decision:
