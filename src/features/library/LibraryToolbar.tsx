@@ -4,6 +4,7 @@ import type { SortMode, ViewMode } from "../../types/library";
 type LibraryToolbarProps = {
   sortMode: SortMode;
   viewMode: ViewMode;
+  recentSortLabel?: string;
   compact?: boolean;
   onSortModeChange: (value: SortMode) => void;
   onViewModeChange: (value: ViewMode) => void;
@@ -55,7 +56,7 @@ const viewModes: Array<{ mode: ViewMode; label: string }> = [
   { mode: "list", label: "Visualizar em lista" },
 ];
 
-export function LibraryToolbar({ sortMode, viewMode, compact = false, onSortModeChange, onViewModeChange }: LibraryToolbarProps) {
+export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente", compact = false, onSortModeChange, onViewModeChange }: LibraryToolbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -91,7 +92,7 @@ export function LibraryToolbar({ sortMode, viewMode, compact = false, onSortMode
           onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
           className="flex items-center gap-2 rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-[12px] font-normal leading-[18px] text-[#2C1810] dark:text-text-primary"
         >
-          {sortModeLabels[sortMode]}
+          {sortMode === "recentes" ? recentSortLabel : sortModeLabels[sortMode]}
           <ChevronDownIcon />
         </button>
 
@@ -106,7 +107,7 @@ export function LibraryToolbar({ sortMode, viewMode, compact = false, onSortMode
                   mode === sortMode ? "font-semibold text-primary" : "text-text-primary"
                 }`}
               >
-                {sortModeLabels[mode]}
+                {mode === "recentes" ? recentSortLabel : sortModeLabels[mode]}
               </button>
             ))}
           </div>

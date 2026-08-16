@@ -8,7 +8,7 @@ import { getSubjectTagTone, registerSubjectTagTone } from "../styles/designToken
 import { isAnnotationMarkStyle, isHighlightColor } from "../types/annotation";
 import type { Annotation, AnnotationMarkStyle, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { DocumentBookmark } from "../types/bookmark";
-import type { AnnotationsFilterScope, Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
+import type { AnnotationsFilterScope, Canvas, DocumentStatus, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
 import type { NotebookExportManifest } from "../features/notebooks/notebookExportHtml";
@@ -616,6 +616,10 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
 
   if (route.type === "reading-list") {
     whereClauses.push("documents.status = 'in-progress'");
+    whereClauses.push(`(
+      documents.reading_list_dismissed_at IS NULL
+      OR documents.last_opened_at > documents.reading_list_dismissed_at
+    )`);
   }
 
   if (route.type === "collection") {
@@ -642,7 +646,9 @@ function buildDocumentListQuery({ searchTerm, sortMode, route }: ListDocumentsOp
       ? "documents.title COLLATE NOCASE ASC"
       : sortMode === "progresso"
         ? "documents.progress DESC, documents.updated_at DESC"
-        : "documents.updated_at DESC";
+        : route.type === "reading-list"
+          ? "documents.last_opened_at IS NULL, documents.last_opened_at DESC"
+          : "documents.updated_at DESC";
 
   return {
     sql: `
@@ -1951,11 +1957,33 @@ export async function setDocumentReadingStarted(
     `UPDATE documents
      SET
        last_opened_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-       status = CASE WHEN status = 'not-started' THEN 'in-progress' ELSE status END,
-       progress = CASE WHEN status = 'not-started' AND progress < 1 THEN 1 ELSE progress END
+       status = CASE WHEN status = 'not-started' THEN 'in-progress' ELSE status END
      WHERE id = $1 AND deleted_at IS NULL`,
     [documentId],
   );
+  await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, documentId);
+}
+
+export async function updateDocumentReadingStatus(
+  documentId: string,
+  status: DocumentStatus,
+  source: DatabaseHandleSource = "loaded",
+) {
+  if (status !== "not-started" && status !== "in-progress" && status !== "completed") {
+    throw new Error("Status de leitura invalido.");
+  }
+
+  const database = await getDatabase(source);
+  const result = await database.execute(
+    `UPDATE documents
+     SET status = $1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     WHERE id = $2 AND deleted_at IS NULL`,
+    [status, documentId],
+  );
+  if (result.rowsAffected === 0) {
+    throw new Error("Documento nao encontrado para atualizar o status de leitura.");
+  }
+
   await emitReaderInvalidation(READER_PROGRESS_CHANGED_EVENT, documentId);
 }
 

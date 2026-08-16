@@ -371,7 +371,13 @@ export function DetailsTab({
         </section>
 
         <div className="py-5">
-          <ReadingStatusCard status={document.status} progress={progress} variant="island" />
+          <ReadingStatusCard
+            documentId={document.id}
+            status={document.status}
+            progress={progress}
+            databaseSource={databaseSource}
+            variant="island"
+          />
         </div>
 
         <section className="py-5">

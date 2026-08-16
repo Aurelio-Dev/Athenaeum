@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -18,10 +18,11 @@ import {
   openDocumentExternally,
   READER_DETAILS_CHANGED_EVENT,
   removeDocumentTag,
+  updateDocumentReadingStatus,
   type DatabaseHandleSource,
   type RelatedDocument,
 } from "../../../lib/database";
-import type { ReaderDocumentDetails, SubjectTag } from "../../../types/library";
+import type { DocumentStatus, ReaderDocumentDetails, SubjectTag } from "../../../types/library";
 import { statusTokens } from "../../../styles/designTokens";
 import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon } from "./readerPanelIcons";
 
@@ -49,10 +50,6 @@ export function formatFileSize(bytes: number | null) {
   }
 
   return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)} ${units[unitIndex]}`;
-}
-
-export function formatReadingStatus(status: ReaderDocumentDetails["status"]) {
-  return statusTokens[status].label;
 }
 
 // Recarrega dados da secao quando outra janela (ou outro componente) altera os
@@ -91,21 +88,105 @@ export function useReaderDetailsInvalidation(documentId: string, reload: () => v
 }
 
 type ReadingStatusCardProps = {
+  documentId: string;
   status: ReaderDocumentDetails["status"];
   progress: number;
+  databaseSource?: DatabaseHandleSource;
   variant?: "default" | "island";
 };
 
-export function ReadingStatusCard({ status, progress, variant = "default" }: ReadingStatusCardProps) {
+type EditableReadingStatus = Extract<DocumentStatus, "not-started" | "in-progress" | "completed">;
+
+const readingStatusOptions: Array<{ status: EditableReadingStatus; label: string }> = [
+  { status: "not-started", label: "Não iniciado" },
+  { status: "in-progress", label: "Em andamento" },
+  { status: "completed", label: "Concluído" },
+];
+
+export function ReadingStatusCard({
+  documentId,
+  status,
+  progress,
+  databaseSource = "loaded",
+  variant = "default",
+}: ReadingStatusCardProps) {
   const normalizedProgress = Math.min(100, Math.max(0, Math.round(progress)));
+  const [selectedStatus, setSelectedStatus] = useState<DocumentStatus>(status);
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusError, setStatusError] = useState("");
+  const latestDocumentIdRef = useRef(documentId);
+  latestDocumentIdRef.current = documentId;
+
+  useEffect(() => {
+    setSelectedStatus(status);
+    setIsSaving(false);
+    setStatusError("");
+  }, [documentId]);
+
+  useEffect(() => {
+    if (!isSaving) {
+      setSelectedStatus(status);
+    }
+  }, [isSaving, status]);
+
+  async function selectReadingStatus(nextStatus: EditableReadingStatus) {
+    if (isSaving || nextStatus === selectedStatus) {
+      return;
+    }
+
+    const targetDocumentId = documentId;
+    const previousStatus = selectedStatus;
+    setSelectedStatus(nextStatus);
+    setIsSaving(true);
+    setStatusError("");
+
+    try {
+      await updateDocumentReadingStatus(targetDocumentId, nextStatus, databaseSource);
+    } catch (error) {
+      console.warn("Não foi possível atualizar o status de leitura.", error);
+      if (latestDocumentIdRef.current === targetDocumentId) {
+        setSelectedStatus(previousStatus);
+        setStatusError("Não foi possível atualizar o status de leitura.");
+      }
+    } finally {
+      if (latestDocumentIdRef.current === targetDocumentId) {
+        setIsSaving(false);
+      }
+    }
+  }
+
+  const statusSelector = (
+    <div className="grid gap-1.5" role="group" aria-label="Alterar status de leitura">
+      {readingStatusOptions.map((option) => {
+        const isSelected = option.status === selectedStatus;
+        const token = statusTokens[option.status];
+
+        return (
+          <button
+            key={option.status}
+            type="button"
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition disabled:cursor-wait disabled:opacity-70 ${
+              isSelected
+                ? token.className
+                : "bg-[var(--background)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+            aria-pressed={isSelected}
+            disabled={isSaving}
+            onClick={() => void selectReadingStatus(option.status)}
+          >
+            <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${token.dotClassName}`} />
+            <span>{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
   if (variant === "island") {
     return (
       <section aria-label="Status de leitura">
-        <div className="flex items-center gap-2 rounded-full bg-[var(--muted)] px-3 py-2 text-xs font-semibold text-primary">
-          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-          <span>{formatReadingStatus(status)}</span>
-        </div>
+        {statusSelector}
+        {statusError ? <p className="mt-2 text-xs text-status-red-text" role="alert">{statusError}</p> : null}
         <div className="mt-3 flex items-center gap-4">
           <div className="min-w-0 flex-1">
             <ProgressBar value={normalizedProgress} showValue={false} />
@@ -120,14 +201,10 @@ export function ReadingStatusCard({ status, progress, variant = "default" }: Rea
     <section>
       <h2 className={sectionLabelClassName}>Status de leitura</h2>
       <div className="mt-3 rounded-lg border border-border-subtle bg-[var(--background)] px-3 py-3">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-[var(--foreground)]">
-            <span className="shrink-0 text-primary">
-              <BookOpenIcon size={14} />
-            </span>
-            <span className="truncate">{formatReadingStatus(status)}</span>
-          </span>
-          <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">{normalizedProgress}%</span>
+        {statusSelector}
+        {statusError ? <p className="mt-2 text-xs text-status-red-text" role="alert">{statusError}</p> : null}
+        <div className="mb-2 mt-3 flex items-center justify-end">
+          <span className="text-xs tabular-nums text-[var(--muted-foreground)]">{normalizedProgress}%</span>
         </div>
         <ProgressBar value={normalizedProgress} showValue={false} />
       </div>

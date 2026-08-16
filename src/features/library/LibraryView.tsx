@@ -730,6 +730,7 @@ export function LibraryView() {
                 compact={isTrashRoute}
                 sortMode={sortMode}
                 viewMode={viewMode}
+                recentSortLabel={activeRoute.type === "reading-list" ? "Aberto recentemente" : "Recente"}
                 onSortModeChange={setSortMode}
                 onViewModeChange={setViewMode}
               />
