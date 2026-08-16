@@ -361,11 +361,17 @@ export function ReaderFloatingChrome({
     zoomButtonRef.current?.focus({ preventScroll: true });
   }
 
+  // O wrapper cobre a largura inteira da janela e fica sobre o scroller do
+  // leitor (z-30 contra o z-auto do workspace), inclusive sobre a faixa da
+  // barra de rolagem vertical. Ele e transparente, entao nao pode capturar o
+  // ponteiro: so as pilulas visiveis abaixo reativam pointer-events.
+  // Se o arraste da janela for retomado, a faixa arrastavel precisa de um
+  // conteiner proprio com pointer-events-auto: o onMouseDown daqui nunca dispara.
   return (
     <div
       ref={chromeRootRef}
       aria-hidden={readingMode}
-      className={`reader-reading-island absolute inset-x-0 top-0 z-30 h-[84px] select-none bg-transparent ${
+      className={`reader-reading-island pointer-events-none absolute inset-x-0 top-0 z-30 h-[84px] select-none bg-transparent ${
         readingMode ? "reader-reading-island--hidden reader-reading-island--top" : ""
       } ${draggable ? "cursor-move" : ""}`}
       onMouseDown={draggable ? onStartDragging : undefined}
@@ -375,7 +381,7 @@ export function ReaderFloatingChrome({
         aria-expanded={detailsOpen}
         aria-label={detailsOpen ? "Ocultar detalhes do documento" : "Abrir detalhes do documento"}
         title={detailsOpen ? "Ocultar detalhes" : "Abrir detalhes"}
-        className={`absolute left-[22px] top-5 flex items-center gap-2.5 rounded-[13px] border px-3.5 text-left shadow-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-app ${
+        className={`pointer-events-auto absolute left-[22px] top-5 flex items-center gap-2.5 rounded-[13px] border px-3.5 text-left shadow-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-app ${
           compact ? "h-11 w-[214px]" : "min-h-[50px] w-[306px] py-2"
         } ${
           detailsOpen
@@ -402,7 +408,7 @@ export function ReaderFloatingChrome({
       </button>
 
       <div
-        className={`absolute right-[22px] top-5 flex h-[44px] items-center rounded-[13px] border border-border-subtle bg-surface-card py-1.5 ${
+        className={`pointer-events-auto absolute right-[22px] top-5 flex h-[44px] items-center rounded-[13px] border border-border-subtle bg-surface-card py-1.5 ${
           compact ? "gap-0.5 px-1" : "gap-1.5 px-2"
         }`}
         style={{ boxShadow: shadow }}

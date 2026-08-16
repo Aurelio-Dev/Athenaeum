@@ -1700,6 +1700,18 @@ select {
   pointer-events: none;
 }
 
+/* As ilhas usam pointer-events-none no wrapper e pointer-events-auto nas
+   pilulas visiveis, para nao roubar o ponteiro da barra de rolagem do leitor.
+   Como o pointer-events-auto do filho anula o none do pai, a ilha oculta
+   precisa zerar tambem os descendentes: sem esta regra o header continuaria
+   clicavel no modo de leitura, invisivel porem ativo.
+   A classe base e repetida de proposito: (0,2,0) vence .pointer-events-auto
+   (0,1,0) por especificidade, sem depender de onde o @tailwind utilities cai
+   na ordem deste arquivo. */
+.reader-reading-island.reader-reading-island--hidden * {
+  pointer-events: none;
+}
+
 .reader-reading-island--top {
   transform: translate3d(0, -12px, 0);
 }
