@@ -43,7 +43,17 @@ vi.mock("../../lib/database", () => ({
   },
   isReaderDocumentPayload: vi.fn(() => false),
   isReaderInvalidationPayload: vi.fn(() => false),
-  isReaderPageStatePayload: vi.fn(() => false),
+  isReaderPageStatePayload: (payload: unknown) => {
+    if (typeof payload !== "object" || payload === null) {
+      return false;
+    }
+    const candidate = payload as Record<string, unknown>;
+    return (
+      typeof candidate.documentId === "string" &&
+      typeof candidate.page === "number" &&
+      typeof candidate.hasSelection === "boolean"
+    );
+  },
   listAnnotations: vi.fn(async () => []),
   listAvailableTagsFromPreloadedDatabase: vi.fn(async () => []),
   READER_ANNOTATIONS_CHANGED_EVENT: "reader:annotations-changed",
@@ -113,7 +123,16 @@ vi.mock("./panels/AnnotationsTab", async () => {
   };
 });
 
-vi.mock("./panels/AiTab", () => ({ AiTab: () => null }));
+vi.mock("./panels/AiTab", async () => {
+  const { createElement } = await import("react");
+  return {
+    AiTab: ({ currentPage, hasSelection }: { currentPage: number; hasSelection: boolean }) => createElement(
+      "output",
+      { "data-testid": "ai-reader-state" },
+      `${currentPage}:${String(hasSelection)}`,
+    ),
+  };
+});
 
 const testDocument: LibraryDocument = {
   id: "document-1",
@@ -148,6 +167,14 @@ function dispatchFilterScope(payload: unknown) {
   const handler = eventMocks.handlers.get(filterScopeEvent);
   if (!handler) {
     throw new Error("Listener do filtro de anotacoes nao registrado.");
+  }
+  act(() => handler({ payload }));
+}
+
+function dispatchPageState(payload: unknown) {
+  const handler = eventMocks.handlers.get("reader:page-state-changed");
+  if (!handler) {
+    throw new Error("Listener do estado da página não registrado.");
   }
   act(() => handler({ payload }));
 }
@@ -205,5 +232,22 @@ describe("ReaderPanelPopout - sincronizacao do filtro de anotacoes", () => {
       "reader:jump-to-page",
       { documentId: "document-1", page: 2, annotationId: "annotation-2" },
     );
+  });
+
+  it("repassa página e disponibilidade da seleção para a aba ASK IA", async () => {
+    await renderPopout();
+
+    dispatchPageState({
+      documentId: "document-1",
+      page: 4,
+      progress: 60,
+      totalPages: 8,
+      fileSizeBytes: 1024,
+      hasSelection: true,
+    });
+    click(Array.from(container?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+      .find((button) => button.textContent === "ASK IA") as HTMLButtonElement);
+
+    expect(container?.querySelector('[data-testid="ai-reader-state"]')?.textContent).toBe("4:true");
   });
 });

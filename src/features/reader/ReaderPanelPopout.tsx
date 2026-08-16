@@ -51,6 +51,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
   const [activeTab, setActiveTab] = useState<ReaderTab>("annotations");
   const [documentDetails, setDocumentDetails] = useState<LibraryDocument | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [hasSelection, setHasSelection] = useState(false);
   const [, setNotesText] = useState("");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -260,6 +261,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
       }
 
       setCurrentPage(payload.page);
+      setHasSelection(payload.hasSelection);
     }, () => {
       void emitTo<ReaderDocumentPayload>(READER_WINDOW_LABEL, READER_PAGE_STATE_REQUESTED_EVENT, { documentId })
         .catch((error) => {
@@ -400,6 +402,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             preloadedSwitchDocumentIdRef.current = nextDocumentId;
             documentIdRef.current = nextDocumentId;
             setDocumentId(nextDocumentId);
+            setHasSelection(false);
             applyLoadedNotes(loadedNotes);
             setAnnotations(loadedAnnotations);
             applyLoadedDocument(loadedDocument);
@@ -548,7 +551,7 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
         </p>
       ) : null}
 
-      <section className="min-h-0 flex-1 overflow-y-auto">
+      <section className={`min-h-0 flex-1 ${activeTab === "ai" ? "overflow-hidden" : "overflow-y-auto"}`}>
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-sm font-semibold text-[var(--muted-foreground)]">Carregando...</div>
         ) : !documentDetails ? (
@@ -567,7 +570,12 @@ export function ReaderPanelPopout({ documentId: initialDocumentId }: ReaderPanel
             onOpenNotebook={requestOpenNotebook}
           />
         ) : (
-          <AiTab />
+          <AiTab
+            documentId={documentDetails.id}
+            currentPage={currentPage}
+            hasSelection={hasSelection}
+            onJumpToPage={handleJumpToPage}
+          />
         )}
       </section>
     </main>

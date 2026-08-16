@@ -31,6 +31,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   isReaderJumpToPagePayload,
+  isReaderPageStatePayload,
   READER_ANNOTATIONS_FILTER_SCOPE_CHANGED_EVENT,
   setDocumentAnnotationsFilterScope,
 } from "./database";
@@ -81,5 +82,27 @@ describe("payload de navegacao do Reader", () => {
     expect(isReaderJumpToPagePayload({ documentId: "document-1", page: 2 })).toBe(true);
     expect(isReaderJumpToPagePayload({ documentId: "document-1", page: 2, annotationId: "annotation-2" })).toBe(true);
     expect(isReaderJumpToPagePayload({ documentId: "document-1", page: 2, annotationId: 2 })).toBe(false);
+  });
+
+  it("exige o booleano de seleção no estado sincronizado da página", () => {
+    const validPayload = {
+      documentId: "document-1",
+      page: 2,
+      progress: 40,
+      totalPages: 5,
+      fileSizeBytes: 1024,
+      hasSelection: true,
+    };
+
+    expect(isReaderPageStatePayload(validPayload)).toBe(true);
+    expect(isReaderPageStatePayload({ ...validPayload, hasSelection: false })).toBe(true);
+    expect(isReaderPageStatePayload({ ...validPayload, hasSelection: "sim" })).toBe(false);
+    expect(isReaderPageStatePayload({
+      documentId: validPayload.documentId,
+      page: validPayload.page,
+      progress: validPayload.progress,
+      totalPages: validPayload.totalPages,
+      fileSizeBytes: validPayload.fileSizeBytes,
+    })).toBe(false);
   });
 });

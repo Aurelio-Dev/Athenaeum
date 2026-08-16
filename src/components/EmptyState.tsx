@@ -14,6 +14,8 @@ export interface EmptyStateProps {
   action?: {
     label: string;
     onClick: () => void;
+    disabled?: boolean;
+    title?: string;
   };
 }
 
@@ -27,13 +29,16 @@ export function EmptyState({ icon: Icon, iconClassName, illustration, title, tit
       <h2 className={`mt-3 font-sans text-base font-semibold ${titleClassName ?? "text-text-primary"}`}>{title}</h2>
       <p className="mt-1 font-sans text-sm font-normal text-text-secondary">{description}</p>
       {action ? (
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
-        >
-          {action.label}
-        </button>
+        <span className="mt-4 inline-flex" title={action.title}>
+          <button
+            type="button"
+            onClick={action.onClick}
+            disabled={action.disabled}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-primary"
+          >
+            {action.label}
+          </button>
+        </span>
       ) : null}
     </div>
   );

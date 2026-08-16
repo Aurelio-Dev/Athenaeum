@@ -69,7 +69,12 @@ vi.mock("../../lib/database", () => ({
   getLibraryDocument: vi.fn(async () => null),
   getDocumentNotes: vi.fn(async () => ""),
   openDocumentExternally: vi.fn(async () => undefined),
-  isReaderDocumentPayload: vi.fn(() => false),
+  isReaderDocumentPayload: (payload: unknown) => {
+    if (typeof payload !== "object" || payload === null) {
+      return false;
+    }
+    return typeof (payload as Record<string, unknown>).documentId === "string";
+  },
   isReaderInvalidationPayload: vi.fn(() => false),
   isReaderJumpToPagePayload: (payload: unknown) => {
     if (typeof payload !== "object" || payload === null) {
@@ -626,5 +631,38 @@ describe("navegacao precisa da popout de anotacoes", () => {
     });
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 914, behavior: "smooth" });
+  });
+});
+
+describe("sincronização da seleção com a popout", () => {
+  it("emite apenas quando o booleano de seleção muda", async () => {
+    await mountReader(1);
+    await waitFor(() => expect(eventMocks.handlers.has("reader-popout-status-changed")).toBe(true));
+    eventMocks.emitTo.mockClear();
+    const getPageStateCalls = () => (eventMocks.emitTo.mock.calls as unknown as Array<[string, string, unknown]>)
+      .filter((call) => call[1] === "reader-page-state-changed");
+
+    dispatchReaderEvent("reader-popout-status-changed", { documentId: testDocument.id });
+    await waitFor(() => {
+      const pageStateCalls = getPageStateCalls();
+      expect(pageStateCalls[pageStateCalls.length - 1]?.[2]).toMatchObject({ hasSelection: true });
+    });
+    const callsAfterOpeningSelection = getPageStateCalls().length;
+
+    await act(async () => {
+      getElement("main").dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(getPageStateCalls()).toHaveLength(callsAfterOpeningSelection);
+
+    await act(async () => {
+      getElement("main").dispatchEvent(new Event("scroll", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      const pageStateCalls = getPageStateCalls();
+      expect(pageStateCalls[pageStateCalls.length - 1]?.[2]).toMatchObject({ hasSelection: false });
+      expect(pageStateCalls).toHaveLength(callsAfterOpeningSelection + 1);
+    });
   });
 });

@@ -723,6 +723,7 @@ export function ReaderContent({
   const [pendingSelection, setPendingSelection] = useState<CapturedSelection | null>(null);
   const [selectionSessionId, setSelectionSessionId] = useState<string | null>(null);
   const selectionSessionRef = useRef<ReaderSelectionSession | null>(null);
+  const hasActiveSelection = selectionSessionId !== null;
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   // Guarda o payload de criacoes que falharam, por id otimista, para o retry.
   const failedCreatesRef = useRef<Map<string, NewAnnotation>>(new Map());
@@ -733,6 +734,7 @@ export function ReaderContent({
     progress: Math.round((currentPage / totalPages) * 100),
     totalPages: null,
     fileSizeBytes: null,
+    hasSelection: false,
   });
 
   const updatePopoutDocumentId = useCallback((nextDocumentId: string | null) => {
@@ -777,6 +779,7 @@ export function ReaderContent({
     progress: Math.round((progressPage / totalPages) * 100),
     totalPages: pdfDocument?.numPages ?? null,
     fileSizeBytes,
+    hasSelection: hasActiveSelection,
   };
   const currentPageGroupIndex = Math.max(
     0,
@@ -2877,6 +2880,7 @@ export function ReaderContent({
       progress,
       totalPages: pdfDocument?.numPages ?? null,
       fileSizeBytes,
+      hasSelection: hasActiveSelection,
     };
     await emitTo(READER_PANEL_WINDOW_LABEL, READER_PAGE_STATE_CHANGED_EVENT, payload);
   }
@@ -3150,11 +3154,12 @@ export function ReaderContent({
       progress,
       totalPages: pdfDocument?.numPages ?? null,
       fileSizeBytes,
+      hasSelection: hasActiveSelection,
     };
     void emitTo(READER_PANEL_WINDOW_LABEL, READER_PAGE_STATE_CHANGED_EVENT, payload).catch((error) => {
       console.warn("Nao foi possivel sincronizar a pagina atual com a popout.", error);
     });
-  }, [currentPage, document.id, fileSizeBytes, pdfDocument, popoutDocumentId, progress]);
+  }, [currentPage, document.id, fileSizeBytes, hasActiveSelection, pdfDocument, popoutDocumentId, progress]);
   const editingAnnotation = editingAnnotationId ? annotations.find((annotation) => annotation.id === editingAnnotationId) ?? null : null;
   const effectiveNativeFullscreen = isNativeFullscreen || readerNativeFullscreenSessionActive;
 

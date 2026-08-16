@@ -58,6 +58,7 @@ export type ReaderPageStatePayload = ReaderJumpToPagePayload & {
   progress: number;
   totalPages: number | null;
   fileSizeBytes: number | null;
+  hasSelection: boolean;
 };
 
 export type OpenDocumentExternallyError = {
@@ -130,7 +131,7 @@ export function isReaderPageStatePayload(payload: unknown): payload is ReaderPag
   }
 
   const candidate = payload as unknown as Record<string, unknown>;
-  const { progress, totalPages, fileSizeBytes } = candidate;
+  const { progress, totalPages, fileSizeBytes, hasSelection } = candidate;
   const hasValidTotalPages =
     totalPages === null ||
     (typeof totalPages === "number" && Number.isInteger(totalPages) && totalPages > 0);
@@ -144,7 +145,8 @@ export function isReaderPageStatePayload(payload: unknown): payload is ReaderPag
     progress >= 0 &&
     progress <= 100 &&
     hasValidTotalPages &&
-    hasValidFileSize
+    hasValidFileSize &&
+    typeof hasSelection === "boolean"
   );
 }
 
