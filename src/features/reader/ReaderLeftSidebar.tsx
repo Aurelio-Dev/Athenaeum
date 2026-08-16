@@ -7,7 +7,7 @@ import { useInViewport } from "../../hooks/useInViewport";
 import { openDocumentExternally } from "../../lib/database";
 import type { DatabaseHandleSource } from "../../lib/database";
 import type { DocumentBookmark } from "../../types/bookmark";
-import type { LibraryDocument } from "../../types/library";
+import type { DocumentStatus, LibraryDocument } from "../../types/library";
 import type { RegisterPdfCancellation } from "./PdfTextLayer";
 import { DetailsTab, type ReaderDetailsPreload } from "./panels/DetailsTab";
 import { createDocumentTextSearcher, type DocumentSearchResult } from "./pdfTextSearch";
@@ -47,6 +47,7 @@ type ReaderLeftSidebarProps = {
   onUpdateBookmarkLabel: (bookmarkId: string, label: string | null) => Promise<void>;
   onDeleteBookmark: (bookmarkId: string) => Promise<void>;
   onToggleFavorite: () => Promise<void>;
+  onUpdateReadingStatus: (status: DocumentStatus) => Promise<void>;
 };
 
 const tabs: Array<{ id: ReaderSidebarView; label: string }> = [
@@ -512,6 +513,7 @@ export function ReaderLeftSidebar({
   onUpdateBookmarkLabel,
   onDeleteBookmark,
   onToggleFavorite,
+  onUpdateReadingStatus,
 }: ReaderLeftSidebarProps) {
   const [activeView, setActiveView] = useState<ReaderSidebarView>("details");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -755,6 +757,7 @@ export function ReaderLeftSidebar({
       preloadedData={detailsPreload}
       onOpenNotebook={openNotebookWindow}
       onToggleFavorite={onToggleFavorite}
+      onUpdateReadingStatus={onUpdateReadingStatus}
       onOpenExternally={() => openDocumentExternally(document.id)}
       showFooterActions={false}
       onTagsChanged={handleTagsChanged}

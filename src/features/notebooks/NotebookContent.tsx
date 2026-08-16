@@ -465,7 +465,7 @@ function formatNotebookDate(value: string) {
 
 const notebookReadingStatusOptions: Array<{ value: NotebookReadingStatus; label: string }> = [
   { value: "not-started", label: "Não iniciado" },
-  { value: "in-progress", label: "Em progresso" },
+  { value: "in-progress", label: "Em andamento" },
   { value: "completed", label: "Concluído" },
 ];
 

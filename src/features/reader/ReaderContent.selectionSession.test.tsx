@@ -402,6 +402,7 @@ async function mountReader(pageCount: number) {
         onSaveNotes={vi.fn(async () => undefined)}
         onNotesReloaded={vi.fn()}
         onToggleFavorite={vi.fn(async () => undefined)}
+        onUpdateReadingStatus={vi.fn(async () => undefined)}
         readerPanelSize={{ width: 1200, height: 800 }}
         isReaderMaximized={false}
         isActiveForShortcuts={false}

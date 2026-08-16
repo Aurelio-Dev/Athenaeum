@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -18,13 +18,12 @@ import {
   openDocumentExternally,
   READER_DETAILS_CHANGED_EVENT,
   removeDocumentTag,
-  updateDocumentReadingStatus,
   type DatabaseHandleSource,
   type RelatedDocument,
 } from "../../../lib/database";
 import type { DocumentStatus, ReaderDocumentDetails, SubjectTag } from "../../../types/library";
 import { statusTokens } from "../../../styles/designTokens";
-import { BookOpenIcon, ExternalLinkIcon, MoreVerticalIcon } from "./readerPanelIcons";
+import { BookOpenIcon, CheckIcon, ChevronDownIcon, ExternalLinkIcon, MoreVerticalIcon } from "./readerPanelIcons";
 
 // Secoes de informacao do documento usadas pelo painel Detalhes do leitor.
 // Cada secao e autossuficiente em dados quando precisa do banco.
@@ -88,104 +87,137 @@ export function useReaderDetailsInvalidation(documentId: string, reload: () => v
 }
 
 type ReadingStatusCardProps = {
-  documentId: string;
   status: ReaderDocumentDetails["status"];
   progress: number;
-  databaseSource?: DatabaseHandleSource;
   variant?: "default" | "island";
+  // A escrita e a atualizacao do documento vivem no dono do estado
+  // (ReaderWindowRoot). Este card apenas exibe a prop e pede a troca: sem
+  // estado local de status, nao ha como reverter a escolha para um valor
+  // obsoleto depois que a escrita termina.
+  onUpdateReadingStatus: (status: DocumentStatus) => Promise<void>;
 };
 
-type EditableReadingStatus = Extract<DocumentStatus, "not-started" | "in-progress" | "completed">;
+// "Nao iniciado" nao e escolhivel: abrir o documento ja promove
+// not-started -> in-progress (setDocumentReadingStarted), entao a escolha
+// manual seria desfeita na proxima abertura. O valor continua sendo EXIBIDO
+// quando e o status atual do documento.
+type EditableReadingStatus = Extract<DocumentStatus, "in-progress" | "completed">;
 
-const readingStatusOptions: Array<{ status: EditableReadingStatus; label: string }> = [
-  { status: "not-started", label: "Não iniciado" },
-  { status: "in-progress", label: "Em andamento" },
-  { status: "completed", label: "Concluído" },
-];
+const readingStatusOptions: EditableReadingStatus[] = ["in-progress", "completed"];
 
 export function ReadingStatusCard({
-  documentId,
   status,
   progress,
-  databaseSource = "loaded",
   variant = "default",
+  onUpdateReadingStatus,
 }: ReadingStatusCardProps) {
   const normalizedProgress = Math.min(100, Math.max(0, Math.round(progress)));
-  const [selectedStatus, setSelectedStatus] = useState<DocumentStatus>(status);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusError, setStatusError] = useState("");
-  const latestDocumentIdRef = useRef(documentId);
-  latestDocumentIdRef.current = documentId;
+  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
+  const currentToken = statusTokens[status];
 
+  // Fecha o menu em clique fora do controle (scroll nao fecha), mesmo padrao
+  // usado pelo seletor de tags desta mesma tela.
   useEffect(() => {
-    setSelectedStatus(status);
-    setIsSaving(false);
-    setStatusError("");
-  }, [documentId]);
-
-  useEffect(() => {
-    if (!isSaving) {
-      setSelectedStatus(status);
-    }
-  }, [isSaving, status]);
-
-  async function selectReadingStatus(nextStatus: EditableReadingStatus) {
-    if (isSaving || nextStatus === selectedStatus) {
+    if (!isMenuOpen || !containerElement) {
       return;
     }
 
-    const targetDocumentId = documentId;
-    const previousStatus = selectedStatus;
-    setSelectedStatus(nextStatus);
+    function handlePointerDown(event: MouseEvent) {
+      if (containerElement && event.target instanceof Node && !containerElement.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isMenuOpen, containerElement]);
+
+  async function selectReadingStatus(nextStatus: EditableReadingStatus) {
+    setIsMenuOpen(false);
+
+    if (isSaving || nextStatus === status) {
+      return;
+    }
+
     setIsSaving(true);
     setStatusError("");
 
     try {
-      await updateDocumentReadingStatus(targetDocumentId, nextStatus, databaseSource);
+      await onUpdateReadingStatus(nextStatus);
     } catch (error) {
       console.warn("Não foi possível atualizar o status de leitura.", error);
-      if (latestDocumentIdRef.current === targetDocumentId) {
-        setSelectedStatus(previousStatus);
-        setStatusError("Não foi possível atualizar o status de leitura.");
-      }
+      setStatusError("Não foi possível atualizar o status de leitura.");
     } finally {
-      if (latestDocumentIdRef.current === targetDocumentId) {
-        setIsSaving(false);
-      }
+      setIsSaving(false);
     }
   }
 
-  const statusSelector = (
-    <div className="grid gap-1.5" role="group" aria-label="Alterar status de leitura">
-      {readingStatusOptions.map((option) => {
-        const isSelected = option.status === selectedStatus;
-        const token = statusTokens[option.status];
+  const statusControl = (
+    <div
+      ref={setContainerElement}
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && isMenuOpen) {
+          event.stopPropagation();
+          setIsMenuOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isMenuOpen}
+        aria-label={`Status de leitura: ${currentToken.label}. Alterar.`}
+        disabled={isSaving}
+        className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold transition disabled:cursor-wait disabled:opacity-70 ${currentToken.className}`}
+        onClick={() => setIsMenuOpen((current) => !current)}
+      >
+        <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${currentToken.dotClassName}`} />
+        <span>{currentToken.label}</span>
+        <ChevronDownIcon />
+      </button>
 
-        return (
-          <button
-            key={option.status}
-            type="button"
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition disabled:cursor-wait disabled:opacity-70 ${
-              isSelected
-                ? token.className
-                : "bg-[var(--background)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-            }`}
-            aria-pressed={isSelected}
-            disabled={isSaving}
-            onClick={() => void selectReadingStatus(option.status)}
-          >
-            <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${token.dotClassName}`} />
-            <span>{option.label}</span>
-          </button>
-        );
-      })}
+      {isMenuOpen ? (
+        <div
+          role="menu"
+          aria-label="Alterar status de leitura"
+          className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-border-subtle bg-[var(--card)] py-1 shadow-lg"
+        >
+          {readingStatusOptions.map((option) => {
+            const token = statusTokens[option];
+            const isCurrent = option === status;
+
+            return (
+              <button
+                key={option}
+                type="button"
+                role="menuitemradio"
+                aria-checked={isCurrent}
+                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-[var(--muted)]"
+                onClick={() => void selectReadingStatus(option)}
+              >
+                <span aria-hidden="true" className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-primary">
+                  {isCurrent ? <CheckIcon /> : null}
+                </span>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${token.className}`}>
+                  <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${token.dotClassName}`} />
+                  {token.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 
   if (variant === "island") {
     return (
       <section aria-label="Status de leitura">
-        {statusSelector}
+        {statusControl}
         {statusError ? <p className="mt-2 text-xs text-status-red-text" role="alert">{statusError}</p> : null}
         <div className="mt-3 flex items-center gap-4">
           <div className="min-w-0 flex-1">
@@ -201,7 +233,7 @@ export function ReadingStatusCard({
     <section>
       <h2 className={sectionLabelClassName}>Status de leitura</h2>
       <div className="mt-3 rounded-lg border border-border-subtle bg-[var(--background)] px-3 py-3">
-        {statusSelector}
+        {statusControl}
         {statusError ? <p className="mt-2 text-xs text-status-red-text" role="alert">{statusError}</p> : null}
         <div className="mb-2 mt-3 flex items-center justify-end">
           <span className="text-xs tabular-nums text-[var(--muted-foreground)]">{normalizedProgress}%</span>

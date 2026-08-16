@@ -64,7 +64,7 @@ import type {
 } from "../../lib/database";
 import type { Annotation, AnnotationMarkStyle, AnnotationSaveState, HighlightColor } from "../../types/annotation";
 import type { DocumentBookmark } from "../../types/bookmark";
-import type { LibraryDocument, ReadingLocation } from "../../types/library";
+import type { DocumentStatus, LibraryDocument, ReadingLocation } from "../../types/library";
 import { useInViewport } from "../../hooks/useInViewport";
 import { captureSelection, type CapturedSelection, type PageElement } from "./anchor";
 import { HighlightLayer } from "./HighlightLayer";
@@ -160,6 +160,7 @@ type ReaderContentProps = {
   onSaveNotes: (documentId: string, notes: string) => Promise<void>;
   onNotesReloaded: (documentId: string, notes: string) => void;
   onToggleFavorite: (documentId: string) => Promise<void>;
+  onUpdateReadingStatus: (documentId: string, status: DocumentStatus) => Promise<void>;
   readerPanelSize: ReaderContentSize;
   isReaderMaximized: boolean;
   isActiveForShortcuts: boolean;
@@ -606,6 +607,7 @@ export function ReaderContent({
   onSaveNotes,
   onNotesReloaded,
   onToggleFavorite,
+  onUpdateReadingStatus,
   readerPanelSize,
   isReaderMaximized,
   isActiveForShortcuts,
@@ -3399,6 +3401,7 @@ export function ReaderContent({
               onUpdateBookmarkLabel={saveBookmarkLabel}
               onDeleteBookmark={removePageBookmark}
               onToggleFavorite={() => onToggleFavorite(document.id)}
+              onUpdateReadingStatus={(status) => onUpdateReadingStatus(document.id, status)}
             />
           </div>
         ) : null}

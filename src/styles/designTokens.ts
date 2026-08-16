@@ -101,7 +101,7 @@ export function getNextSubjectTagTone(tag: SubjectTag) {
 
 export const statusTokens: Record<DocumentStatus, StatusToken> = {
   "in-progress": {
-    label: "Em progresso",
+    label: "Em andamento",
     className: "bg-primary-soft text-primary-text",
     dotClassName: "bg-primary",
   },

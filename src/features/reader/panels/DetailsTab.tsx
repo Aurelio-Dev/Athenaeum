@@ -16,7 +16,7 @@ import {
   type NotebookOption,
 } from "../../../lib/database";
 import { listen } from "@tauri-apps/api/event";
-import type { ReaderDocumentDetails } from "../../../types/library";
+import type { DocumentStatus, ReaderDocumentDetails } from "../../../types/library";
 import {
   DocumentTagsSection,
   formatFileSize,
@@ -42,6 +42,9 @@ type DetailsTabProps = {
   // exige o titulo pra barra da janela) e quem chama ja o tem carregado.
   onOpenNotebook: (notebookId: number, notebookTitle: string) => void;
   onToggleFavorite: () => Promise<void>;
+  // Persiste o status e atualiza o documento no dono do estado. O card nao
+  // escreve por conta propria (ver ReadingStatusCard).
+  onUpdateReadingStatus: (status: DocumentStatus) => Promise<void>;
   onOpenExternally: () => Promise<void>;
   showFooterActions?: boolean;
   preloadedData?: ReaderDetailsPreload | null;
@@ -122,6 +125,7 @@ export function DetailsTab({
   databaseSource = "loaded",
   onOpenNotebook,
   onToggleFavorite,
+  onUpdateReadingStatus,
   onOpenExternally,
   showFooterActions = true,
   preloadedData = null,
@@ -372,11 +376,10 @@ export function DetailsTab({
 
         <div className="py-5">
           <ReadingStatusCard
-            documentId={document.id}
             status={document.status}
             progress={progress}
-            databaseSource={databaseSource}
             variant="island"
+            onUpdateReadingStatus={onUpdateReadingStatus}
           />
         </div>
 

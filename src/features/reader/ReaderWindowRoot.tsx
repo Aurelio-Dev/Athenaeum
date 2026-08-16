@@ -15,8 +15,9 @@ import {
   setDocumentNote,
   setDocumentReadingLocation,
   setDocumentReadingStarted,
+  updateDocumentReadingStatus,
 } from "../../lib/database";
-import type { LibraryDocument, ReadingLocation } from "../../types/library";
+import type { DocumentStatus, LibraryDocument, ReadingLocation } from "../../types/library";
 import { ReaderContent, type ReaderContentSize } from "./ReaderContent";
 
 type ReaderWindowRootProps = {
@@ -301,6 +302,25 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
     });
   }
 
+  // A escrita vem antes do setBootstrap de proposito: se updateDocumentReadingStatus
+  // lancar, o estado nao e tocado e o card continua exibindo o status persistido.
+  async function updateReadingStatus(targetDocumentId: string, status: DocumentStatus) {
+    const currentDocument = documentRef.current;
+    if (!currentDocument || currentDocument.id !== targetDocumentId) {
+      return;
+    }
+
+    await updateDocumentReadingStatus(targetDocumentId, status, "preloaded");
+    setBootstrap((current) => {
+      if (!current || current.document.id !== targetDocumentId) {
+        return current;
+      }
+      const document = { ...current.document, status };
+      documentRef.current = document;
+      return { ...current, document };
+    });
+  }
+
   let content = (
     <div className="flex h-screen items-center justify-center bg-[var(--background)] text-sm font-semibold text-[var(--muted-foreground)]">
       Carregando...
@@ -321,6 +341,7 @@ export function ReaderWindowRoot({ documentId }: ReaderWindowRootProps) {
         onSaveNotes={saveNotes}
         onNotesReloaded={applyReloadedNotes}
         onToggleFavorite={toggleFavorite}
+        onUpdateReadingStatus={updateReadingStatus}
         readerPanelSize={readerSize}
         isReaderMaximized={bootstrap.opensMaximized}
         isActiveForShortcuts={true}
