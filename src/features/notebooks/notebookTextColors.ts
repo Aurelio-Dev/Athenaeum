@@ -4,6 +4,7 @@ import {
   isTagColorToken,
   type TagColorToken,
 } from "../../lib/tagColors";
+import { prepareCodeElements } from "../reader/richTextShared";
 
 export type NotebookTextColorKind = "highlight" | "color";
 
@@ -304,6 +305,14 @@ export function applyNotebookTextColor(
   root.ownerDocument.execCommand(command, false, commandValue);
 
   normalizeNotebookTextColors(root);
+  // A normalizacao remove cor inline de TODO elemento visitado, inclusive do
+  // <code>, cujo fundo e cor sao estilo de runtime recriado a partir da propria
+  // tag (mesma sequencia da carga inicial do editor). Sem reaplicar aqui, o
+  // bloco de codigo fica sem estilo ate o reload ou a troca de pagina. Nao vale
+  // reaplicar no clone de serializacao: o HTML persistido nao deve carregar
+  // valores de design token. prepareCodeElements so reescreve atributos, entao
+  // repetir a chamada nao duplica estilo nem cria nos.
+  prepareCodeElements(root);
   return restoreSelectionFromMarkers(selection, startMarker, endMarker);
 }
 

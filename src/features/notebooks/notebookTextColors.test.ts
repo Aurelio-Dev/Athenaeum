@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TAG_COLOR_TOKEN_NAMES, TAG_COLOR_TOKENS } from "../../lib/tagColors";
+import { prepareCodeElement } from "../reader/richTextShared";
 import {
   applyNotebookTextColor,
   normalizeNotebookTextColors,
@@ -266,6 +267,50 @@ describe("applyNotebookTextColor", () => {
     expect(editor.querySelector(`[${attribute}="amber"]`)?.textContent).toBe("alvo");
     expect(selection.toString()).toBe("alvo");
     expect(editor.querySelector("h2")?.textContent).toBe("titulo alvo abaixo");
+  });
+
+  it.each([
+    ["aplicar realce", "highlight", "amber"],
+    ["aplicar cor da fonte", "color", "amber"],
+    ["remover realce", "highlight", null],
+    ["remover cor da fonte", "color", null],
+  ] as const)("restaura o estilo de runtime do bloco de codigo depois de %s", (_label, kind, token) => {
+    installExecCommandMock();
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML =
+      '<div><code style="display:block;background:#1E2130;color:#F0E6DC">codigo distante</code>&nbsp;</div>' +
+      "<h2>titulo alvo abaixo</h2>";
+    document.body.append(editor);
+
+    // Referencia produzida pelo mesmo helper: a comparacao nao depende de como
+    // o ambiente serializa o atributo style.
+    const reference = document.createElement("code");
+    prepareCodeElement(reference);
+
+    // A remocao passa pelo mesmo applyNotebookTextColor, com o sentinela
+    // #010203 no lugar do token. Aplicar a cor antes reproduz o fluxo real do
+    // menu: "Remover" so aparece como acao sobre trecho ja colorido.
+    if (token === null) {
+      applyNotebookTextColor(editor, selectText(editor, "alvo"), kind, "amber");
+    }
+
+    const selection = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, selection, kind, token)).not.toBeNull();
+
+    const code = editor.querySelector("code");
+    expect(code?.getAttribute("style")).toBe(reference.getAttribute("style"));
+
+    // Idempotencia: repetir a operacao nao duplica estilo nem cria nos no <code>.
+    const repeated = selectText(editor, "alvo");
+    expect(applyNotebookTextColor(editor, repeated, kind, token)).not.toBeNull();
+
+    expect(editor.querySelectorAll("code")).toHaveLength(1);
+    expect(editor.querySelector("code")?.getAttribute("style")).toBe(reference.getAttribute("style"));
+    expect(editor.querySelector("code")?.childNodes).toHaveLength(1);
+    expect(editor.querySelector("code")?.textContent).toBe("codigo distante");
+    // O sentinela de remocao nunca sobrevive a normalizacao.
+    expect(editor.innerHTML).not.toContain("010203");
   });
 
   it.each([
