@@ -32,6 +32,25 @@ export function HeartIcon({ className, filled = false, size = 18 }: HeartIconPro
   );
 }
 
+export function CheckIcon({ className, size = 18 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.16667"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12.25 3.5L5.25 10.5L1.75 7" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ className, size = 18 }: IconProps) {
   return (
     <svg

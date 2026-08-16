@@ -45,6 +45,7 @@ import {
   setNotebookFavorite,
   updateCollection as updatePersistedCollection,
   updateDocumentMetadata as updatePersistedDocumentMetadata,
+  updateDocumentReadingStatus,
   updateTagTone as updatePersistedTagTone,
 } from "../../lib/database";
 import type { CollectionUpdates, DocumentMetadataUpdates, ListDocumentsOptions } from "../../lib/database";
@@ -526,6 +527,22 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
+  async function toggleReadingCompletion(documentId: string) {
+    const targetDocument = allDocuments.find((currentDocument) => currentDocument.id === documentId);
+
+    if (!targetDocument) {
+      return;
+    }
+
+    const nextStatus =
+      targetDocument.status === "completed"
+        ? (targetDocument.lastOpenedAt ? "in-progress" : "not-started")
+        : "completed";
+
+    await updateDocumentReadingStatus(documentId, nextStatus);
+    await invalidateLibraryQueries();
+  }
+
   async function moveToTrash(documentId: string) {
     await moveDocumentToTrash(documentId);
     await invalidateLibraryQueries();
@@ -922,6 +939,7 @@ export function LibraryView() {
               void updateDocumentMetadata(documentId, { ...updates, tags: selectedDocument.tags })
             }
             onToggleFavorite={(documentId) => void toggleFavorite(documentId)}
+            onToggleReadingCompletion={(documentId) => void toggleReadingCompletion(documentId)}
             onAvailableTagsChange={updateAvailableTags}
             onUpdateNotes={(documentId, notes) => void saveDocumentNote(documentId, notes)}
             onUpdateDocumentTags={(documentId, tags) => void updateDocumentTags(documentId, tags)}

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { IconButton } from "../../components/IconButton";
 import { TagBadge } from "../../components/TagBadge";
-import { HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
+import { CheckIcon, HeartIcon, TrashIcon } from "../../components/ui/SharedIcons";
 import { getNextSubjectTagTone, registerSubjectTagTone, rememberSubjectTagToneAlias } from "../../styles/designTokens";
 import type { LibraryCollection, LibraryDocument, SubjectTag, Tone } from "../../types/library";
 import { DocumentPreview } from "./DocumentPreview";
@@ -17,6 +17,7 @@ type DocumentDetailsPanelProps = {
   onClose: () => void;
   onUpdateDocument: (documentId: string, updates: DocumentMetadataUpdates) => void;
   onToggleFavorite: (documentId: string) => void;
+  onToggleReadingCompletion: (documentId: string) => void;
   onAvailableTagsChange: (tags: SubjectTag[]) => void;
   onUpdateNotes?: (documentId: string, notes: string) => void;
   onUpdateDocumentTags?: (documentId: string, tags: SubjectTag[]) => void;
@@ -139,14 +140,6 @@ function FileTextIcon() {
       <path d="M14 2v6h6" />
       <line x1="8" x2="16" y1="13" y2="13" />
       <line x1="8" x2="16" y1="17" y2="17" />
-    </svg>
-  );
-}
-
-function BookmarkIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
     </svg>
   );
 }
@@ -352,6 +345,7 @@ export function DocumentDetailsPanel({
   onClose,
   onUpdateDocument,
   onToggleFavorite,
+  onToggleReadingCompletion,
   onAvailableTagsChange,
   onUpdateNotes,
   onUpdateDocumentTags,
@@ -636,7 +630,9 @@ export function DocumentDetailsPanel({
                 </span>
                 <span className={sectionLabelClassName}>Progresso de leitura</span>
               </span>
-              <span className="text-sm font-bold text-primary">{document.progress}%</span>
+              <span className="text-sm font-bold text-primary">
+                {document.status === "completed" ? "Concluído" : `${document.progress}%`}
+              </span>
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
               <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, document.progress))}%` }} />
@@ -678,12 +674,15 @@ export function DocumentDetailsPanel({
               </button>
               <button
                 type="button"
-                disabled
-                title="Em breve"
-                className="inline-flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-surface-muted px-4 py-3 text-sm font-bold text-text-secondary opacity-50"
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition ${
+                  document.status === "completed"
+                    ? "bg-status-green text-status-green-text hover:brightness-95"
+                    : "bg-surface-muted text-text-secondary hover:brightness-95"
+                }`}
+                onClick={() => onToggleReadingCompletion(document.id)}
               >
-                <BookmarkIcon />
-                <span>Leitura</span>
+                <CheckIcon />
+                <span>Concluído</span>
               </button>
             </div>
             <button
