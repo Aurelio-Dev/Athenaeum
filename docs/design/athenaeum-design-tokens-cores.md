@@ -1,6 +1,51 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
-> **Changelog 17/08/2026 — Texto secundário sobe para AA em todas as
+> **Changelog 17/08/2026 (tarde) — A correção de contraste da entrada
+> abaixo dessaturava o texto secundário; revertida para hexes fixos que
+> preservam hue/saturação.** `color-mix(in srgb, var(--foreground) 72%,
+> var(--background))` fechava AA (era esse o único critério verificado) mas
+> misturar um tom cromático (`#7A6558`, hue 23°, sat 0.162) com um neutro
+> quase acromático desloca o resultado: o `#57514B` produzido tinha hue 30°
+> e sat 0.074 — **54% menos saturado**. Contra a premissa "warm minimalism,
+> nunca cinza frio" do design system, isso era regressão de identidade, só
+> que invisível a qualquer teste de contraste numérico.
+>
+> **A regra nova, e por que ela existe:** tokens de **texto cromático**
+> (que carregam um matiz de marca, não apenas neutralidade) não usam
+> `color-mix` rumo a um foreground/background quase acromático para gerar
+> escala de contraste. Usam hexes derivados em **HSL**, preservando hue e
+> saturação da cor de origem e variando só luminosidade — como uma escala
+> tonal desenhada à mão. `--border` é a exceção deliberada: é traço/divisor,
+> não texto, e a identidade cromática dele é secundária à presença; segue
+> em `color-mix`.
+>
+> **Valores finais** (tabela completa, com contraste em cada superfície e
+> prova de hue/saturação preservados, na seção "Texto secundário" abaixo):
+>
+> | Token | Nível | Claro | Escuro |
+> | --- | --- | --- | --- |
+> | `--muted-foreground` | 100 | `#665449` | `#9E8878` (inalterado) |
+> | `--muted-foreground` | 110 | `#4B3E36` | `#B5A497` |
+> | `--muted-foreground` | 120 | `#362D27` | `#C9BDB4` |
+> | `--color-sidebar-muted` | 100 | `#665449` | `#9E8878` (inalterado) |
+> | `--color-sidebar-muted` | 110 | `#4B3E36` | `#B09E90` |
+> | `--color-sidebar-muted` | 120 | `#362D27` | `#C4B6AC` |
+>
+> Todos passam AA com margem nas superfícies do próprio tema; nenhum se
+> desvia da cor de origem em mais de 4° de hue ou 0.02 de saturação —
+> ambos travados por teste (`mutedForegroundContrast.test.ts`).
+>
+> Verificado num efeito colateral: `--reader-header-muted` também está sem
+> consumidor (acréscimo à lista de órfãos, ver a entrada de 16/08 sobre o
+> eixo de material, abaixo).
+>
+> ⚠️ A entrada logo abaixo (mesmo dia, de manhã) está **parcialmente
+> superada**: a causa raiz que ela identifica (token validado só contra
+> `--card`) continua correta e é o motivo desta leva inteira existir; os
+> **valores** `#57514B`/`#463F3A`/`#342E29`/`#625149` que ela registra
+> foram substituídos pelos da tabela acima.
+
+> **Changelog 17/08/2026 (manhã) — Texto secundário sobe para AA em todas as
 > superfícies, e o documento passa por uma auditoria contra o código.**
 >
 > **A correção.** `--muted-foreground` no tema claro era o literal
@@ -109,6 +154,18 @@
 > Library — superfícies do app, não chrome sobre conteúdo do usuário, que é
 > exatamente o caso em que a variante de material *deve* ser seguida. Ficam
 > como estão até lá; **não remover**.
+>
+> **Um oitavo órfão, sem relação com o eixo de material:**
+> `--reader-header-muted` tem zero consumidores em `.tsx` — achado da
+> auditoria de 17/08/2026, registrado aqui e não corrigido. Diferente dos
+> sete acima, não há destino conhecido para ele.
+>
+> ⚠️ Verificação rápida ao registrar este item encontrou algo maior, fora
+> do escopo desta correção: `ReaderChrome.tsx` não usa **nenhum** token
+> `--reader-header-*` — consome `--reader-chrome-divider` e
+> `--reader-floating-shadow`, de uma família de nomes diferente. Não
+> investiguei se é a família inteira (11 tokens) que ficou órfã ou só
+> parte dela. Fica para uma auditoria própria, não expandida aqui.
 >
 > **Consequência: a conversão de ícones e rótulos foi revertida.** Como a
 > ilha volta a ser escura sempre, os brancos e o `#9E8878` do componente
@@ -770,62 +827,112 @@ Pior caso é Red a 6.47:1 — todos folgados acima do mínimo de 4.5:1.
 > em `--card` e falhava em quatro das outras cinco. Ao mexer neste token,
 > verifique a tabela completa abaixo — não só `--card`.
 
-**Modo claro** — `--muted-foreground`, derivado:
+> ⚠️ **REGRA: não usar `color-mix` para derivar este token.** A primeira
+> correção do bug acima (17/08/2026, manhã) usou
+> `color-mix(in srgb, var(--foreground) 72%, var(--background))`, que
+> fechava AA mas **dessaturava o tom**: hue `23°` → `30°`, saturação
+> `0.162` → `0.074` — perda de 54%. `color-mix(in srgb, ...)` interpola
+> linear nos canais R/G/B gama-codificados, não em HSL; misturar um tom
+> cromático com um neutro quase acromático sempre puxa para cinza. Numa
+> paleta cuja premissa é "warm minimalism, nunca cinza frio" (ver
+> Contexto, acima), isso é regressão de identidade — e um teste de
+> contraste numérico **não pega isso sozinho**, porque o valor dessaturado
+> ainda passava AA. Foi corrigido horas depois (mesmo dia) derivando os
+> hexes em HSL a partir da cor de origem, preservando hue/saturação e
+> variando só luminosidade. `--border` é a exceção deliberada: é traço
+> fino/divisor, não texto, e continua em `color-mix` — a identidade
+> cromática importa para o que se lê, não para o que separa.
+
+**Modo claro** — `--muted-foreground`, hex fixo, derivado em HSL a partir de
+`#7A6558` (hue 22.9°, sat 0.162), preservando hue/saturação e variando só a
+luminosidade:
 
 ```css
-color-mix(in srgb, var(--foreground) 72%, var(--background))  /* = #57514B */
+--muted-foreground: #665449;
 ```
 
 Era o literal `#7A6558` (que por sua vez corrigiu um `#8B7263` ainda pior,
-em 30/06). Passou a ser derivado em 17/08/2026 para fechar AA nas seis
-superfícies. **Não usar tom mais claro que este.**
+em 30/06), depois brevemente um `color-mix` dessaturado (ver regra acima).
+`#665449` fecha AA nas seis superfícies preservando o tom. **Não usar tom
+mais claro que este.**
 
-| Superfície | Valor | `#57514B` (hoje) | `#7A6558` (antes) |
+| Superfície | Valor | `#665449` (hoje) | `#7A6558` (original) |
 | --- | --- | --- | --- |
-| `--background` / `surface-app` | `#F5EDE4` | 6.76:1 ✅ | 4.73:1 ✅ |
-| `--card` / `surface-card`, `surface-panel` | `#FAF5EF` | 7.23:1 ✅ | 5.06:1 ✅ |
-| `--sidebar` | `#EDE5DA` | 6.27:1 ✅ | **4.39:1** ❌ |
-| `--muted` / `surface-muted` | `#EDE5DA` | 6.27:1 ✅ | **4.39:1** ❌ |
-| `--input` / `surface-subtle` | `#EDE5DA` | 6.27:1 ✅ | **4.39:1** ❌ |
-| `--color-sidebar-raised` | `#D8CCBD` | 4.95:1 ✅ | **3.47:1** ❌ |
-| `--notebook-focus-bar-bg` | `#F6F0E8` | 6.91:1 ✅ | 4.83:1 ✅ |
+| `--background` / `surface-app` | `#F5EDE4` | 6.18:1 ✅ | 4.73:1 ✅ |
+| `--card` / `surface-card`, `surface-panel` | `#FAF5EF` | 6.61:1 ✅ | 5.06:1 ✅ |
+| `--sidebar` | `#EDE5DA` | 5.74:1 ✅ | **4.39:1** ❌ |
+| `--muted` / `surface-muted` | `#EDE5DA` | 5.74:1 ✅ | **4.39:1** ❌ |
+| `--input` / `surface-subtle` | `#EDE5DA` | 5.74:1 ✅ | **4.39:1** ❌ |
+| `--color-sidebar-raised` | `#D8CCBD` | 4.54:1 ✅ | **3.47:1** ❌ |
+| `--notebook-focus-bar-bg` | `#F6F0E8` | 6.33:1 ✅ | 4.83:1 ✅ |
 
 As três superfícies que falhavam não eram casos de borda: a pílula "+N" de
 tags extras vive sempre sobre `--muted`, o hover da list row troca o fundo
-para `--muted`, e o hover dos itens da sidebar usa `--color-sidebar-raised`.
+para `--muted`, e o hover dos itens da sidebar usa `--color-sidebar-raised`
+— que também é o pior caso do tom corrigido (4.54:1, a margem mais estreita
+das sete).
 
 **Modo escuro** — sobre `--card` `#231C16`:
 
-- Cor: `#9E8878` _(sem alteração — já passava nas seis)_
+- Cor: `#9E8878` _(sem alteração — já passava nas seis; hue 25.3°, sat
+  0.164, mesma família de origem que o claro)_
 - Contraste: 5.00:1 sobre `--card`; pior superfície 4.68:1 (`--muted`
   `#2E2018`)
 - **Não usar tom mais claro que este.**
 
-**`--color-sidebar-muted`** é um token separado, com o mesmo histórico: era
-`#7A6558` e falhava nas duas superfícies da sidebar. Hoje no claro é
-`color-mix(in srgb, var(--color-sidebar-text) 72%, var(--sidebar))` =
-`#625149`, fechando em 6.02:1 sobre `--sidebar` e 4.76:1 sobre
-`--color-sidebar-raised`. No escuro segue `#9E8878`.
+**`--color-sidebar-muted`** é um token separado, com o mesmo histórico e a
+mesma correção: era `#7A6558` e falhava nas duas superfícies da sidebar. Hoje
+no claro é o hex fixo `#665449` — **o mesmo valor** de `--muted-foreground`,
+não por acaso: os dois nascem do mesmo hue/sat de origem, e o par de
+superfícies mais restritivo em ambos os casos é o mesmo
+(`--color-sidebar-raised`). Fecha 5.74:1 sobre `--sidebar` e 4.54:1 sobre
+`--color-sidebar-raised`. No escuro segue `#9E8878` (5.00:1 / 5.66:1).
 
 `src/styles/mutedForegroundContrast.test.ts` lê o `index.css` e recalcula
-esta tabela a cada `npm test` — baixar a porcentagem quebra o teste.
+contraste **e** hue/saturação a cada `npm test` — o segundo é o que trava a
+regressão de identidade que o teste de contraste sozinho deixou passar.
 
 ### Níveis de "Contraste da interface"
 
-O stepper de Ajustes › Aparência redefine `--muted-foreground`, `--border` e
-`--color-sidebar-muted` por `color-mix`, não por filtro CSS. **100 é o piso,
-não o meio.** Havia um nível 90 que levava as seis superfícies a 2.95:1–3.74:1
-— um controle de contraste cujo mínimo reduzia contraste abaixo do legível.
+O stepper de Ajustes › Aparência redefine `--muted-foreground` e
+`--color-sidebar-muted` por hex fixo (derivado em HSL, ver regra acima) e
+`--border` por `color-mix` (inalterado — não é texto). **100 é o piso, não o
+meio.** Havia um nível 90 que levava as seis superfícies a 2.95:1–3.74:1 — um
+controle de contraste cujo mínimo reduzia contraste abaixo do legível.
 Removido em 17/08/2026.
 
-| Nível | Mix | Valor no claro | Pior superfície |
-| --- | --- | --- | --- |
-| 100 (default) | 72% | `#57514B` | 4.96:1 |
-| 110 | 80% | `#463F3A` | 6.51:1 |
-| 120 | 88% | `#342E29` | 8.46:1 |
+Como hex fixo não se adapta a `--foreground`/`--background` como o mix
+fazia, cada nível tem blocos **separados por tema**:
+`html[data-ui-contrast="N"]` para o claro e
+`.dark[data-ui-contrast="N"]` para o escuro (vence por especificidade, mesmo
+padrão do eixo de material). Travado por teste: todo nível claro tem de ter
+o par escuro correspondente.
 
-Um nível novo tem de ficar **acima** do anterior e passar AA nas sete
-superfícies. Os dois requisitos são travados por teste.
+| Nível | `--muted-foreground` claro | Pior claro | `--muted-foreground` escuro | Pior escuro |
+| --- | --- | --- | --- | --- |
+| 100 (default) | `#665449` | 4.54:1 | `#9E8878` (inalterado) | 4.68:1 |
+| 110 | `#4B3E36` | 6.51:1 | `#B5A497` | 6.53:1 |
+| 120 | `#362D27` | 8.51:1 | `#C9BDB4` | 8.55:1 |
+
+`--color-sidebar-muted` sobre as suas duas superfícies (`--sidebar` e
+`--color-sidebar-raised`):
+
+| Nível | Claro | Pior claro | Escuro | Pior escuro |
+| --- | --- | --- | --- | --- |
+| 100 (default) | `#665449` | 4.54:1 | `#9E8878` (inalterado) | 5.00:1 |
+| 110 | `#4B3E36` | 6.51:1 | `#B09E90` | 6.52:1 |
+| 120 | `#362D27` | 8.51:1 | `#C4B6AC` | 8.51:1 |
+
+No escuro os dois tokens **divergem** a partir do 110 — `--color-sidebar-muted`
+só precisa satisfazer duas superfícies mais escuras que o pior caso de
+`--muted-foreground` (`--muted`/`--input`, mais claro que `--sidebar`/
+`--card`), então a mesma meta de contraste é alcançada com menos
+luminosidade. No claro os dois convergem para os mesmos três hexes porque a
+superfície mais restritiva (`--color-sidebar-raised`) é compartilhada.
+
+Um nível novo tem de ficar **acima** do anterior, passar AA nas superfícies
+do seu tema, **e** manter hue/saturação a até 4° e 0.02 da cor de origem. Os
+três requisitos são travados por teste.
 
 ## Texto principal e seleção na biblioteca
 
@@ -956,7 +1063,7 @@ são dois sistemas sobrepostos).
 | `accent-icon-amber`          | `#F59E0B`                                                         | Borda de destaque do aviso de exportação grande no Caderno (`NotebookContent.tsx:2405`). ⚠️ Descrito como "ícone Marcar ativo na toolbar de seleção" até 17/08/2026 — a `SelectionToolbar` **nunca** consumiu este token; seu estado ativo usa `text-white`. |
 | `accent-tint-bg`             | `#EFE2D8`                                                         | Fundo de destaque em estado "ativo" de botões de ferramenta (ex: toolbar do Quadro) — tint sutil de terracota sobre o accent. Diferente do fill sólido das tags: aqui o texto/ícone continua na cor accent por cima, não branco. |
 | `sidebar-text`               | claro `#2C1810`; escuro `#F0E8DF`                                 | Texto principal da sidebar, título `Athenaeum`, título da coleção aberta e itens selecionados da navegação/biblioteca.                                                                                                           |
-| `sidebar-muted`              | claro `#625149` (derivado); escuro `#9E8878`                      | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação. Vive sobre `--sidebar` **e** `--color-sidebar-raised` (hover) — era `#7A6558` e falhava AA nas duas até 17/08/2026.                          |
+| `sidebar-muted`              | claro `#665449` (hex fixo, derivado em HSL); escuro `#9E8878`     | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação. Vive sobre `--sidebar` **e** `--color-sidebar-raised` (hover) — era `#7A6558` e falhava AA nas duas até 17/08/2026.                          |
 | `document-cover-hue`         | hue derivado do documento                                         | Base determinística das miniaturas de documento; o hue é estável por documento e a saturação/luminosidade mudam por tema.                                                                                                        |
 | `document-cover-swatch`      | claro `hsl(hue 28% 74%)`; escuro `hsl(hue 30% 18%)`               | Fundo principal da área de preview dos cards de documento.                                                                                                                                                                       |
 | `document-cover-line`        | claro `hsl(hue 28% 34% / 0.24)`; escuro `rgb(255 255 255 / 0.08)` | Linhas secundárias internas das miniaturas.                                                                                                                                                                                      |
@@ -980,7 +1087,7 @@ Aplique esses tokens de cor em todas as tags, badges de status e texto
 secundário, substituindo as cores pastel/fill-sólido atuais:
 
 TEXTO SECUNDÁRIO (metadados, datas, percentuais):
-- Modo claro: #57514B
+- Modo claro: #665449
 - Modo escuro: #9E8878
 Não usar tom mais claro que esses — são o limite mínimo aceitável.
 Esse tom aparece sobre SEIS superfícies diferentes, não só sobre o card.
@@ -1011,7 +1118,7 @@ athenaeum-design-tokens-cores.md to all tags, status badges, and
 secondary text.
 
 Secondary text (metadata, dates, percentages):
-- Light mode: #57514B
+- Light mode: #665449
 - Dark mode: #9E8878
 Do not lighten these tones even if it looks "nicer" — this breaks the
 calculated WCAG AA contrast. This tone sits on SIX different surfaces, not

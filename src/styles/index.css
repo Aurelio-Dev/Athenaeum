@@ -95,18 +95,18 @@
   /* Texto */
   --foreground: #1A1410;
   --card-foreground: #1A1410;
-  /* Texto secundario do tema claro. Era o literal #7A6558, validado APENAS
-     contra --card (5.06:1) — mas o token e usado sobre SEIS superficies, e
-     falhava AA em quatro delas: --sidebar/--muted/--input (#EDE5DA, 4.39:1)
-     e --color-sidebar-raised (#D8CCBD, 3.47:1), esta ultima a pior da tela.
-     Agora e derivado, no mesmo formato dos niveis de contraste abaixo, para
-     que a base e os niveis vivam na mesma escala. 72% da #57514B e fecha a
-     pior superficie em 4.95:1. O minimo que limparia #D8CCBD seria 70%; os
-     dois pontos extras sao a folga. Ver a tabela das seis superficies em
-     docs/design/athenaeum-design-tokens-cores.md.
-     O tema ESCURO nao muda: o .dark abaixo fixa #9E8878, que ja passa nas
-     seis. */
-  --muted-foreground: color-mix(in srgb, var(--foreground) 72%, var(--background));
+  /* Texto secundario do tema claro. HEX FIXO, nao color-mix — ver o porque
+     no bloco de comentario grande logo acima da regra html[data-ui-contrast]
+     abaixo desta folha: resumindo, color-mix(--foreground, --background)
+     dessatura o tom (hue 23° -> 30°, sat 0.162 -> 0.074), o que quebra a
+     premissa "warm minimalism, nunca cinza frio" do design system.
+     #665449 preserva hue/sat do #7A6558 original (hue 22.8°, sat 0.166,
+     contra hue 22.94°/sat 0.162 da origem) e fecha AA nas seis superficies —
+     pior caso 4.54:1 sobre --color-sidebar-raised (#D8CCBD). Tabela completa
+     em docs/design/athenaeum-design-tokens-cores.md.
+     O tema ESCURO nao muda de mecanismo: o .dark abaixo fixa #9E8878, que ja
+     passa nas seis (pior 4.68:1). */
+  --muted-foreground: #665449;
 
   /* Accent */
   --primary: #9C5A2E;
@@ -154,11 +154,18 @@
      "Ajustes"). O cabecalho "MINHA BIBLIOTECA" e mantido em #9E8878 via
      classe propria. No escuro fica #9E8878 (override no .dark), onde
      escurecer sobre o fundo escuro pioraria a legibilidade.
+     HEX FIXO, mesmo racional de --muted-foreground acima (color-mix rumo a
+     um foreground dessatura o tom). Derivado do MESMO par hue/sat do
+     #7A6558 original (nao de --color-sidebar-text), porque a identidade
+     cromatica que importa preservar aqui e a do tom secundario, nao a do
+     texto principal da sidebar.
      Este token vive sobre DUAS superficies — --sidebar no repouso e
-     --color-sidebar-raised no hover/ativo — e o literal #7A6558 anterior
-     falhava nas duas (4.39:1 e 3.47:1). 72% da #625149 e fecha em 6.02:1 e
-     4.76:1. O minimo que limparia as duas seria 71%. */
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 72%, var(--sidebar));
+     --color-sidebar-raised no hover/ativo. A busca por L minimo que fecha
+     as duas converge no MESMO #665449 de --muted-foreground: nao e
+     coincidencia nem copia — os dois nascem do mesmo hue/sat e o par de
+     superficies mais restritivo em ambos os casos e o mesmo
+     (--color-sidebar-raised #D8CCBD). Pior caso aqui: 4.54:1. */
+  --color-sidebar-muted: #665449;
   /* Linhas internas secundarias do icone de busca sem resultados. */
   --color-empty-state-detail: #D9C5B4;
 
@@ -508,19 +515,58 @@
    --muted-foreground para mix 46% e levava as seis superfícies claras a
    2.95:1–3.74:1 — um controle de contraste que reduzia contraste abaixo do
    mínimo legível. Foi removido: 100 é o piso, e os níveis só sobem a partir
-   dele. Ao adicionar um nível novo, ele tem de ficar ACIMA do anterior e
-   passar AA nas sete superfícies (ver mutedForegroundContrast.test.ts, que
-   trava as duas coisas). */
+   dele.
+
+   POR QUE --muted-foreground E --color-sidebar-muted NÃO USAM color-mix
+   NESTES NÍVEIS (embora --border continue usando):
+   color-mix(in srgb, ...) interpola linearmente nos canais R/G/B
+   gama-codificados — não em HSL. Isso NÃO preserva matiz nem saturação:
+   misturar #7A6558 (hue 23°, sat 0.162) com um neutro quase acromático
+   (--foreground #1A1410, sat ~0.09) desloca o resultado para hue 30° e
+   dessatura para sat 0.074 — perda de 54% da saturação original. Numa
+   paleta cuja premissa é "warm minimalism, nunca cinza frio", isso é
+   regressão de identidade, não só uma questão de contraste — foi
+   descoberta assim, por inspeção visual, depois que o mix já passava em
+   todos os testes de contraste numérico.
+   --border não tem esse problema porque é usado como traço fino/divisor,
+   não como texto: a leitura de "cor" nele é secundária à de "presença", e
+   ele já era color-mix desde antes desta correção sem queixa de identidade.
+
+   Os hexes abaixo são derivados em HSL a partir da ORIGEM real de cada
+   token (#7A6558 para --muted-foreground/--color-sidebar-muted no claro,
+   #9E8878 no escuro), preservando hue e saturação e variando só a
+   luminosidade — a mesma lógica de uma escala tonal desenhada à mão.
+   Como hex fixo não se adapta a --foreground/--background como o mix
+   fazia, os dois temas precisam de blocos SEPARADOS aqui: os deste bloco
+   (sem .dark) valem para o claro; os blocos .dark[data-ui-contrast="N"]
+   abaixo vencem no escuro por especificidade (0,2,1 contra 0,1,1), mesmo
+   padrão já usado pelo eixo de material. --border continua num único
+   bloco por nível: o mix nele resolve corretamente nos dois temas porque
+   var(--foreground)/var(--background) já mudam de valor dentro de .dark.
+
+   Tabela completa de contraste e a prova de hue/saturação preservados:
+   docs/design/athenaeum-design-tokens-cores.md. Trava por teste:
+   mutedForegroundContrast.test.ts. */
 html[data-ui-contrast="110"] {
-  --muted-foreground: color-mix(in srgb, var(--foreground) 80%, var(--background));
+  --muted-foreground: #4B3E36;
+  --color-sidebar-muted: #4B3E36;
   --border: color-mix(in srgb, var(--foreground) 30%, var(--background));
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 80%, var(--sidebar));
 }
 
 html[data-ui-contrast="120"] {
-  --muted-foreground: color-mix(in srgb, var(--foreground) 88%, var(--background));
+  --muted-foreground: #362D27;
+  --color-sidebar-muted: #362D27;
   --border: color-mix(in srgb, var(--foreground) 40%, var(--background));
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 88%, var(--sidebar));
+}
+
+.dark[data-ui-contrast="110"] {
+  --muted-foreground: #B5A497;
+  --color-sidebar-muted: #B09E90;
+}
+
+.dark[data-ui-contrast="120"] {
+  --muted-foreground: #C9BDB4;
+  --color-sidebar-muted: #C4B6AC;
 }
 
 * {
