@@ -153,6 +153,12 @@ Principais áreas do schema:
 - quadros e seus arquivos
 - configurações do aplicativo
 
+Migrations são forward-only e nunca são reescritas. Como o banco de
+produção só recebe as novas, o caminho "banco vazio rodando `v1..v23` em
+sequência" só é exercitado ao criar um banco do zero — use
+`npm run dev:reset && npm run tauri:dev` para isso, e não a sua
+biblioteca real.
+
 ## Pré-requisitos
 
 - [Node.js](https://nodejs.org/) (LTS) + npm
@@ -173,6 +179,11 @@ npm run tauri dev
 
 A primeira execução compila as dependências Rust — pode demorar alguns
 minutos. As próximas são bem mais rápidas.
+
+`npm run tauri dev` usa a **sua biblioteca real**. Para teste manual —
+abrir documentos, aplicar realces, importar PDFs — use
+`npm run tauri:dev`, que roda em um perfil de dados descartável; veja
+[Perfil de desenvolvimento isolado](#perfil-de-desenvolvimento-isolado).
 
 ### Fontes
 
@@ -218,7 +229,9 @@ exceções do `.gitignore`.
 
 | Comando | O que faz |
 | --- | --- |
-| `npm run tauri dev` | Sobe o app completo (frontend + shell Tauri) em modo desenvolvimento |
+| `npm run tauri dev` | Sobe o app completo (frontend + shell Tauri) em modo desenvolvimento — **usa os dados reais** |
+| `npm run tauri:dev` | Igual, mas em um **perfil de dados isolado e descartável** (ver abaixo) |
+| `npm run dev:reset` | Apaga o perfil de dados de desenvolvimento |
 | `npm run tauri build` | Gera o binário/instalador de produção |
 | `npm run dev` | Sobe só o frontend (Vite), sem a janela do Tauri |
 | `npm run build` | Type-check (`tsc --noEmit`) + build do frontend |
@@ -229,6 +242,50 @@ exceções do `.gitignore`.
 `npm run dev` sobe só o frontend (Vite) — sem os comandos nativos,
 SQLite e acesso a filesystem que dependem do ambiente Tauri. Para
 funcionalidade completa, use `npm run tauri dev`.
+
+### Perfil de desenvolvimento isolado
+
+> [!WARNING]
+> **`npm run tauri dev` escreve na sua biblioteca real.** Ele usa o mesmo
+> `identifier` da build instalada, então abre o mesmo SQLite e a mesma
+> pasta de PDFs. Qualquer teste manual — abrir um documento, aplicar um
+> realce, importar um PDF — vira dado permanente. Só abrir um documento
+> já grava `last_opened_at`.
+>
+> **Para teste manual, use `npm run tauri:dev`.**
+
+`npm run tauri:dev` sobe o app com o `identifier`
+`io.github.aurelio-dev.athenaeum.dev`, definido no overlay
+`src-tauri/tauri.dev.conf.json`. Isso troca os dois diretórios de dados
+de uma vez, sem tocar em nenhum código do app:
+
+| | Produção | Desenvolvimento |
+| --- | --- | --- |
+| SQLite e PDFs | `%APPDATA%\io.github.aurelio-dev.athenaeum\` | `…athenaeum.dev\` |
+| Perfil do WebView2 (`localStorage`) | `%LOCALAPPDATA%\io.github.aurelio-dev.athenaeum\` | `…athenaeum.dev\` |
+
+O banco de desenvolvimento nasce vazio e roda as migrations `v1..v23` do
+zero — é também o único jeito prático de exercitar esse caminho, já que
+o banco de produção nunca é recriado.
+
+```bash
+npm run tauri:dev   # sobe no perfil descartável
+npm run dev:reset   # apaga o perfil; o próximo tauri:dev recria do zero
+```
+
+`npm run dev:reset` lê o `identifier` do próprio overlay e **se recusa a
+rodar** se ele não terminar em `.dev` — a guarda existe para que um
+overlay editado por engano não apague a biblioteca real. Feche o app
+antes de rodar o reset.
+
+**O overlay não afeta build de produção.** Ele só é aplicado quando
+passado explicitamente via `--config`, o que só o script `tauri:dev`
+faz. O nome do arquivo também não é um dos que o Tauri mescla
+automaticamente (`tauri.windows.conf.json`, `tauri.macos.conf.json`,
+`tauri.linux.conf.json`, `tauri.android.conf.json`,
+`tauri.ios.conf.json`). Verificado inspecionando os artefatos: o
+`app.exe`, o `.wxs` do WiX, o `.msi` e o instalador NSIS gerados pelo
+caminho de produção contêm zero ocorrências do identifier `.dev`.
 
 Os testes com Vitest cobrem, entre outras áreas, o parser de diagramas,
 análise de grafos, escalas e dimensões de figuras, geração de SVG
