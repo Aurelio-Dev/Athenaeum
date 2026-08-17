@@ -107,6 +107,7 @@ describe("contraste do texto secundario no tema claro", () => {
     const niveis = [
       { rotulo: "100 (base)", bloco: ":root" },
       { rotulo: "110", bloco: 'html[data-ui-contrast="110"]' },
+      { rotulo: "120", bloco: 'html[data-ui-contrast="120"]' },
     ];
 
     let anterior = 0;
@@ -123,6 +124,35 @@ describe("contraste do texto secundario no tema claro", () => {
       const pior = Math.min(...superficiesClaras.map(([, superficie]) => contraste(cor, superficie)));
       expect(pior, `nivel ${nivel.rotulo}, cor ${cor}`).toBeGreaterThanOrEqual(AA_TEXTO_NORMAL);
     }
+  });
+
+  it("nao existe nivel de contraste abaixo do default", () => {
+    // O nivel 90 levava as superficies claras a 2.95:1-3.74:1. Se voltar — por
+    // reversao ou por copiar-colar de um bloco vizinho — o teste barra aqui.
+    expect(css).not.toContain('html[data-ui-contrast="90"]');
+
+    const blocos = [...css.matchAll(/html\[data-ui-contrast="(\d+)"\]/g)].map((m) => Number(m[1]));
+    expect(blocos.length).toBeGreaterThan(0);
+    for (const nivel of blocos) {
+      expect(nivel, "todo nivel declarado tem de estar acima do default 100").toBeGreaterThan(100);
+    }
+  });
+
+  it("todo nivel declarado no CSS tem opcao no stepper, e vice-versa", () => {
+    // Um bloco CSS sem opcao no stepper e codigo morto; uma opcao sem bloco
+    // aplica o default silenciosamente e o usuario ve o numero mudar sem efeito.
+    const doCss = [...css.matchAll(/html\[data-ui-contrast="(\d+)"\]/g)].map((m) => Number(m[1])).sort((a, b) => a - b);
+
+    const hook: string = readFileSync(new URL("../hooks/useAppearancePreferences.tsx", import.meta.url), "utf8");
+    const declaradas = hook.match(/uiContrastOptions: readonly UiContrast\[\] = \[([^\]]+)\]/);
+    expect(declaradas, "uiContrastOptions nao encontrado no hook").not.toBeNull();
+
+    const doStepper = declaradas![1].split(",").map((n) => Number(n.trim())).sort((a, b) => a - b);
+
+    // O default 100 nao tem bloco proprio de proposito: ele E a ausencia de
+    // override, definida no :root. Os demais precisam de bloco.
+    expect(doStepper[0], "o primeiro nivel do stepper e o default 100").toBe(100);
+    expect(doCss).toEqual(doStepper.slice(1));
   });
 
   it("o tema escuro segue nos literais, sem passar pelo mix da base", () => {

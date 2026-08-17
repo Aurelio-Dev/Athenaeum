@@ -502,20 +502,25 @@
 
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam
    somente tons secundários e bordas, sem filtros que alterariam imagens ou
-   criariam novos contextos de empilhamento para os painéis flutuantes. */
-html[data-ui-contrast="90"] {
-  --muted-foreground: color-mix(in srgb, var(--foreground) 46%, var(--background));
-  --border: color-mix(in srgb, var(--foreground) 12%, var(--background));
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 44%, var(--sidebar));
-}
+   criariam novos contextos de empilhamento para os painéis flutuantes.
 
-/* O nivel 110 tem de ficar ACIMA da base. Quando a base subiu para 72%, os
-   68%/70% que este bloco usava passaram a ser MENOS contraste que o nivel
-   100 — o rotulo "110" renderizaria mais claro que o default. Subiu junto. */
+   NÃO EXISTE nível abaixo de 100. Havia um nível 90 que derrubava
+   --muted-foreground para mix 46% e levava as seis superfícies claras a
+   2.95:1–3.74:1 — um controle de contraste que reduzia contraste abaixo do
+   mínimo legível. Foi removido: 100 é o piso, e os níveis só sobem a partir
+   dele. Ao adicionar um nível novo, ele tem de ficar ACIMA do anterior e
+   passar AA nas sete superfícies (ver mutedForegroundContrast.test.ts, que
+   trava as duas coisas). */
 html[data-ui-contrast="110"] {
   --muted-foreground: color-mix(in srgb, var(--foreground) 80%, var(--background));
   --border: color-mix(in srgb, var(--foreground) 30%, var(--background));
   --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 80%, var(--sidebar));
+}
+
+html[data-ui-contrast="120"] {
+  --muted-foreground: color-mix(in srgb, var(--foreground) 88%, var(--background));
+  --border: color-mix(in srgb, var(--foreground) 40%, var(--background));
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 88%, var(--sidebar));
 }
 
 * {
