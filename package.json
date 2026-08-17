@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "dev:reset": "node scripts/reset-dev-profile.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
