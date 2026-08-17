@@ -1,5 +1,53 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 17/08/2026 — Texto secundário sobe para AA em todas as
+> superfícies, e o documento passa por uma auditoria contra o código.**
+>
+> **A correção.** `--muted-foreground` no tema claro era o literal
+> `#7A6558`, validado nesta página **apenas contra `--card`** (5.06:1). O
+> token é usado sobre **seis** superfícies, e falhava AA em quatro:
+> `--sidebar`/`--muted`/`--input` (`#EDE5DA`, 4.39:1) e
+> `--color-sidebar-raised` (`#D8CCBD`, 3.47:1). Não eram casos de borda —
+> a pílula "+N" de tags vive sempre sobre `--muted`, o hover da list row
+> troca o fundo para `--muted`, e o hover da sidebar usa
+> `--color-sidebar-raised`. Hoje o token é derivado
+> (`color-mix(--foreground 72%, --background)` = `#57514B`) e fecha a pior
+> superfície em 4.95:1. `--color-sidebar-muted` recebeu o mesmo tratamento.
+> O tema escuro não mudou: já passava nas seis.
+>
+> **A causa raiz é documental**, e por isso está registrada aqui: validar
+> um token contra uma única superfície, quando ele é usado em seis, foi o
+> que deixou o bug passar meses. A seção "Texto secundário" agora traz a
+> tabela completa, e um teste (`mutedForegroundContrast.test.ts`) lê o
+> `index.css` e recalcula a cada `npm test`.
+>
+> **O nível 90 de "Contraste da interface" foi removido.** Ele derrubava
+> as seis superfícies para 2.95:1–3.74:1 — o valor mínimo de um controle
+> de contraste reduzindo contraste abaixo do legível, contra a regra desta
+> própria página ("não usar tom mais claro que este"). Os níveis passam a
+> ser 100 / 110 / 120, com 100 como piso.
+>
+> **Correções de auditoria nesta mesma leva** (o documento é usado para
+> escrever briefs, então afirmação não verificada aqui propaga erro):
+>
+> | Item | O que estava escrito | O que o código faz |
+> | --- | --- | --- |
+> | `accent-icon-amber` | ícone "Marcar" da `SelectionToolbar` | borda do aviso de export do Caderno; a toolbar **nunca** usou o token |
+> | `icon_variant` | feature entregue, persistida e propagada | **nunca existiu** — entrada retratada |
+> | `surface-header` | fundo do header/top bar | só o toast de carregamento do Quadro |
+> | nota do Excalidraw | limitação ativa | resolvida pela migração para Konva |
+> | mapeamento palavra-chave→cor | um sistema, 23 palavras | **dois** sistemas; as pílulas da Library usam 6 palavras + substring + hash |
+>
+> Registrados também: os 7 tokens `--glass-*` que ficaram órfãos após a
+> reversão de 16/08 (com destino conhecido — não remover), e o hash de cor
+> de tag ser sensível à caixa, o que contradiz a regra 2 desta página e
+> fica como limitação conhecida.
+>
+> **Fora do escopo desta leva, para levas próprias:** os hex hardcoded da
+> Library (`#2C1810`/`#F0E8DF` em 9 lugares ignorando
+> `--color-sidebar-text`, `#EF4444`, `bg-white`, os 4 hex do botão "+ Tag"),
+> a correção do hash sensível à caixa, e o consumo dos tokens glass.
+
 > **Changelog 16/08/2026 — O chrome flutuante do Reader permanece escuro
 > no material glass. Revisão da entrada anterior.** A decisão registrada
 > logo abaixo — a ilha da `SelectionToolbar` seguir a variante de
@@ -46,6 +94,21 @@
 > O nome diz o contrato: `immersive`, não `elevated`. Reaproveitar
 > `--glass-surface-elevated` aqui reintroduziria o problema no dia em que
 > a variante clara mudasse.
+>
+> **Efeito colateral desta reversão: 7 dos 12 tokens `--glass-*` ficaram
+> sem consumidor.** Como a ilha passou a usar só o trio `--glass-immersive-*`,
+> estes continuam definidos nos dois blocos de tema, com valor e regra de
+> luminância documentados, sem que nenhuma regra CSS ou componente os
+> referencie:
+>
+> `--glass-surface` · `--glass-surface-elevated` · `--glass-border-top` ·
+> `--glass-border-top-elevated` · `--glass-border` · `--glass-shadow` ·
+> `--glass-shadow-elevated`
+>
+> **Órfãos com destino conhecido, não lixo.** O consumo previsto é a
+> Library — superfícies do app, não chrome sobre conteúdo do usuário, que é
+> exatamente o caso em que a variante de material *deve* ser seguida. Ficam
+> como estão até lá; **não remover**.
 >
 > **Consequência: a conversão de ícones e rótulos foi revertida.** Como a
 > ilha volta a ser escura sempre, os brancos e o `#9E8878` do componente
@@ -566,18 +629,35 @@ Imagem` são salvas em `notebook-assets/{notebookId}/{pageId}/` via
 > a troca de cor é global por tag, não por documento; renomear para uma
 > tag já existente assume a cor já registrada dessa tag.
 
-> **Changelog 04/07/2026:** o painel de Ajustes ganhou seleção funcional
-> de variante do ícone do app (`Frontão` / `Coluna`). Os previews agora
-> usam SVG inline compartilhado com a marca da sidebar, removendo o antigo
-> `column-icon.svg` externo renderizado via `mask-image` (que no WebView
-> podia aparecer como bloco sólido). A seleção persiste em `app_settings`
-> (`icon_variant`) e passa por um provider global, então sidebar e painel
-> respondem juntos à troca. Limitação conhecida: a aplicação também tenta
-> trocar o ícone da janela/taskbar via API runtime do Tauri, mas o ícone do
-> executável, instalador e atalhos continua sendo o definido em build-time
-> pelo `src-tauri/tauri.conf.json`/`src-tauri/icons/*`; no Windows, o shell
-> ainda pode manter cache visual do ícone nativo até reiniciar/reinstalar.
+> ❌ **Changelog 04/07/2026 — RETRATADO em 17/08/2026: esta feature nunca
+> existiu em código.** A entrada descrevia uma seleção funcional de
+> variante do ícone do app (`Frontão` / `Coluna`), persistida em
+> `app_settings` como `icon_variant` e propagada por um provider global.
+> Uma auditoria doc↔código não encontrou **nada**: nenhum
+> `getSetting`/`setSetting("icon_variant")`, nenhum provider, nenhuma
+> string `Frontão` ou `Coluna` em `src/`. O texto original foi removido
+> para não seguir circulando como precedente.
+>
+> Por que isto importa mais que uma entrada errada: dois commits de agosto
+> (o eixo de material) citaram `icon_variant` em comentários de código como
+> "padrão já seguido" para justificar a própria arquitetura de
+> persistência. A ficção estava se propagando. Esses comentários foram
+> corrigidos junto com esta retratação.
+>
+> Resta **uma** menção que não pode ser removida: o comentário de
+> `src-tauri/migrations/0014_add_app_settings.sql`. O `sqlx` guarda
+> checksum do conteúdo da migration, então editar até o comentário
+> quebraria bancos já migrados. Fica como artefato histórico — ao ler
+> aquele arquivo, saiba que a única chave realmente persistida em
+> `app_settings` naquele momento era nenhuma; hoje são
+> `show_divider_lines`, `material_variant`, `reader.maximized`,
+> `reader.view-preferences` e as duas de espaçamento do Caderno.
 
+> 🗄️ **HISTÓRICO — resolvido pela migração para Konva em 10/07/2026.** A
+> nota abaixo pressupõe `@excalidraw/excalidraw` ativo; a dependência não
+> existe mais em `package.json` nem em `src/`, então o popup descrito não
+> existe. Mantida como registro da decisão. Marcada em 17/08/2026.
+>
 > **Nota conhecida (03/07/2026):** o popup "Mais ferramentas" do Quadro
 > mostra 4 itens em inglês (Web Embed, Laser pointer, Generate, Mermaid
 > to Excalidraw) — traduções ausentes no locale pt-BR da própria lib
@@ -684,18 +764,68 @@ Pior caso é Red a 6.47:1 — todos folgados acima do mínimo de 4.5:1.
 > A versão de 20/06 assumia fundo branco/`#FAFAFA` genérico. O app
 > real não usa branco — usa a paleta creme quente abaixo.
 
-**Modo claro** — sobre `--card` `#FAF5EF`:
+> ⚠️ **Este token vive sobre SEIS superfícies, não uma.** Até 17/08/2026
+> esta seção validava o tom apenas contra `--card`, e essa omissão foi a
+> causa raiz de um bug de acessibilidade que durou meses: o valor passava
+> em `--card` e falhava em quatro das outras cinco. Ao mexer neste token,
+> verifique a tabela completa abaixo — não só `--card`.
 
-- Cor: `#7A6558` _(era `#8B7263` — corrigido; o valor antigo media
-  ~3.9–4.1:1, abaixo do mínimo)_
-- Contraste: 5.06:1
-- **Não usar tom mais claro que este.**
+**Modo claro** — `--muted-foreground`, derivado:
+
+```css
+color-mix(in srgb, var(--foreground) 72%, var(--background))  /* = #57514B */
+```
+
+Era o literal `#7A6558` (que por sua vez corrigiu um `#8B7263` ainda pior,
+em 30/06). Passou a ser derivado em 17/08/2026 para fechar AA nas seis
+superfícies. **Não usar tom mais claro que este.**
+
+| Superfície | Valor | `#57514B` (hoje) | `#7A6558` (antes) |
+| --- | --- | --- | --- |
+| `--background` / `surface-app` | `#F5EDE4` | 6.76:1 ✅ | 4.73:1 ✅ |
+| `--card` / `surface-card`, `surface-panel` | `#FAF5EF` | 7.23:1 ✅ | 5.06:1 ✅ |
+| `--sidebar` | `#EDE5DA` | 6.27:1 ✅ | **4.39:1** ❌ |
+| `--muted` / `surface-muted` | `#EDE5DA` | 6.27:1 ✅ | **4.39:1** ❌ |
+| `--input` / `surface-subtle` | `#EDE5DA` | 6.27:1 ✅ | **4.39:1** ❌ |
+| `--color-sidebar-raised` | `#D8CCBD` | 4.95:1 ✅ | **3.47:1** ❌ |
+| `--notebook-focus-bar-bg` | `#F6F0E8` | 6.91:1 ✅ | 4.83:1 ✅ |
+
+As três superfícies que falhavam não eram casos de borda: a pílula "+N" de
+tags extras vive sempre sobre `--muted`, o hover da list row troca o fundo
+para `--muted`, e o hover dos itens da sidebar usa `--color-sidebar-raised`.
 
 **Modo escuro** — sobre `--card` `#231C16`:
 
-- Cor: `#9E8878` _(sem alteração — já passava)_
-- Contraste: 5.00:1
+- Cor: `#9E8878` _(sem alteração — já passava nas seis)_
+- Contraste: 5.00:1 sobre `--card`; pior superfície 4.68:1 (`--muted`
+  `#2E2018`)
 - **Não usar tom mais claro que este.**
+
+**`--color-sidebar-muted`** é um token separado, com o mesmo histórico: era
+`#7A6558` e falhava nas duas superfícies da sidebar. Hoje no claro é
+`color-mix(in srgb, var(--color-sidebar-text) 72%, var(--sidebar))` =
+`#625149`, fechando em 6.02:1 sobre `--sidebar` e 4.76:1 sobre
+`--color-sidebar-raised`. No escuro segue `#9E8878`.
+
+`src/styles/mutedForegroundContrast.test.ts` lê o `index.css` e recalcula
+esta tabela a cada `npm test` — baixar a porcentagem quebra o teste.
+
+### Níveis de "Contraste da interface"
+
+O stepper de Ajustes › Aparência redefine `--muted-foreground`, `--border` e
+`--color-sidebar-muted` por `color-mix`, não por filtro CSS. **100 é o piso,
+não o meio.** Havia um nível 90 que levava as seis superfícies a 2.95:1–3.74:1
+— um controle de contraste cujo mínimo reduzia contraste abaixo do legível.
+Removido em 17/08/2026.
+
+| Nível | Mix | Valor no claro | Pior superfície |
+| --- | --- | --- | --- |
+| 100 (default) | 72% | `#57514B` | 4.96:1 |
+| 110 | 80% | `#463F3A` | 6.51:1 |
+| 120 | 88% | `#342E29` | 8.46:1 |
+
+Um nível novo tem de ficar **acima** do anterior e passar AA nas sete
+superfícies. Os dois requisitos são travados por teste.
 
 ## Texto principal e seleção na biblioteca
 
@@ -742,6 +872,53 @@ coleção aberta.
 > existentes por papel semântico (tema principal / subcategoria /
 > destaque / estado), não por área de conhecimento.
 
+> ⚠️ **Existem DOIS sistemas de resolução em código, não um.** A tabela
+> abaixo descreve fielmente `tagColors.ts`. Ela **não** descreve o que as
+> pílulas de tag da Library exibem — essas passam por `designTokens.ts`,
+> que tem outra lista e outra estratégia. Verificado em 17/08/2026.
+
+| | `tagColors.ts` | `designTokens.ts` |
+| --- | --- | --- |
+| Função | `resolveTagColor` | `getSubjectTagTone` |
+| Quem consome | Realce e cor de fonte no Caderno, color-picker de Coleção, preenchimento de forma no Quadro | **Pílulas de tag da Library** (`TagBadge`, `TagPill`) |
+| Palavras-chave explícitas | 27 (a tabela abaixo) | **6** — uma por tom |
+| Tokens alcançáveis | os 9 | **6** (sem green/slate/red) |
+| Fallback | `'slate'`, fixo | casamento por substring, depois **hash da string** |
+
+O sistema da Library resolve pelo tom registrado no banco
+(`tags.color_token`), depois por igualdade exata numa lista de 6, depois
+por **substring nos dois sentidos** — é isso que faz `Systems` → indigo
+(contido em "systems / infra"), `Vision` → teal, `Math`/`Theory` → rose,
+`Ethics` → amber e `Learning` → violet (contido em "machine learning") —
+e só então por hash. Tag vazia ou nula → indigo.
+
+**Das 23 palavras de assunto da tabela abaixo, a Library resolve 10 para o
+tom documentado, e só 6 por projeto** — as outras 4 (`Deep Learning`,
+`Transformers`, `Neuroscience`, `Seminal`) acertam por coincidência do
+hash. As 13 restantes divergem: `Consciousness`→amber,
+`Philosophy`→teal, `Urbanismo`→blue, `Cognition`→blue, `Design
+Systems`→blue, `Typography`→amber, `Accessibility`→blue,
+`Language`→violet, `Perception`→amber, `Epistemologia`→violet,
+`Memory`→teal, `Sociologia`→indigo, `Reinf. Learning`→blue.
+
+### Limitação conhecida: o hash é sensível à caixa
+
+`getSubjectTagTone` soma `charCodeAt` da string **original**, não da
+normalizada que ele próprio calcula duas linhas acima. Consequência:
+
+| Tag | Tom |
+| --- | --- |
+| `Deep Learning` | violet |
+| `deep learning` | rose |
+| `Seminal` | amber |
+| `seminal` | indigo |
+
+**Isso contradiz a regra 2 desta página** ("a mesma palavra-chave de tag
+deve sempre usar o mesmo par de cor em todas as telas"). Registrado como
+limitação conhecida, **não corrigido** — fica para uma leva própria. O
+alcance prático é limitado: uma tag já gravada no banco passa por
+`registerSubjectTagTone` e fica estável; o hash só decide antes disso.
+
 | Cor    | Papel                | Palavras-chave                                                                   |
 | ------ | -------------------- | -------------------------------------------------------------------------------- |
 | Violet | Tema principal       | Machine Learning, Consciousness, Philosophy, Deep Learning, Urbanismo, Cognition |
@@ -773,13 +950,13 @@ são dois sistemas sobrepostos).
 
 | Nome                         | Valor                                                             | Uso                                                                                                                                                                                                                              |
 | ---------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `surface-header`             | `#14161F`                                                         | Fundo do header/top bar (telas com leitor)                                                                                                                                                                                       |
+| `surface-header`             | `#14161F`                                                         | ⚠️ **Histórico.** Descrito como "fundo do header/top bar" até 17/08/2026, mas os headers migraram para `--card` em 03/07 (ver nota abaixo). Único consumidor real hoje: o toast de carregamento do painel de Quadro (`LibraryView.tsx:999`). |
 | `surface-elevated`           | `#1E2130`                                                         | Fundo de elementos flutuantes escuros (toolbar de seleção, toolbar de formatação)                                                                                                                                                |
 | `accent-interactive`         | `#9C5A2E`                                                         | Ícone do logo, botão "+ Adicionar", barra de progresso de leitura, toggle de painel ativo, aba ativa no painel de anotações. **Mesmo hex em claro e escuro — sem variante separada.**                                            |
-| `accent-icon-amber`          | `#F59E0B`                                                         | Ícone "Marcar" em estado ativo na toolbar de seleção (mais vívido que `tag-amber-text`, é ícone pequeno, não texto)                                                                                                              |
+| `accent-icon-amber`          | `#F59E0B`                                                         | Borda de destaque do aviso de exportação grande no Caderno (`NotebookContent.tsx:2405`). ⚠️ Descrito como "ícone Marcar ativo na toolbar de seleção" até 17/08/2026 — a `SelectionToolbar` **nunca** consumiu este token; seu estado ativo usa `text-white`. |
 | `accent-tint-bg`             | `#EFE2D8`                                                         | Fundo de destaque em estado "ativo" de botões de ferramenta (ex: toolbar do Quadro) — tint sutil de terracota sobre o accent. Diferente do fill sólido das tags: aqui o texto/ícone continua na cor accent por cima, não branco. |
 | `sidebar-text`               | claro `#2C1810`; escuro `#F0E8DF`                                 | Texto principal da sidebar, título `Athenaeum`, título da coleção aberta e itens selecionados da navegação/biblioteca.                                                                                                           |
-| `sidebar-muted`              | claro `#7A6558`; escuro `#9E8878`                                 | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação.                                                                                                                                             |
+| `sidebar-muted`              | claro `#625149` (derivado); escuro `#9E8878`                      | Itens não selecionados da sidebar, ações secundárias e metadados leves da navegação. Vive sobre `--sidebar` **e** `--color-sidebar-raised` (hover) — era `#7A6558` e falhava AA nas duas até 17/08/2026.                          |
 | `document-cover-hue`         | hue derivado do documento                                         | Base determinística das miniaturas de documento; o hue é estável por documento e a saturação/luminosidade mudam por tema.                                                                                                        |
 | `document-cover-swatch`      | claro `hsl(hue 28% 74%)`; escuro `hsl(hue 30% 18%)`               | Fundo principal da área de preview dos cards de documento.                                                                                                                                                                       |
 | `document-cover-line`        | claro `hsl(hue 28% 34% / 0.24)`; escuro `rgb(255 255 255 / 0.08)` | Linhas secundárias internas das miniaturas.                                                                                                                                                                                      |
@@ -803,9 +980,12 @@ Aplique esses tokens de cor em todas as tags, badges de status e texto
 secundário, substituindo as cores pastel/fill-sólido atuais:
 
 TEXTO SECUNDÁRIO (metadados, datas, percentuais):
-- Modo claro (sobre --card #FAF5EF): #7A6558
-- Modo escuro (sobre --card #231C16): #9E8878
+- Modo claro: #57514B
+- Modo escuro: #9E8878
 Não usar tom mais claro que esses — são o limite mínimo aceitável.
+Esse tom aparece sobre SEIS superfícies diferentes, não só sobre o card.
+A mais escura delas é #D8CCBD (hover da sidebar): valide contra ela, que
+é o pior caso, não contra o fundo do card.
 
 TAGS (fill sólido — bg saturado + texto branco fixo #FFFFFF):
 - Violet #5B21B6 — Consciousness, Philosophy, Deep Learning, Urbanismo, Cognition
@@ -831,10 +1011,12 @@ athenaeum-design-tokens-cores.md to all tags, status badges, and
 secondary text.
 
 Secondary text (metadata, dates, percentages):
-- Light mode (over --card #FAF5EF): #7A6558
-- Dark mode (over --card #231C16): #9E8878
+- Light mode: #57514B
+- Dark mode: #9E8878
 Do not lighten these tones even if it looks "nicer" — this breaks the
-calculated WCAG AA contrast.
+calculated WCAG AA contrast. This tone sits on SIX different surfaces, not
+just the card. The darkest is #D8CCBD (sidebar hover) — validate against
+that worst case, not against the card background.
 
 Tags use solid-fill pills (saturated bg + fixed white #FFFFFF text).
 Use this fixed keyword-to-color mapping, and do not invent new colors

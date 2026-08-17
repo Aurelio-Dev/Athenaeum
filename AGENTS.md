@@ -175,16 +175,40 @@ IPC boundary, Rust memory, and filesystem buffers.
 
 ## Commands
 
-### Full application
+### Full application — isolated dev profile (use this one)
+
+```bash
+npm run tauri:dev
+```
+
+Runs the frontend and Tauri shell in development mode against a **disposable
+data profile** (`identifier` `io.github.aurelio-dev.athenaeum.dev`, overlay in
+`src-tauri/tauri.dev.conf.json`). Use this for any manual test.
+
+```bash
+npm run dev:reset
+```
+
+Deletes the dev profile. The next `tauri:dev` recreates the database from
+scratch, running migrations `v1..v23`. Close the app first.
+
+### Full application — real user data
 
 ```bash
 npm run tauri dev
 ```
 
-Runs the frontend and Tauri shell in development mode.
+Same thing, but against the **user's real library**: same `identifier` as the
+installed build, so the same SQLite file and the same PDF folder. Every manual
+action becomes permanent data — merely opening a document writes
+`last_opened_at`, and applying a highlight writes an annotation row.
+
+Do not use this for manual testing. Prefer `npm run tauri:dev` unless the task
+is specifically about the real data.
 
 The first run may take several minutes because Rust dependencies need to be
-compiled.
+compiled. Switching between the two commands changes the config the Rust build
+sees, so it triggers a recompile.
 
 ### Frontend only
 

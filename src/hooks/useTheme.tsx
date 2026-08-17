@@ -21,8 +21,8 @@ import {
 // - MODO so em localStorage. A leitura sincrona antes do primeiro paint evita o
 //   flash de tema errado na abertura, que uma leitura assincrona via IPC do
 //   banco traria.
-// - MATERIAL em app_settings (chave material_variant), como show_divider_lines e
-//   icon_variant, com ESPELHO write-through em localStorage. O SQLite continua
+// - MATERIAL em app_settings (chave material_variant), como show_divider_lines,
+//   com ESPELHO write-through em localStorage. O SQLite continua
 //   sendo a FONTE DE VERDADE: e o unico lugar compartilhado pelas 4 janelas
 //   nativas (cada uma tem o seu proprio localStorage) e o unico que sobrevive a
 //   uma troca feita com a janela fechada. O espelho existe so para o bootstrap

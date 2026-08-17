@@ -2410,9 +2410,9 @@ export async function setReaderOpensMaximized(
 }
 
 // Material das superficies do app (eixo ortogonal ao tema claro/escuro).
-// Vive em app_settings, como show_divider_lines e icon_variant, e nao em
-// localStorage: e uma preferencia global compartilhada por todas as janelas
-// nativas, e a emissao abaixo e o que as mantem em sincronia.
+// Vive em app_settings, como show_divider_lines, e nao em localStorage: e uma
+// preferencia global compartilhada por todas as janelas nativas, e a emissao
+// abaixo e o que as mantem em sincronia.
 const MATERIAL_VARIANT_SETTING_KEY = "material_variant";
 
 export async function getMaterialVariant(source: DatabaseHandleSource = "loaded"): Promise<MaterialVariant> {
