@@ -1,5 +1,48 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 16/08/2026 — Primeiro consumo dos tokens `--glass-*`, e
+> mudança de regra no chrome flutuante do Reader.** Os tokens de material
+> saíram da infraestrutura e passaram a pintar uma superfície real: a
+> `SelectionToolbar` do Reader (a ilha que aparece sobre o texto
+> selecionado) e sua paleta de seis cores. **Só ela** — nenhuma outra
+> superfície do Reader, da Library, do Caderno ou do Quadro consome os
+> tokens ainda. O controle de material vive em Ajustes › Aparência, numa
+> linha própria (`Padrão` | `Vidro`), separada do controle de tema:
+> continuam sendo dois eixos ortogonais, não uma lista de três temas.
+>
+> **A mudança de regra.** Até aqui, o chrome flutuante do Reader era
+> **escuro por definição**: a ilha usava `--surface-elevated` (`#1E2130`)
+> nos dois modos, e era exatamente por isso que seus ícones e rótulos
+> podiam ser brancos fixos — o fundo nunca mudava. No material `glass`
+> isso deixa de valer: **a ilha passa a seguir a variante**, e no Glass
+> claro ela fica creme, onde texto branco seria ilegível. A consequência
+> é obrigatória, não opcional: em `glass`, ícones e texto do chrome usam
+> os tokens de texto do tema (`--color-text-primary` e
+> `--color-text-secondary`), nunca branco fixo.
+>
+> | Texto sobre a ilha em glass | Contraste | AA (4.5:1) |
+> | --- | --- | --- |
+> | `#7A6558` sobre `#F7F0E8` (claro, parada mais escura do elevated) | 4.85:1 | ✅ |
+> | `#9E8878` sobre `#292521` (escuro, parada mais clara do elevated) | 4.52:1 | ✅ |
+>
+> **Em `flat` nada mudou** — e isso é invariante, não coincidência. As
+> classes `.reader-selection-*` do componente são marcadores sem estilo
+> próprio; toda regra que as usa vive sob `[data-material="glass"]`. No
+> material padrão a ilha continua pintada apenas pelas utilitárias do
+> componente, byte-idêntica ao que era antes do eixo existir. Há teste
+> travando as duas pontas desse contrato.
+>
+> **Esta decisão está sob avaliação visual, não fechada.** O que está em
+> aberto é se um chrome flutuante *claro* continua lendo como chrome —
+> a regra de 15/07/2026 ("chrome flutuante é reservado para superfícies
+> imersivas de objeto único") foi escrita quando ilha flutuante e fundo
+> escuro eram a mesma coisa na prática, e nunca precisou distinguir as
+> duas. Se o Glass claro se provar frágil sobre a página do PDF, a saída
+> não é voltar a branco fixo: é a ilha manter a variante *escura* do
+> glass nos dois modos, o que preservaria a legibilidade sem reintroduzir
+> uma superfície fora do eixo. Não estender o padrão a outras superfícies
+> antes desse veredito.
+
 > **Changelog 16/08/2026 — Eixo de material (`flat` | `glass`),
 > ortogonal ao tema claro/escuro:** o app passa a ter uma segunda
 > dimensão de aparência, independente do modo. O modo continua sendo a

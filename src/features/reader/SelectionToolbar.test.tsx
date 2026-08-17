@@ -177,3 +177,56 @@ describe("SelectionToolbar", () => {
     expect(button("Amber para Marca-texto")).toBeTruthy();
   });
 });
+
+// O material glass e aplicado 100% por CSS, sob [data-material="glass"] em
+// styles/index.css. Estes testes travam os dois lados desse contrato: as classes
+// marcadoras que o CSS usa como gancho, e a pintura do material flat, que tem de
+// continuar byte-identica ao que era antes do eixo de material existir.
+describe("SelectionToolbar — ganchos do material", () => {
+  function toolbarElement() {
+    const element = container?.querySelector<HTMLDivElement>('div[role="toolbar"]');
+    if (!element) {
+      throw new Error("Toolbar nao encontrada.");
+    }
+    return element;
+  }
+
+  it("expoe as classes marcadoras que o CSS do glass usa", () => {
+    expect(toolbarElement().classList.contains("reader-selection-toolbar")).toBe(true);
+    expect(button("Copiar").classList.contains("reader-selection-tool")).toBe(true);
+    expect(container?.querySelector(".reader-selection-divider")).toBeTruthy();
+
+    click(button("Marca-texto"));
+    click(button("Marca-texto"));
+
+    const selectedSwatch = button("Amber para Marca-texto");
+    expect(selectedSwatch.classList.contains("reader-selection-swatch")).toBe(true);
+    expect(selectedSwatch.classList.contains("reader-selection-swatch--selected")).toBe(true);
+    expect(
+      button("Blue para Marca-texto").classList.contains("reader-selection-swatch--selected"),
+    ).toBe(false);
+  });
+
+  it("preserva a pintura escura do material flat", () => {
+    // A ilha e escura nos dois modos em flat; mudar qualquer uma destas
+    // utilitarias e regressao visual, nao refatoracao.
+    const toolbarClasses = toolbarElement().className;
+    expect(toolbarClasses).toContain("bg-[var(--surface-elevated)]");
+    expect(toolbarClasses).toContain("shadow-2xl");
+    expect(toolbarClasses).toContain("ring-1");
+    expect(toolbarClasses).toContain("ring-white/10");
+
+    expect(container?.querySelector(".reader-selection-divider")?.className).toContain("bg-white/10");
+    expect(button("Marca-texto").className).toContain("text-[#9E8878]");
+
+    click(button("Marca-texto"));
+    expect(button("Marca-texto").className).toContain("bg-white/10");
+    expect(button("Marca-texto").className).toContain("text-white");
+
+    click(button("Marca-texto"));
+    const selectedSwatch = button("Amber para Marca-texto");
+    expect(selectedSwatch.className).toContain("ring-2");
+    expect(selectedSwatch.className).toContain("ring-white");
+    expect(selectedSwatch.className).toContain("ring-offset-[var(--surface-elevated)]");
+  });
+});

@@ -425,6 +425,66 @@
   --glass-shadow-elevated: 0 16px 40px -12px rgb(0 0 0 / 0.70);
 }
 
+/* ------------------------------------------------------------
+   Primeiro consumo dos tokens --glass-*
+   ------------------------------------------------------------
+   Escopo: SOMENTE a SelectionToolbar do Reader e sua paleta de cores.
+   As classes .reader-selection-* (SelectionToolbar.tsx) sao marcadores
+   sem estilo proprio — nao existe nenhuma regra para elas fora deste
+   bloco. Por isso o material flat continua identico ao que era: a ilha
+   segue pintada so pelas utilitarias do componente
+   (bg-[var(--surface-elevated)], shadow-2xl, ring-white/10, text-white).
+
+   MUDANCA DE REGRA (ver docs/design/athenaeum-design-tokens-cores.md):
+   em flat esta ilha e escura por definicao nos DOIS modos, e por isso
+   seus icones e rotulos sao brancos fixos. Em glass ela passa a seguir a
+   variante — no glass CLARO fica creme, onde texto branco seria
+   ilegivel. Logo, aqui os textos/icones usam os tokens de texto do tema
+   (--color-text-primary / --color-text-secondary), nunca branco fixo.
+   Contrastes validados: #7A6558 sobre #F7F0E8 = 4.85:1 (claro) e
+   #9E8878 sobre #292521 = 4.52:1 (escuro).
+
+   Os seletores tem especificidade 0,2,0 (ou 0,3,0 com pseudo-classe e
+   atributo), entao vencem as utilitarias do componente (0,1,0 e 0,2,0)
+   por especificidade — nao por ordem de origem no CSS gerado. */
+[data-material="glass"] .reader-selection-toolbar {
+  background: var(--glass-surface-elevated);
+  /* A borda superior entra como sombra INSET, nao como border-top: uma
+     borda real somaria 1px a altura e deslocaria o conteudo em relacao
+     ao flat. O segundo valor substitui de uma vez o shadow-2xl e o
+     ring-white/10 das utilitarias, que compunham o mesmo box-shadow. */
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-border-top-elevated),
+    var(--glass-shadow-elevated);
+}
+
+[data-material="glass"] .reader-selection-tool {
+  color: var(--color-text-secondary);
+}
+
+[data-material="glass"] .reader-selection-tool:hover {
+  background-color: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+  color: var(--color-text-primary);
+}
+
+[data-material="glass"] .reader-selection-tool[aria-pressed="true"] {
+  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  color: var(--color-text-primary);
+}
+
+[data-material="glass"] .reader-selection-divider {
+  background-color: var(--glass-border);
+}
+
+/* O anel da cor selecionada vira outline: outline-offset mostra a propria
+   superficie no vao, o que ring-offset-color nao consegue fazer aqui —
+   ele exige uma cor solida e --glass-surface-elevated e um gradiente. */
+[data-material="glass"] .reader-selection-swatch--selected {
+  box-shadow: none;
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 2px;
+}
+
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam
    somente tons secundários e bordas, sem filtros que alterariam imagens ou
    criariam novos contextos de empilhamento para os painéis flutuantes. */

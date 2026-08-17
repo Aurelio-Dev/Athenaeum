@@ -43,7 +43,7 @@ function ToolButton({ label, icon, active, onClick }: ToolButtonProps) {
       aria-label={label}
       aria-pressed={active}
       title={label}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+      className={`reader-selection-tool inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
         active
           ? "bg-white/10 text-white"
           : "text-[#9E8878] hover:bg-white/5 hover:text-white"
@@ -108,7 +108,10 @@ export function SelectionToolbar({ anchor, onApplyMark, onAnotar, onCopy }: Sele
       ref={toolbarRef}
       role="toolbar"
       aria-label="Ferramentas da seleção"
-      className="fixed z-[60] flex items-center gap-2 rounded-xl bg-[var(--surface-elevated)] px-3 py-2 shadow-2xl ring-1 ring-white/10"
+      // As classes reader-selection-* sao marcadores sem estilo proprio: TODA
+      // regra que as usa vive sob [data-material="glass"] em styles/index.css.
+      // No material flat a ilha continua exatamente com as utilitarias abaixo.
+      className="reader-selection-toolbar fixed z-[60] flex items-center gap-2 rounded-xl bg-[var(--surface-elevated)] px-3 py-2 shadow-2xl ring-1 ring-white/10"
       style={{
         top: anchor.top,
         left: anchor.left + anchor.width / 2,
@@ -130,9 +133,9 @@ export function SelectionToolbar({ anchor, onApplyMark, onAnotar, onCopy }: Sele
                 aria-label={`${palette.label} para ${paletteTool === "highlight" ? "Marca-texto" : "Sublinhar"}`}
                 aria-pressed={isSelected}
                 title={palette.label}
-                className={`h-5 w-5 rounded-full transition ${
+                className={`reader-selection-swatch h-5 w-5 rounded-full transition ${
                   isSelected
-                    ? "ring-2 ring-white ring-offset-2 ring-offset-[var(--surface-elevated)]"
+                    ? "reader-selection-swatch--selected ring-2 ring-white ring-offset-2 ring-offset-[var(--surface-elevated)]"
                     : "hover:scale-110"
                 }`}
                 style={{ backgroundColor: palette.bg }}
@@ -163,7 +166,7 @@ export function SelectionToolbar({ anchor, onApplyMark, onAnotar, onCopy }: Sele
         </div>
       )}
 
-      <div className="h-6 w-px bg-white/10" aria-hidden="true" />
+      <div className="reader-selection-divider h-6 w-px bg-white/10" aria-hidden="true" />
 
       <ToolButton
         label="Copiar"

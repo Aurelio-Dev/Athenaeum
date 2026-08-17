@@ -7,6 +7,7 @@ import {
   type UiFontScale,
 } from "../../hooks/useAppearancePreferences";
 import { useTheme, type Theme } from "../../hooks/useTheme";
+import type { MaterialVariant } from "../../lib/database";
 
 type SettingRowProps = {
   label: string;
@@ -81,13 +82,64 @@ function StepControl<T extends number>({
   );
 }
 
+const materialOptions: ReadonlyArray<{ value: MaterialVariant; label: string }> = [
+  { value: "flat", label: "Padrão" },
+  { value: "glass", label: "Vidro" },
+];
+
+// Controle do eixo de MATERIAL, separado do controle de modo acima: os dois sao
+// ortogonais (claro/vidro e escuro/vidro existem), nao uma lista de tres temas.
+//
+// SEM PREVIEW, de proposito: o material so muda no clique confirmado. O efeito
+// que aplica data-material no <html> tambem grava o espelho em localStorage
+// (ver useTheme.tsx), entao aplicar em hover, foco ou navegacao por setas
+// vazaria para o cache e deixaria o usuario com um material que nao escolheu —
+// inclusive na proxima abertura do app. Por isso aqui so existe onClick: nada
+// de onMouseEnter, onFocus ou roving tabindex.
+function MaterialControl({
+  material,
+  onChange,
+}: {
+  material: MaterialVariant;
+  onChange: (material: MaterialVariant) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Material da interface"
+      className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-panel p-1"
+    >
+      {materialOptions.map((option) => {
+        const isSelected = option.value === material;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={isSelected}
+            onClick={() => onChange(option.value)}
+            className={`h-7 rounded-md px-3 text-xs font-semibold transition ${
+              isSelected
+                ? "bg-primary text-text-inverse"
+                : "text-text-secondary hover:text-primary"
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AppearanceSettings() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, material, setMaterial } = useTheme();
   const { showDividerLines, setShowDividerLines } = useDividerLines();
   const { uiContrast, setUiContrast, uiFontScale, setUiFontScale } = useAppearancePreferences();
 
   function restoreDefaults() {
     setTheme("light");
+    setMaterial("flat");
     setShowDividerLines(true);
     setUiContrast(100);
     setUiFontScale(100);
@@ -111,6 +163,10 @@ export function AppearanceSettings() {
             <option value="light">Claro</option>
             <option value="dark">Escuro</option>
           </select>
+        </SettingRow>
+
+        <SettingRow label="Material" description="Escolha o acabamento das superfícies. Funciona nos temas claro e escuro.">
+          <MaterialControl material={material} onChange={setMaterial} />
         </SettingRow>
 
         <SettingRow label="Linhas divisórias" description="Exibir linhas sutis entre seções e itens.">
