@@ -95,7 +95,18 @@
   /* Texto */
   --foreground: #1A1410;
   --card-foreground: #1A1410;
-  --muted-foreground: #7A6558;
+  /* Texto secundario do tema claro. Era o literal #7A6558, validado APENAS
+     contra --card (5.06:1) — mas o token e usado sobre SEIS superficies, e
+     falhava AA em quatro delas: --sidebar/--muted/--input (#EDE5DA, 4.39:1)
+     e --color-sidebar-raised (#D8CCBD, 3.47:1), esta ultima a pior da tela.
+     Agora e derivado, no mesmo formato dos niveis de contraste abaixo, para
+     que a base e os niveis vivam na mesma escala. 72% da #57514B e fecha a
+     pior superficie em 4.95:1. O minimo que limparia #D8CCBD seria 70%; os
+     dois pontos extras sao a folga. Ver a tabela das seis superficies em
+     docs/design/athenaeum-design-tokens-cores.md.
+     O tema ESCURO nao muda: o .dark abaixo fixa #9E8878, que ja passa nas
+     seis. */
+  --muted-foreground: color-mix(in srgb, var(--foreground) 72%, var(--background));
 
   /* Accent */
   --primary: #9C5A2E;
@@ -140,11 +151,14 @@
   --color-sidebar-border: var(--border);
   --color-sidebar-text: #2C1810;
   /* Texto/icones muted da sidebar (itens de nav, colecoes, "Nova colecao",
-     "Ajustes"). No claro usa um tom levemente mais escuro que o #9E8878 base
-     para dar mais presenca; o cabecalho "MINHA BIBLIOTECA" e mantido em
-     #9E8878 via classe propria. No escuro fica #9E8878 (override no .dark),
-     onde escurecer sobre o fundo escuro pioraria a legibilidade. */
-  --color-sidebar-muted: #7A6558;
+     "Ajustes"). O cabecalho "MINHA BIBLIOTECA" e mantido em #9E8878 via
+     classe propria. No escuro fica #9E8878 (override no .dark), onde
+     escurecer sobre o fundo escuro pioraria a legibilidade.
+     Este token vive sobre DUAS superficies — --sidebar no repouso e
+     --color-sidebar-raised no hover/ativo — e o literal #7A6558 anterior
+     falhava nas duas (4.39:1 e 3.47:1). 72% da #625149 e fecha em 6.02:1 e
+     4.76:1. O minimo que limparia as duas seria 71%. */
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 72%, var(--sidebar));
   /* Linhas internas secundarias do icone de busca sem resultados. */
   --color-empty-state-detail: #D9C5B4;
 
@@ -495,10 +509,13 @@ html[data-ui-contrast="90"] {
   --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 44%, var(--sidebar));
 }
 
+/* O nivel 110 tem de ficar ACIMA da base. Quando a base subiu para 72%, os
+   68%/70% que este bloco usava passaram a ser MENOS contraste que o nivel
+   100 — o rotulo "110" renderizaria mais claro que o default. Subiu junto. */
 html[data-ui-contrast="110"] {
-  --muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--background));
+  --muted-foreground: color-mix(in srgb, var(--foreground) 80%, var(--background));
   --border: color-mix(in srgb, var(--foreground) 30%, var(--background));
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 70%, var(--sidebar));
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 80%, var(--sidebar));
 }
 
 * {
