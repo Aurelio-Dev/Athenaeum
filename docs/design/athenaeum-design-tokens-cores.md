@@ -1,5 +1,74 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 16/08/2026 — O chrome flutuante do Reader permanece escuro
+> no material glass. Revisão da entrada anterior.** A decisão registrada
+> logo abaixo — a ilha da `SelectionToolbar` seguir a variante de
+> material — está **revertida**. Ela foi tomada olhando o contraste do
+> *texto sobre a ilha*, que fechava (4.85:1). O que não foi medido na
+> hora foi a ilha contra **o que está atrás dela**.
+>
+> **A medição que derruba a decisão.** A `SelectionToolbar` flutua sobre
+> a página do PDF, que é papel branco — a única superfície branca pura do
+> leitor. Seguindo a variante, no Glass claro a ilha ficava:
+>
+> | Parada da ilha (Glass claro) | Contra papel `#FFFFFF` | Mínimo 1.4.11 (3:1) |
+> | --- | --- | --- |
+> | `#FFFDFA` (topo do elevated) | **1.02:1** | ❌ |
+> | `#F7F0E8` (base do elevated) | **1.13:1** | ❌ |
+>
+> A WCAG 2.1 **1.4.11 (Non-text Contrast)** exige 3:1 para o limite de um
+> componente de interface contra o que o cerca. A 1.02:1 a ilha não tem
+> limite visível nenhum: ela desaparece no papel, e o que sobra é texto
+> marrom flutuando sobre o PDF. O problema nunca foi o texto — era a
+> própria ilha. Com o par `--glass-immersive-*` ela vai a **15.2:1**
+> contra o papel.
+>
+> **REGRA NOVA: chrome flutuante sobre superfície imersiva não segue a
+> variante de material.** O material descreve o acabamento das
+> superfícies *do app*; ele não tem jurisdição sobre um controle que
+> flutua sobre conteúdo do usuário — ali quem manda é o contraste contra
+> esse conteúdo, e conteúdo não muda de cor com o tema. Isso não
+> contradiz a regra de 15/07/2026, e sim a completa: aquela decide *quem*
+> pode ser chrome flutuante; esta decide que, uma vez flutuante sobre
+> superfície imersiva, o componente sai do eixo de material.
+>
+> Os tokens são um par dedicado, com valores **idênticos** nos blocos
+> claro e escuro de `[data-material="glass"]` — a repetição é proposital
+> e não deve ser "limpada" movendo para `:root`, porque é ela que torna
+> visível, lendo qualquer um dos blocos, que este grupo não varia:
+>
+> | Token | Claro e escuro (mesmo valor) |
+> | --- | --- |
+> | `--glass-immersive-surface` | `linear-gradient(180deg, #292521 0%, #201C19 100%)` |
+> | `--glass-immersive-border-top` | `rgb(255 255 255 / 0.16)` |
+> | `--glass-immersive-shadow` | `0 16px 40px -12px rgb(0 0 0 / 0.70)` |
+>
+> O nome diz o contrato: `immersive`, não `elevated`. Reaproveitar
+> `--glass-surface-elevated` aqui reintroduziria o problema no dia em que
+> a variante clara mudasse.
+>
+> **Consequência: a conversão de ícones e rótulos foi revertida.** Como a
+> ilha volta a ser escura sempre, os brancos e o `#9E8878` do componente
+> voltam a ser corretos e ficam em 15.2:1 e 4.52:1 sobre
+> `#292521`. O bloco glass agora toca **apenas superfície, borda e
+> sombra** — nenhum valor de texto, divisor ou anel segue a variante.
+>
+> **`accent-icon-amber` e `tag-amber-text` seguem sem se substituir.** A
+> emenda que se cogitou para essa regra (ver "Cores de interface" abaixo)
+> **não é mais necessária**: ela só faria sentido se a ilha pudesse ficar
+> clara, quando a distinção entre ícone vívido e texto sobre fundo claro
+> ficaria ambígua. Com a ilha sempre escura, `#F59E0B` fica em 7.08:1
+> sobre `#292521` e a regra original vale sem ressalva.
+>
+> Em `flat` nada mudou, de novo — a ilha continua `#1E2130` nos dois
+> modos, byte-idêntica.
+
+> ⚠️ **Entrada parcialmente SUPERADA pela de cima.** A parte sobre a ilha
+> seguir a variante foi revertida por 1.4.11 — ela permanece escura no
+> glass. O restante (controle em Ajustes, invariante do flat, mecânica
+> das classes marcadoras) continua valendo. Mantida como registro de
+> como a decisão foi tomada e por que caiu.
+>
 > **Changelog 16/08/2026 — Primeiro consumo dos tokens `--glass-*`, e
 > mudança de regra no chrome flutuante do Reader.** Os tokens de material
 > saíram da infraestrutura e passaram a pintar uma superfície real: a

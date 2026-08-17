@@ -407,6 +407,11 @@
   --glass-shadow: 0 8px 24px -8px rgb(44 26 16 / 0.18);
   --glass-border-top-elevated: rgb(255 255 255 / 0.85);
   --glass-shadow-elevated: 0 16px 40px -12px rgb(44 26 16 / 0.24);
+  /* IMMERSIVE — nao segue a variante. Ver o bloco escuro: os valores sao
+     deliberadamente IDENTICOS nos dois temas. */
+  --glass-immersive-surface: linear-gradient(180deg, #292521 0%, #201C19 100%);
+  --glass-immersive-border-top: rgb(255 255 255 / 0.16);
+  --glass-immersive-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.70);
 }
 
 /* Vence o bloco acima por especificidade (0,2,0 contra 0,1,0), nao por
@@ -423,10 +428,19 @@
      o fundo de elevated fica praticamente colado no de surface. */
   --glass-border-top-elevated: rgb(255 255 255 / 0.16);
   --glass-shadow-elevated: 0 16px 40px -12px rgb(0 0 0 / 0.70);
+  /* IMMERSIVE — repetidos IGUAIS ao bloco claro, de proposito.
+     Nao e duplicacao a ser "limpada" movendo para :root: manter o par nos
+     dois blocos deixa explicito, na leitura de qualquer um deles, que este
+     e o unico grupo de tokens glass que NAO muda com o tema. Se um dia
+     divergirem, o chrome flutuante volta a ter o problema de 1.4.11 que
+     este par existe para resolver. */
+  --glass-immersive-surface: linear-gradient(180deg, #292521 0%, #201C19 100%);
+  --glass-immersive-border-top: rgb(255 255 255 / 0.16);
+  --glass-immersive-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.70);
 }
 
 /* ------------------------------------------------------------
-   Primeiro consumo dos tokens --glass-*
+   Chrome flutuante do Reader no material glass
    ------------------------------------------------------------
    Escopo: SOMENTE a SelectionToolbar do Reader e sua paleta de cores.
    As classes .reader-selection-* (SelectionToolbar.tsx) sao marcadores
@@ -435,53 +449,40 @@
    segue pintada so pelas utilitarias do componente
    (bg-[var(--surface-elevated)], shadow-2xl, ring-white/10, text-white).
 
-   MUDANCA DE REGRA (ver docs/design/athenaeum-design-tokens-cores.md):
-   em flat esta ilha e escura por definicao nos DOIS modos, e por isso
-   seus icones e rotulos sao brancos fixos. Em glass ela passa a seguir a
-   variante — no glass CLARO fica creme, onde texto branco seria
-   ilegivel. Logo, aqui os textos/icones usam os tokens de texto do tema
-   (--color-text-primary / --color-text-secondary), nunca branco fixo.
-   Contrastes validados: #7A6558 sobre #F7F0E8 = 4.85:1 (claro) e
-   #9E8878 sobre #292521 = 4.52:1 (escuro).
+   REGRA (ver docs/design/athenaeum-design-tokens-cores.md): chrome
+   flutuante sobre superficie IMERSIVA nao segue a variante de material.
+   Esta ilha flutua sobre a pagina do PDF, que e papel branco. Seguindo a
+   variante, no glass CLARO ela ficava a 1.02-1.13:1 contra o papel —
+   contra o minimo de 3:1 que a WCAG 1.4.11 exige para limite de
+   componente. Nao e problema de texto (esse fechava em 4.85:1): e a
+   propria ilha que sumia. Por isso ela consome o par --glass-immersive-*,
+   que tem valores iguais nos dois temas, e fica em 15.2:1 contra o papel.
 
-   Os seletores tem especificidade 0,2,0 (ou 0,3,0 com pseudo-classe e
-   atributo), entao vencem as utilitarias do componente (0,1,0 e 0,2,0)
-   por especificidade — nao por ordem de origem no CSS gerado. */
+   Consequencia: a ilha continua escura SEMPRE, entao os brancos e o
+   #9E8878 das utilitarias do componente seguem corretos e NAO sao
+   convertidos aqui. Este bloco toca apenas superficie, borda e sombra.
+
+   Os seletores tem especificidade 0,2,0, entao vencem as utilitarias do
+   componente (0,1,0) por especificidade — nao por ordem de origem. */
 [data-material="glass"] .reader-selection-toolbar {
-  background: var(--glass-surface-elevated);
+  background: var(--glass-immersive-surface);
   /* A borda superior entra como sombra INSET, nao como border-top: uma
      borda real somaria 1px a altura e deslocaria o conteudo em relacao
      ao flat. O segundo valor substitui de uma vez o shadow-2xl e o
      ring-white/10 das utilitarias, que compunham o mesmo box-shadow. */
   box-shadow:
-    inset 0 1px 0 0 var(--glass-border-top-elevated),
-    var(--glass-shadow-elevated);
+    inset 0 1px 0 0 var(--glass-immersive-border-top),
+    var(--glass-immersive-shadow);
 }
 
-[data-material="glass"] .reader-selection-tool {
-  color: var(--color-text-secondary);
-}
-
-[data-material="glass"] .reader-selection-tool:hover {
-  background-color: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
-  color: var(--color-text-primary);
-}
-
-[data-material="glass"] .reader-selection-tool[aria-pressed="true"] {
-  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
-  color: var(--color-text-primary);
-}
-
-[data-material="glass"] .reader-selection-divider {
-  background-color: var(--glass-border);
-}
-
-/* O anel da cor selecionada vira outline: outline-offset mostra a propria
-   superficie no vao, o que ring-offset-color nao consegue fazer aqui —
-   ele exige uma cor solida e --glass-surface-elevated e um gradiente. */
+/* O anel branco da cor selecionada continua certo (a ilha e escura), mas o
+   ring-offset das utilitarias aponta para --surface-elevated, a superficie
+   do flat. Em glass o vao mostraria #1E2130 sobre o gradiente immersive.
+   outline-offset resolve sem precisar de cor: o vao mostra a superficie
+   real, seja ela qual for. */
 [data-material="glass"] .reader-selection-swatch--selected {
   box-shadow: none;
-  outline: 2px solid var(--color-text-primary);
+  outline: 2px solid #FFFFFF;
   outline-offset: 2px;
 }
 
