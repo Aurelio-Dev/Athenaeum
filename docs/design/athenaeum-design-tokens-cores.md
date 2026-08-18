@@ -1,8 +1,56 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
-> **Changelog 18/08/2026 — O material glass ganha paleta própria: fundo
-> estratificado, texto secundário e capas.**
+> **Changelog 18/08/2026 — Capas de documento clareadas no glass CLARO
+> (follow-up de 7631155). Só o claro; o escuro não muda.**
 >
+> Julgamento visual, não métrica: mesmo com a saturação já em 12%
+> (entrada abaixo), a capa continuava dominando a tela no glass claro. A
+> causa não era cor — era **área**: a capa ocupa ~2/3 do card. Correção:
+> clarear, mantendo hue e saturação intocados.
+>
+> **1. `--document-cover-swatch`** sobe de 74% para **86%** de luminosidade
+> sob glass claro. Os três hexes do brief conferem exatos, confirmados por
+> varredura completa de hue (não por um palpite pontual):
+>
+> | Hue | Hex |
+> | --- | --- |
+> | verde (~90°) | `#DBE0D7` ✅ |
+> | roxo (~275°) | `#DCD7E0` ✅ |
+> | terracota (~28°) | `#E0DBD7` ✅ |
+>
+> **2. As linhas internas** (que imitam texto na miniatura) quase somem com
+> o alpha antigo de 0.24 contra a capa mais clara. Medido no **pior caso ao
+> longo de todo o hue** (0–359°, já que `--document-cover-hue` é por
+> documento — um número pontual não garante a regra para todo documento):
+>
+> | | Alpha | Contraste (pior hue) |
+> | --- | --- | --- |
+> | `--document-cover-line` | 0.24 → **0.40** | 1.36:1 → **1.70:1** |
+> | `--document-cover-line-strong` | 0.34 → **0.57** | 1.63:1 → **2.39:1** |
+>
+> ⚠️ Os números medidos divergem levemente dos citados no brief (1.34/~1.65):
+> o pior caso medido sobre a capa nova é 1.36–1.70, não 1.34/1.65. A
+> diferença é pequena (≤0.05) e não muda a decisão — reportado por
+> disciplina de verificação, não porque algo estivesse errado.
+>
+> `0.57` preserva a razão original entre as duas linhas (0.34/0.24 = 1.4167)
+> a 0.008 de distância — a proporção de 2 casas decimais que o resto do
+> arquivo usa.
+>
+> **3. Distinção capa × card**, verificada contra `#F7F0E8` (parada mais
+> escura de `--glass-surface-elevated` claro), também no pior caso de hue:
+> **1.18:1** — acima do mínimo de 1.15:1 pedido, com margem de 0.03.
+>
+> **Isolamento.** As três mudanças vivem só em
+> `[data-material="glass"] .document-cover-*` (sem `.dark`). O par
+> `.dark[data-material="glass"] .document-cover-*` **não foi tocado** —
+> confirmado por teste e por captura de tela. `glassPalette.test.ts` ganhou
+> um describe dedicado com os três itens, mais um guard de escopo para os
+> valores novos (86%, alpha 0.40/0.57) e um guard explícito de que o glass
+> escuro continua nos três valores herdados. Sete mutações confirmadas.
+>
+> Verificado por captura: os quatro estados de flat (grade/lista × claro/
+> escuro) têm o **mesmo SHA-256** de antes desta leva.
 > O glass estava aplicado (entrada abaixo) mas **não lia como vidro**: com o
 > fundo do flat, a distância entre o fundo e a parada escura de
 > `--glass-surface` era de **ΔL\* 0.3** no claro — indistinguível. Vidro sem

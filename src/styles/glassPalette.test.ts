@@ -110,6 +110,20 @@ describe("isolamento: todo token novo vive sob [data-material=\"glass\"]", () =>
     expect(foraDoEscopo).toEqual([]);
   });
 
+  it("as capas claras clareadas (86%, alpha 0.40/0.57) nao escapam do escopo de material", () => {
+    // Mesmo racional do teste acima, para os valores da leva de 18/08/2026
+    // (segunda leva): se um deles aparecer fora do escopo glass, ou vazou
+    // para o flat, ou foi escrito no seletor errado.
+    const foraDoEscopo = REGRAS.filter(
+      (r: Regra) =>
+        /document-cover/.test(r.seletor) &&
+        (/\b86%/.test(r.corpo) || /\/ 0\.40\b/.test(r.corpo) || /\/ 0\.57\b/.test(r.corpo)) &&
+        !r.seletor.includes(ESCOPO_GLASS),
+    ).map((r: Regra) => r.seletor);
+
+    expect(foraDoEscopo).toEqual([]);
+  });
+
   it("a troca de consumo do fundo raiz acontece so dentro do escopo", () => {
     // --background continua intocado; o que muda e o alias que body, as
     // utilitarias bg-surface-app e a barra de rolagem leem.
@@ -128,6 +142,122 @@ describe("isolamento: todo token novo vive sob [data-material=\"glass\"]", () =>
       ).toBe(true);
     }
     expect(regra(`.dark${ESCOPO_GLASS} .document-cover-swatch`).corpo).toContain("12% 18%");
+  });
+
+  it("o glass ESCURO das capas fica exatamente como estava (fora de escopo desta leva)", () => {
+    // Follow-up de 7631155, so no CLARO: a capa escura ja lia bem por
+    // julgamento visual. Trava os tres valores herdados, para que uma
+    // mudanca aqui — mesmo acidental, tipo copiar/colar o bloco claro por
+    // engano — reprove imediatamente.
+    expect(regra(`.dark${ESCOPO_GLASS} .document-cover-swatch`).corpo).toContain(
+      "hsl(var(--document-cover-hue) 12% 18%)",
+    );
+    expect(regra(`.dark${ESCOPO_GLASS} .document-cover-line`).corpo).toContain("rgb(255 255 255 / 0.08)");
+    expect(regra(`.dark${ESCOPO_GLASS} .document-cover-line-strong`).corpo).toContain("rgb(255 255 255 / 0.15)");
+  });
+});
+
+describe("capas no glass CLARO: clareadas para respirar (follow-up de 7631155)", () => {
+  // Julgamento visual, nao metrica: a 74% a capa dominava a tela mesmo com
+  // saturacao ja em 12% — o problema era AREA (~2/3 do card), nao cor.
+  // Subida para 86% de luminosidade; sat e hue ficam. Local, e nao em
+  // tokenContrast.helpers, porque HSL-com-alpha e composicao sobre um fundo
+  // nao-branco nao aparecem em nenhum outro teste do projeto.
+  function hslParaRgb(hue: number, satPct: number, luzPct: number): [number, number, number] {
+    const s = satPct / 100;
+    const l = luzPct / 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+    const m = l - c / 2;
+    const [r, g, b] =
+      hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
+    return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+  }
+  function paraHex(rgb: readonly number[]): string {
+    return "#" + rgb.map((v) => Math.round(v).toString(16).toUpperCase().padStart(2, "0")).join("");
+  }
+  function compositar(frente: readonly number[], alpha: number, fundo: readonly number[]): [number, number, number] {
+    return [0, 1, 2].map((i) => frente[i] * alpha + fundo[i] * (1 - alpha)) as [number, number, number];
+  }
+  function luminancia(rgb: readonly number[]): number {
+    const canais = rgb.map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2];
+  }
+  function contrasteRgb(a: readonly number[], b: readonly number[]): number {
+    const x = luminancia(a);
+    const y = luminancia(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+  // Pior caso ao longo de TODO o hue (0-359): --document-cover-hue e por
+  // documento, entao a garantia so vale se valer para qualquer hue, nao so
+  // para os tres nomeados no brief.
+  function piorCaso(medir: (hue: number) => number): { valor: number; hue: number } {
+    let piorValor = Infinity;
+    let piorHue = 0;
+    for (let hue = 0; hue < 360; hue += 1) {
+      const valor = medir(hue);
+      if (valor < piorValor) {
+        piorValor = valor;
+        piorHue = hue;
+      }
+    }
+    return { valor: piorValor, hue: piorHue };
+  }
+
+  it("1. --document-cover-swatch: 86% de luminosidade, sat 12% mantida", () => {
+    expect(regra(`${ESCOPO_GLASS} .document-cover-swatch`).corpo).toContain(
+      "hsl(var(--document-cover-hue) 12% 86%)",
+    );
+
+    // Os tres hues nomeados no brief (verde, roxo, terracota), confirmados
+    // por varredura completa de hue — nao contra um palpite de hue exato.
+    const casos: Array<[string, number, string]> = [
+      ["verde", 90, "#DBE0D7"],
+      ["roxo", 275, "#DCD7E0"],
+      ["terracota", 28, "#E0DBD7"],
+    ];
+    for (const [nome, hue, esperado] of casos) {
+      expect(paraHex(hslParaRgb(hue, 12, 86)), nome).toBe(esperado);
+    }
+  });
+
+  it("2. as linhas internas sobem de alpha, na mesma razao que ja existia entre as duas", () => {
+    expect(regra(`${ESCOPO_GLASS} .document-cover-line`).corpo).toContain(
+      "hsl(var(--document-cover-hue) 12% 34% / 0.40)",
+    );
+    expect(regra(`${ESCOPO_GLASS} .document-cover-line-strong`).corpo).toContain(
+      "hsl(var(--document-cover-hue) 12% 30% / 0.57)",
+    );
+
+    // 0.40 * (0.34/0.24) = 0.5666... arredondado para 0.57 (a precisao de 2
+    // casas decimais que o resto do arquivo usa) reproduz a razao original
+    // (1.4167) a 0.008 de distancia.
+    expect(Number((0.57 / 0.4).toFixed(3))).toBeCloseTo(0.34 / 0.24, 1);
+
+    const contrasteLine = piorCaso(
+      (hue) => contrasteRgb(compositar(hslParaRgb(hue, 12, 34), 0.4, hslParaRgb(hue, 12, 86)), hslParaRgb(hue, 12, 86)),
+    );
+    const contrasteStrong = piorCaso(
+      (hue) => contrasteRgb(compositar(hslParaRgb(hue, 12, 30), 0.57, hslParaRgb(hue, 12, 86)), hslParaRgb(hue, 12, 86)),
+    );
+
+    expect(Number(contrasteLine.valor.toFixed(2))).toBe(1.7);
+    expect(Number(contrasteStrong.valor.toFixed(2))).toBe(2.39);
+    expect(contrasteLine.valor).toBeGreaterThan(1.65);
+    expect(contrasteStrong.valor).toBeGreaterThan(contrasteLine.valor);
+  });
+
+  it("3. a capa clareada continua distinguivel do card (>=1.15:1 contra #F7F0E8)", () => {
+    // #F7F0E8 e a parada mais escura de --glass-surface-elevated claro — o
+    // pior caso de fundo contra o qual a capa aparece (card da grade).
+    const cardMaisEscuro: [number, number, number] = [0xf7, 0xf0, 0xe8];
+    const distincao = piorCaso((hue) => contrasteRgb(hslParaRgb(hue, 12, 86), cardMaisEscuro));
+
+    expect(Number(distincao.valor.toFixed(3))).toBe(1.18);
+    expect(distincao.valor).toBeGreaterThanOrEqual(1.15);
   });
 });
 

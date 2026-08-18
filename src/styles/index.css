@@ -638,17 +638,29 @@ body {
    ATENCAO A ESPECIFICIDADE: `[data-material="glass"] .document-cover-*` empata
    com `.dark .document-cover-*` (0,2,0) e vem DEPOIS, entao venceria tambem no
    escuro e aplicaria luminosidade de tema claro (74%) ali. Por isso o par
-   escuro abaixo, em 0,3,0, e obrigatorio — nao e duplicacao a ser "limpada". */
+   escuro abaixo, em 0,3,0, e obrigatorio — nao e duplicacao a ser "limpada".
+
+   FOLLOW-UP so no CLARO (18/08/2026): a 74% a capa ainda dominava a tela —
+   nao era saturacao (ja em 12%), era area: a capa ocupa ~2/3 do card. Subida
+   para 86% de luminosidade, sat e hue intocados. O ESCURO nao muda: as
+   capas em hsl(hue 12% 18%) ja liam bem por julgamento visual.
+
+   Com a capa mais clara, a linha interna (que so existia para imitar texto
+   na miniatura) quase sumiu com o alpha antigo de 0.24 — pior caso medido
+   1.36:1 contra a propria capa, variando por hue (0-359 completo, porque
+   --document-cover-hue e por documento). Subiu para 0.40 (pior caso
+   1.70:1). A -strong sobe na MESMA RAZAO que ja existia entre as duas
+   (0.34/0.24 = 1.4166...): 0.40 * essa razao = 0.57 (pior caso 2.38:1). */
 [data-material="glass"] .document-cover-swatch {
-  background: hsl(var(--document-cover-hue) 12% 74%);
+  background: hsl(var(--document-cover-hue) 12% 86%);
 }
 
 [data-material="glass"] .document-cover-line {
-  background: hsl(var(--document-cover-hue) 12% 34% / 0.24);
+  background: hsl(var(--document-cover-hue) 12% 34% / 0.40);
 }
 
 [data-material="glass"] .document-cover-line-strong {
-  background: hsl(var(--document-cover-hue) 12% 30% / 0.34);
+  background: hsl(var(--document-cover-hue) 12% 30% / 0.57);
 }
 
 .dark[data-material="glass"] .document-cover-swatch {
