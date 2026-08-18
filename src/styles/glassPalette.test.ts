@@ -46,10 +46,14 @@ describe("isolamento: o material flat nao muda em nenhum valor", () => {
   // em contrario: rode `git diff src/styles/index.css` e olhe :root e .dark.
   // So atualize o hash abaixo quando a mudanca no tema padrao for
   // deliberada e aprovada.
-  // Capturado com o diff desta leva contendo ZERO linhas removidas — so
-  // adicoes —, o que prova que nenhuma declaracao existente foi tocada.
-  const IMPRESSAO_FLAT = "b15abc70407c5211c600714f6de869f3";
-  const TOTAL_FLAT = 207;
+  // ATUALIZADO em 18/08/2026 (chore: remove orphan tokens): a remocao dos 11
+  // tokens --reader-header-* (22 declaracoes, dois blocos de tema) e do
+  // --floating-header-divider (2 declaracoes) tirou 24 do total — 207 -> 183.
+  // Zero consumidores reconfirmados em .tsx/.css antes da remocao; ver o
+  // commit. Nao e regressao: e a mudanca deliberada que este teste existe
+  // para distinguir de uma acidental.
+  const IMPRESSAO_FLAT = "91bfe4525c20782eb71dfe4bb041fd67";
+  const TOTAL_FLAT = 183;
 
   function inventarioFlat(): string[] {
     return [":root", ".dark"]
