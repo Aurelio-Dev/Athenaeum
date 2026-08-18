@@ -25,9 +25,16 @@ const superficiesEscuras: ReadonlyArray<readonly [string, string]> = [
   ["--input / --muted", "#2E2018"],
 ];
 
-// A origem de onde a escala foi derivada em HSL, por tema.
-const ORIGEM_CLARA = "#D9CBBF";
-const ORIGEM_ESCURA = "#3D2E22";
+// A origem de onde --color-border-strong e derivado em HSL, por tema.
+//
+// NAO e --border (#D9CBBF claro / #3D2E22 escuro): a primeira versao desta
+// correcao (17/08/2026, primeira leva) derivou dali e produziu sat 0.257 —
+// quase o dobro da sat ~0.166 de todo o resto do sistema (texto secundario,
+// sidebar-muted), e proxima demais do accent #9C5A2E (sat 0.545). A origem
+// certa e a mesma dos tokens de TEXTO cromatico: e a saturacao, nao a
+// luminancia, que separa a borda de componente do accent.
+const ORIGEM_CLARA = "#7A6558";
+const ORIGEM_ESCURA = "#9E8878";
 
 // Mesma tolerancia do teste de texto cromatico: arredondar para hex de 8 bits
 // desloca hue/sat um pouco.
@@ -136,10 +143,14 @@ describe("--color-border-strong: limite de componente", () => {
     expect(falhas, `cor ${cor}`).toEqual([]);
   });
 
-  it("preserva hue e saturacao da origem nos dois temas", () => {
-    // Se alguem "corrigir" isto com color-mix rumo a --foreground, o tom
-    // dessatura e este teste barra — mesma armadilha ja documentada para os
-    // tokens de texto cromatico.
+  it("preserva hue e saturacao da origem de TEXTO nos dois temas", () => {
+    // Duas armadilhas distintas que este teste barra:
+    //  1. color-mix rumo a --foreground dessatura o tom (documentado nos
+    //     tokens de texto cromatico).
+    //  2. derivar de --border em vez da origem de texto: --border tem sat
+    //     0.255/0.284, quase o dobro da sat ~0.166 do resto do sistema — foi
+    //     exatamente o erro da primeira versao desta correcao (#9A785B),
+    //     que passava em contraste mas ficava proxima demais do accent.
     esperarHueSatProximos(lerHex(":root", "--color-border-strong"), ORIGEM_CLARA, "strong claro");
     esperarHueSatProximos(lerHex(".dark", "--color-border-strong"), ORIGEM_ESCURA, "strong escuro");
   });

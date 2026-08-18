@@ -1,7 +1,65 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 17/08/2026 (follow-up da entrada abaixo) —
+> `--color-border-strong` derivava da origem errada; corrigido para a mesma
+> saturação dos tokens de texto.**
+>
+> A entrada logo abaixo derivou `--color-border-strong` em HSL a partir do
+> próprio `--border` (`#D9CBBF` claro, sat 0.255 / `#3D2E22` escuro, sat
+> 0.284). Isso passava nos três critérios verificados na hora — 3:1, hue/sat
+> preservados, `strong` ≠ `subtle` — mas a origem escolhida estava errada: a
+> saturação resultante (0.257 claro) ficou **quase o dobro** da sat ~0.166 de
+> todo o resto do sistema (texto secundário, `sidebar-muted`), e próxima
+> demais do accent `#9C5A2E` (sat 0.545) — só **1.33:1** de contraste entre
+> os dois no claro. Como a seleção do `DocumentCard` usa `border-primary` (o
+> próprio accent), um card selecionado e um não selecionado ficavam
+> visualmente próximos — o oposto do que a borda deveria sinalizar.
+>
+> **A saturação, não a luminância, é o canal que separa a borda de
+> componente do accent.** Os dois ocupam faixas parecidas de luminosidade
+> (`L=0.48` vs `L=0.396` no claro); é a saturação que os distingue. Por isso
+> a origem certa é a mesma dos tokens de **texto** cromático — não a de
+> `--border`, que é (e continua sendo) um tom mais saturado, pensado para
+> `--color-border-subtle`, que não precisa se distinguir do accent.
+>
+> | Token | Claro | Escuro |
+> | --- | --- | --- |
+> | `--color-border-strong` (corrigido) | `#987F6F` | `#7D695A` |
+>
+> | Contraste do `strong` corrigido | Claro | Escuro |
+> | --- | --- | --- |
+> | sobre `--card` | 3.46:1 ✅ | 3.23:1 ✅ |
+> | sobre `--background` | 3.24:1 ✅ | 3.51:1 ✅ |
+> | sobre `--input` / `--muted` | 3.00:1 ✅ | 3.02:1 ✅ |
+>
+> Derivado em HSL a partir de `#7A6558` (claro) e `#9E8878` (escuro) — a
+> mesma origem de `--muted-foreground` — preservando hue/saturação: claro
+> hue 23.4° / sat 0.166 contra hue 22.9° / sat 0.162 da origem; escuro hue
+> 25.7° / sat 0.163 contra hue 25.3° / sat 0.164.
+>
+> `borderTokenContrast.test.ts` agora trava a saturação contra a origem de
+> **texto**, não contra `--border`. Confirmado por mutação: o `#9A785B`
+> anterior reprova — delta de saturação de 0,095 contra a tolerância de
+> 0,02 (quase 5× o limite; a checagem de hue já barra primeiro, em 4.68°
+> contra a tolerância de 4°).
+>
+> **`--color-sidebar-raised` continua a única superfície fora do requisito**
+> — `2.37:1` com o valor corrigido, mesma pendência já registrada, sem
+> nenhuma borda `strong` cuja adjacência primária seja essa superfície.
+> Fora de escopo desta correção, como da anterior.
+>
+> Confirmado de novo: a família `--reader-header-*` (11 tokens) e
+> `--floating-header-divider` seguem sem nenhum consumidor — ver a entrada
+> abaixo, que já registrava isso.
+
 > **Changelog 17/08/2026 (noite) — Borda de componente interativo e divisória
 > deixam de compartilhar token.**
+>
+> ⚠️ **Valores de `--color-border-strong` desta entrada foram SUPERADOS
+> pela entrada de cima**, escrita depois como follow-up desta. A regra, a
+> classificação dos 190 usos e a remoção de `--color-border-muted`
+> continuam válidas sem alteração; só os dois hexes de `strong` e os
+> contrastes derivados deles mudaram.
 >
 > **REGRA NOVA: os dois papéis têm requisitos de contraste diferentes e não
 > podem viver no mesmo token.** A WCAG 1.4.11 exige **3:1** para o limite de

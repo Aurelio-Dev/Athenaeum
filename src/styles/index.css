@@ -229,18 +229,32 @@
      --muted sobre --card da 1.15:1). A borda e a UNICA portadora de limite;
      sem ela o campo desaparece na superficie.
 
-     Valor derivado em HSL a partir do proprio --border, preservando hue e
-     saturacao e variando so luminosidade — mesma regra dos tokens de texto
-     cromatico (color-mix rumo a um foreground quase acromatico dessatura).
-     Claro #9A785B: hue 27.6°/sat 0.257 contra hue 27.7°/sat 0.255 da origem.
-     Escuro #8B694E: hue 26.6°/sat 0.281 contra hue 26.7°/sat 0.284.
+     Valor derivado em HSL preservando hue e saturacao e variando so
+     luminosidade — mesma regra dos tokens de texto cromatico (color-mix
+     rumo a um foreground quase acromatico dessatura).
+
+     CORRIGIDO em 17/08/2026 (segunda leva): a primeira versao (#9A785B)
+     derivou do proprio --border (#D9CBBF, sat 0.255) em vez da origem real
+     do sistema de texto (#7A6558, sat 0.162). Isso deixou --color-border-
+     strong em sat 0.257 — quase o dobro da sat 0.166 de todo o resto do
+     sistema (texto secundario, sidebar-muted) — e proximo demais do accent
+     #9C5A2E (sat 0.545): so 1.33:1 de contraste entre os dois no claro.
+     Como a SELECAO do DocumentCard usa border-primary (o accent), um card
+     selecionado e um nao-selecionado ficavam visualmente proximos.
+
+     A saturacao e o canal que separa a borda de componente do accent — a
+     luminancia sozinha nao separa, os dois ocupam faixas parecidas de L.
+     Por isso a origem certa e a mesma dos tokens de TEXTO cromatico
+     (#7A6558 claro / #9E8878 escuro, sat ~0.162-0.164), nao a de --border.
+     Claro #987F6F: hue 23.4°/sat 0.166 contra hue 22.9°/sat 0.162 da
+     origem. Escuro #7D695A: hue 25.7°/sat 0.163 contra hue 25.3°/sat 0.164.
 
      --color-border-muted foi REMOVIDO nesta mesma leva. Era o terceiro
      alias e seus 22 usos se dividiam entre os dois papeis reais (14 eram
      campo/botao, 8 eram painel/caixa); nenhum precisava de um terceiro
      nivel. Ver a tabela de classificacao no doc de tokens. */
   --color-border-subtle: var(--border);
-  --color-border-strong: #9A785B;
+  --color-border-strong: #987F6F;
 
   --color-primary: var(--primary);
   --color-primary-hover: #814A26;
@@ -414,8 +428,9 @@
   --border: #3D2E22;
   /* Limite de componente no escuro. --color-border-subtle nao precisa de
      override: ele segue var(--border), que o .dark ja redefine acima. Este
-     precisa, porque e hex fixo (ver o bloco de comentario no :root). */
-  --color-border-strong: #8B694E;
+     precisa, porque e hex fixo (ver o bloco de comentario no :root — inclui
+     a correcao de saturacao de 17/08/2026, segunda leva). */
+  --color-border-strong: #7D695A;
   --input: #2E2018;
   --ring: #9C5A2E;
 
