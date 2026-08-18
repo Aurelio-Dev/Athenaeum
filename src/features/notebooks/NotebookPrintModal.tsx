@@ -117,7 +117,7 @@ export function NotebookPrintModal({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className="rounded-lg border border-border-subtle px-3 py-2 text-xs font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-border-strong px-3 py-2 text-xs font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => setSelectedPageIds(new Set(pages.map((page) => page.id)))}
               disabled={isPreparing}
             >
@@ -125,7 +125,7 @@ export function NotebookPrintModal({
             </button>
             <button
               type="button"
-              className="rounded-lg border border-border-subtle px-3 py-2 text-xs font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-border-strong px-3 py-2 text-xs font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
               onClick={selectCurrentPage}
               disabled={currentPageId === null || isPreparing}
             >
@@ -133,7 +133,7 @@ export function NotebookPrintModal({
             </button>
           </div>
 
-          <fieldset className="min-h-0 overflow-y-auto rounded-lg border border-border-subtle bg-surface-card p-2">
+          <fieldset className="min-h-0 overflow-y-auto rounded-lg border border-border-strong bg-surface-card p-2">
             <legend className="sr-only">Páginas para imprimir</legend>
             <div className="grid gap-1">
               {pages.map((page) => (
@@ -170,7 +170,7 @@ export function NotebookPrintModal({
           <div className="flex gap-3">
             <button
               type="button"
-              className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
               onClick={onCancel}
               disabled={isPreparing}
             >

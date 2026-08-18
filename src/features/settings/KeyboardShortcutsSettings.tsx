@@ -40,7 +40,7 @@ export function KeyboardShortcutsSettings() {
         <p className="mt-1 text-xs leading-5 text-text-secondary">Comandos que já estão disponíveis no Leitor, nos Cadernos e nos Quadros.</p>
       </header>
 
-      <label className="flex h-10 items-center gap-2 rounded-xl border border-border-subtle bg-surface-panel px-3 text-text-secondary focus-within:border-primary focus-within:text-primary">
+      <label className="flex h-10 items-center gap-2 rounded-xl border border-border-strong bg-surface-panel px-3 text-text-secondary focus-within:border-primary focus-within:text-primary">
         <SearchIcon />
         <input
           value={query}

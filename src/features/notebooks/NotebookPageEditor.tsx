@@ -3233,14 +3233,14 @@ export function NotebookPageEditor({
           ref={toolbarRef}
           data-toolbar-variant="floating"
           style={{ top: Math.max(8, selectionToolbarRect.top - notebookSelectionToolbarHeight - 8), left: selectionToolbarRect.left }}
-          className="fixed z-[60] flex h-20 w-56 min-w-0 -translate-x-1/2 flex-col items-stretch gap-1 overflow-visible rounded-lg border border-border-subtle bg-[var(--card)] p-1.5 shadow-lg"
+          className="fixed z-[60] flex h-20 w-56 min-w-0 -translate-x-1/2 flex-col items-stretch gap-1 overflow-visible rounded-lg border border-border-strong bg-[var(--card)] p-1.5 shadow-lg"
         >
           {focusToolbarControls}
           {textMenu}
           {textColorMenu}
 
           {isLinkPopoverOpen ? (
-            <div className={"absolute left-1/2 top-[calc(100%+6px)] z-40 flex w-72 -translate-x-1/2 items-center gap-2 rounded-lg border border-border-subtle bg-surface-panel p-2 shadow-lg"}>
+            <div className={"absolute left-1/2 top-[calc(100%+6px)] z-40 flex w-72 -translate-x-1/2 items-center gap-2 rounded-lg border border-border-strong bg-surface-panel p-2 shadow-lg"}>
               <input
                 ref={linkInputRef}
                 value={linkUrl}
@@ -3257,7 +3257,7 @@ export function NotebookPageEditor({
                   }
                 }}
                 placeholder="https://..."
-                className="min-w-0 flex-1 rounded-md border border-border-subtle bg-[var(--card)] px-2 py-1.5 text-xs text-text-primary outline-none focus:border-primary"
+                className="min-w-0 flex-1 rounded-md border border-border-strong bg-[var(--card)] px-2 py-1.5 text-xs text-text-primary outline-none focus:border-primary"
               />
               <button type="button" className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-bold text-text-inverse" onClick={commitLink}>
                 Aplicar

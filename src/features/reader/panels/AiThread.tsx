@@ -44,7 +44,7 @@ export function AiThread({ messages, status, onSuggestion, onJumpToPage, onStop,
                 key={suggestion}
                 type="button"
                 onClick={() => onSuggestion(suggestion)}
-                className="rounded-full border border-border-subtle bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="rounded-full border border-border-strong bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {suggestion}
               </button>
@@ -78,7 +78,7 @@ export function AiThread({ messages, status, onSuggestion, onJumpToPage, onStop,
                           onJumpToPage(message.citation.page);
                         }
                       }}
-                      className="mt-2 rounded-full border border-border-subtle bg-[var(--card)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="mt-2 rounded-full border border-border-strong bg-[var(--card)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       p. {message.citation.page}
                     </button>

@@ -275,7 +275,7 @@ export function Sidebar({
                       }}
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => event.stopPropagation()}
-                      className="min-w-0 flex-1 rounded-md border border-border-muted bg-surface-panel px-1.5 py-0.5 text-[13px] font-semibold leading-[18px] text-text-primary outline-none focus:border-primary"
+                      className="min-w-0 flex-1 rounded-md border border-border-strong bg-surface-panel px-1.5 py-0.5 text-[13px] font-semibold leading-[18px] text-text-primary outline-none focus:border-primary"
                       aria-label="Renomear coleção"
                       autoFocus
                     />
@@ -400,7 +400,7 @@ export function Sidebar({
             </header>
 
             <div className="px-6 py-5">
-              <div className="rounded-lg border border-border-muted bg-surface-muted px-4 py-3 text-sm font-semibold text-text-primary">
+              <div className="rounded-lg border border-border-subtle bg-surface-muted px-4 py-3 text-sm font-semibold text-text-primary">
                 {collectionDialog.collection.name}
               </div>
             </div>

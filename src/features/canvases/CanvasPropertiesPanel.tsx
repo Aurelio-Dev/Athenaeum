@@ -88,7 +88,7 @@ export function CanvasPropertiesPanel({
                   className={`h-8 rounded-lg border-2 transition ${
                     active
                       ? "border-[var(--accent)] ring-2 ring-[var(--color-accent-tint-bg)]"
-                      : "border-transparent hover:border-[var(--color-border-subtle)]"
+                      : "border-transparent hover:border-[var(--color-border-strong)]"
                   }`}
                   style={{ backgroundColor: pair.bg }}
                 />
@@ -117,7 +117,7 @@ export function CanvasPropertiesPanel({
                   className={`h-8 rounded-lg border text-xs font-bold transition ${
                     active
                       ? "border-[var(--accent)] bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
-                      : "border-[var(--color-border-subtle)] text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
+                      : "border-[var(--color-border-strong)] text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
                   }`}
                 >
                   {option.label}
@@ -147,7 +147,7 @@ export function CanvasPropertiesPanel({
                   className={`flex h-9 items-center justify-center rounded-lg border transition ${
                     active
                       ? "border-[var(--accent)] bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
-                      : "border-[var(--color-border-subtle)] text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
+                      : "border-[var(--color-border-strong)] text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
                   }`}
                 >
                   <FillStyleIcon style={option.value} />

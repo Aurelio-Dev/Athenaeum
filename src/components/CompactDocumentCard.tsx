@@ -28,7 +28,7 @@ function PdfIcon() {
 
 export function CompactDocumentCard({ title, authors, year, trailingAction }: CompactDocumentCardProps) {
   return (
-    <div className="group flex items-start gap-2 rounded-md border border-border-subtle bg-surface-card px-3 py-2">
+    <div className="group flex items-start gap-2 rounded-md border border-border-strong bg-surface-card px-3 py-2">
       <span className="mt-0.5 shrink-0 rounded-md bg-status-red px-1.5 py-1 text-text-inverse">
         <PdfIcon />
       </span>

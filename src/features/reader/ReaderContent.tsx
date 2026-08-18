@@ -3338,7 +3338,7 @@ export function ReaderContent({
           aria-hidden={!isReadingMode}
           aria-keyshortcuts="Escape"
           tabIndex={isReadingMode ? 0 : -1}
-          className={`reader-reading-exit absolute right-[22px] top-5 z-40 rounded-[11px] border border-border-subtle bg-surface-card px-3.5 py-2 text-xs font-semibold text-text-primary shadow-[var(--reader-floating-shadow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+          className={`reader-reading-exit absolute right-[22px] top-5 z-40 rounded-[11px] border border-border-strong bg-surface-card px-3.5 py-2 text-xs font-semibold text-text-primary shadow-[var(--reader-floating-shadow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
             isReadingMode ? "reader-reading-exit--visible" : ""
           }`}
           onClick={() => {

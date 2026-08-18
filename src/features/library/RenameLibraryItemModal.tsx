@@ -111,7 +111,7 @@ export function RenameLibraryItemModal({ title, initialName, onClose, onRename }
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="rounded-lg border border-border-strong bg-surface-panel px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary focus:ring-2 focus:ring-primary/20"
               autoFocus
             />
           </label>
@@ -121,7 +121,7 @@ export function RenameLibraryItemModal({ title, initialName, onClose, onRename }
         <footer className="flex justify-end gap-3 border-t border-border-subtle px-6 py-4">
           <button
             type="button"
-            className="rounded-lg border border-border-muted px-4 py-2 text-sm font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
             onClick={onClose}
             disabled={isSubmitting}
           >

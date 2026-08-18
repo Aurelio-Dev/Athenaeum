@@ -139,7 +139,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Ex: Filosofia da Mente"
-              className="rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="rounded-lg border border-border-strong bg-surface-panel px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary focus:ring-2 focus:ring-primary/20"
               autoFocus
             />
             {error ? <span className="text-sm font-semibold text-status-red-text">{error}</span> : null}
@@ -152,7 +152,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Uma linha sobre o tema desta coleção..."
               rows={3}
-              className="resize-none rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm leading-6 text-text-primary outline-none placeholder:text-text-subtle focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="resize-none rounded-lg border border-border-strong bg-surface-panel px-3 py-2 text-sm leading-6 text-text-primary outline-none placeholder:text-text-subtle focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </label>
 
@@ -165,7 +165,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
         <footer className="flex justify-end gap-3 border-t border-border-subtle px-6 py-4">
           <button
             type="button"
-            className="rounded-lg border border-border-muted px-4 py-2 text-sm font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
             onClick={onClose}
             disabled={isSubmitting}
           >

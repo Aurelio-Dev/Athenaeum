@@ -58,7 +58,7 @@ export function NotebookCard({ notebook, collections, onOpen, onRename, onToggle
             onOpen(notebook);
           }
         }}
-        className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#E8DDD4] bg-surface-card shadow-card transition hover:-translate-y-1 dark:border-border-subtle"
+        className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#E8DDD4] bg-surface-card shadow-card transition hover:-translate-y-1 dark:border-border-strong"
       >
         <div className="h-[3px] w-full shrink-0 bg-primary" aria-hidden="true" />
 

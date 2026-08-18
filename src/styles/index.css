@@ -207,9 +207,40 @@
   --notebook-focus-bar-bg: #F6F0E8;
   --notebook-focus-rail-bg: #F2EBE1;
 
+  /* ------------------------------------------------------------
+     BORDA: dois papeis, dois requisitos de contraste
+     ------------------------------------------------------------
+     Ate 17/08/2026 estes eram tres aliases IDENTICOS de --border, ou seja,
+     nomes sem semantica: quem escrevia "strong" recebia o mesmo traco de
+     quem escrevia "subtle". Agora a distincao e real.
+
+     --color-border-subtle  DIVISORIA decorativa. Regua entre secoes, borda
+       de card nao interativo, contorno de painel flutuante. A WCAG nao exige
+       contraste minimo para isto. Mantem o valor historico de --border.
+
+     --color-border-strong  LIMITE DE COMPONENTE. Campo, botao, wrapper de
+       campo, controle agrupado, card clicavel. A WCAG 1.4.11 exige 3:1
+       contra o que cerca o controle.
+
+     POR QUE 1.4.11 SE APLICA AQUI SEM EXCECAO: o criterio dispensa o
+     contraste quando o componente e identificavel por outra indicacao
+     visual. No Athenaeum nao existe essa outra indicacao — as superficies
+     nao se distinguem entre si (--card sobre --background da 1.07:1,
+     --muted sobre --card da 1.15:1). A borda e a UNICA portadora de limite;
+     sem ela o campo desaparece na superficie.
+
+     Valor derivado em HSL a partir do proprio --border, preservando hue e
+     saturacao e variando so luminosidade — mesma regra dos tokens de texto
+     cromatico (color-mix rumo a um foreground quase acromatico dessatura).
+     Claro #9A785B: hue 27.6°/sat 0.257 contra hue 27.7°/sat 0.255 da origem.
+     Escuro #8B694E: hue 26.6°/sat 0.281 contra hue 26.7°/sat 0.284.
+
+     --color-border-muted foi REMOVIDO nesta mesma leva. Era o terceiro
+     alias e seus 22 usos se dividiam entre os dois papeis reais (14 eram
+     campo/botao, 8 eram painel/caixa); nenhum precisava de um terceiro
+     nivel. Ver a tabela de classificacao no doc de tokens. */
   --color-border-subtle: var(--border);
-  --color-border-muted: var(--border);
-  --color-border-strong: var(--border);
+  --color-border-strong: #9A785B;
 
   --color-primary: var(--primary);
   --color-primary-hover: #814A26;
@@ -381,6 +412,10 @@
   --notebook-focus-rail-bg: #18130E;
 
   --border: #3D2E22;
+  /* Limite de componente no escuro. --color-border-subtle nao precisa de
+     override: ele segue var(--border), que o .dark ja redefine acima. Este
+     precisa, porque e hex fixo (ver o bloco de comentario no :root). */
+  --color-border-strong: #8B694E;
   --input: #2E2018;
   --ring: #9C5A2E;
 
@@ -652,7 +687,7 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
+  background: var(--color-border-subtle);
   border: 3px solid var(--color-surface-app);
   border-radius: 999px;
 }
@@ -1593,7 +1628,7 @@ select {
 }
 
 .notebook-editor [data-file-attachment-action] {
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border-strong);
   border-radius: 999px;
   background: var(--color-surface-card);
   color: var(--color-text-secondary);

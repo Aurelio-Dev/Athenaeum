@@ -220,12 +220,12 @@ function ThumbnailRow({ pdfDocument, page, active, sectionTitle, registerPdfCanc
         className={`grid w-full grid-cols-[24px_auto_minmax(0,1fr)] items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 ${
           active
             ? "border-primary bg-[var(--color-accent-tint-bg)]"
-            : "border-border-subtle bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
+            : "border-border-strong bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
         }`}
         onClick={onClick}
       >
         <span className={`text-center text-xs tabular-nums ${active ? "font-bold text-primary" : "text-[var(--muted-foreground)]"}`}>{page}</span>
-        <span className={`overflow-hidden rounded border bg-white ${active ? "border-primary" : "border-border-subtle"}`} style={{ width: thumbnailWidth }}>
+        <span className={`overflow-hidden rounded border bg-white ${active ? "border-primary" : "border-border-strong"}`} style={{ width: thumbnailWidth }}>
           {pdfDocument && hasRendered ? (
             <PageThumbnailCanvas
               pdfDocument={pdfDocument}
@@ -415,10 +415,17 @@ function BookmarksView({
             return (
               <li
                 key={bookmark.id}
+                // A borda deste item muda de PAPEL conforme o estado: em
+                // repouso ele e um item de lista (divisoria), mas em edicao
+                // vira o limite do campo de rename que aparece dentro dele —
+                // e ai a 1.4.11 passa a valer. Unico caso do app em que um
+                // mesmo elemento troca entre os dois tokens.
                 className={`group flex min-w-0 items-center rounded-lg border transition ${
                   isCurrentPage
                     ? "border-primary bg-[var(--color-accent-tint-bg)]"
-                    : "border-border-subtle bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
+                    : isEditing
+                      ? "border-border-strong bg-[var(--card)]"
+                      : "border-border-subtle bg-[var(--card)] hover:border-primary/60 hover:bg-[var(--muted)]"
                 }`}
               >
                 {isEditing ? (
@@ -431,7 +438,7 @@ function BookmarksView({
                       autoFocus
                       aria-label={`Editar label do marcador da página ${bookmark.pageNumber}`}
                       placeholder="Adicionar label"
-                      className="mt-1 block w-full rounded-md border border-border-muted bg-[var(--background)] px-1.5 py-0.5 text-xs leading-5 text-[var(--foreground)] outline-none focus:border-primary"
+                      className="mt-1 block w-full rounded-md border border-border-strong bg-[var(--background)] px-1.5 py-0.5 text-xs leading-5 text-[var(--foreground)] outline-none focus:border-primary"
                       onChange={(event) => setInlineBookmarkLabel(event.target.value)}
                       onFocus={(event) => event.currentTarget.select()}
                       onBlur={() => void submitInlineRename(bookmark)}
@@ -693,7 +700,7 @@ export function ReaderLeftSidebar({
           <li key={`${result.page}-${index}`}>
             <button
               type="button"
-              className="w-full rounded-lg border border-border-subtle bg-[var(--card)] px-3 py-2 text-left outline-none transition hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/60"
+              className="w-full rounded-lg border border-border-strong bg-[var(--card)] px-3 py-2 text-left outline-none transition hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/60"
               onClick={() => onJumpToPage(result.page)}
             >
               <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Página {result.page}</p>

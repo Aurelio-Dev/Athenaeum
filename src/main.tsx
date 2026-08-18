@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
     if (this.state.error) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-surface-app px-6 text-center text-text-primary">
-          <div className="max-w-md rounded-lg border border-border-muted bg-surface-panel p-6 shadow-card">
+          <div className="max-w-md rounded-lg border border-border-subtle bg-surface-panel p-6 shadow-card">
             <h1 className="text-lg font-bold">Nao foi possivel carregar o Athenaeum</h1>
             <p className="mt-3 text-sm text-text-secondary">
               Feche o aplicativo e abra novamente. Se continuar acontecendo, o erro foi registrado no console do app.

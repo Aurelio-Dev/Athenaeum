@@ -74,7 +74,7 @@ export function DocumentPickerModal({ documents, linkedDocumentIds, onPick, onCl
         </header>
 
         <div className="border-b border-border-subtle px-6 py-3">
-          <label className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
+          <label className="flex items-center gap-2 rounded-lg border border-border-strong bg-surface-subtle px-3 py-2 text-text-subtle">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
               <line x1="21" x2="16.65" y1="21" y2="16.65" />

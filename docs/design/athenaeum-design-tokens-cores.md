@@ -1,5 +1,73 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 17/08/2026 (noite) — Borda de componente interativo e divisória
+> deixam de compartilhar token.**
+>
+> **REGRA NOVA: os dois papéis têm requisitos de contraste diferentes e não
+> podem viver no mesmo token.** A WCAG 1.4.11 exige **3:1** para o limite de
+> um componente de interface; para uma régua decorativa não exige nada. Um
+> token só não serve aos dois: subir tudo para 3:1 deixaria cada divisória
+> com traço quase de texto, e manter tudo baixo deixa todo campo sem limite
+> perceptível — que era o estado até aqui (1.21:1–1.46:1 em **todos** os 190
+> usos).
+>
+> **Por que 1.4.11 se aplica aqui sem exceção.** O critério dispensa o
+> contraste quando o componente é identificável por outra indicação visual.
+> No Athenaeum **essa outra indicação não existe**: as superfícies não se
+> distinguem entre si — `--card` sobre `--background` dá **1.07:1**, `--muted`
+> sobre `--card` dá **1.15:1**. Um campo com fundo `--card` sobre um painel
+> `--background` é literalmente invisível sem a borda. Ela é a única
+> portadora de limite, então carrega o requisito inteiro.
+>
+> | Token | Papel | Claro | Escuro |
+> | --- | --- | --- | --- |
+> | `--color-border-subtle` | divisória decorativa | `var(--border)` = `#D9CBBF` | `var(--border)` = `#3D2E22` |
+> | `--color-border-strong` | limite de componente | `#9A785B` | `#8B694E` |
+>
+> | Contraste do `strong` | Claro | Escuro |
+> | --- | --- | --- |
+> | sobre `--card` | 3.72:1 ✅ | 3.39:1 ✅ |
+> | sobre `--input` / `--muted` | 3.23:1 ✅ | 3.17:1 ✅ |
+>
+> Derivado em HSL a partir do próprio `--border`, preservando hue e saturação
+> (claro 27.6° / 0.257 contra 27.7° / 0.255 da origem; escuro 26.6° / 0.281
+> contra 26.7° / 0.284) — mesma regra dos tokens de texto cromático, pelo
+> mesmo motivo: `color-mix` rumo a um foreground quase acromático dessatura.
+>
+> **`--color-border-muted` foi removido.** Os três `--color-border-*` eram
+> aliases **idênticos** de `--border` — nomes sem semântica, em que escrever
+> `strong` dava exatamente o mesmo traço que escrever `subtle`. Os 22 usos do
+> `muted` se dividiram limpo entre os dois papéis reais (14 eram campo, botão
+> ou wrapper de campo; 8 eram painel de menu ou caixa informativa); nenhum
+> pedia um terceiro nível.
+>
+> **Classificação aplicada** (190 usos, inventariados na Etapa 1):
+>
+> | Vai para | Quantos | O quê |
+> | --- | --- | --- |
+> | `strong` | 83 | campos, botões, wrappers de campo, controles agrupados, cards clicáveis, zona de drop |
+> | `subtle` | 99 | réguas de uma aresta, painéis de menu, chrome flutuante, caixas informativas, decorativos |
+> | condicional | 1 | `ReaderLeftSidebar` — item de marcador: `subtle` em repouso, `strong` em edição |
+> | **não tocados** | 8 | blocos do editor de Caderno — ver abaixo |
+>
+> **Categoria à parte, pendente de token próprio: os blocos do editor de
+> Caderno.** Tabela, callout, figura, anexo e equação (`index.css` 745, 786,
+> 880, 892, 1555, 1569, 1644, 1807) desenham contorno de **conteúdo do
+> documento**, não de chrome do app. Nem "limite de componente" nem
+> "divisória decorativa" descreve o que eles são: pertencem ao documento que
+> o usuário escreveu, e um dia serão exportados junto com ele. Ficaram
+> intocados de propósito, aguardando um token de conteúdo editorial próprio.
+>
+> **Órfãos confirmados nesta leva.** A família `--reader-header-*` inteira —
+> os **11 tokens** — tem zero consumidores; a suspeita da auditoria de 17/08
+> se confirma e vai além do `--reader-header-muted` já registrado.
+> `--floating-header-divider` também está sem consumidor. Registrados, sem
+> destino inventado.
+>
+> Travado por `src/styles/borderTokenContrast.test.ts`, que reprova um
+> `strong` abaixo de 3:1, um `strong` que volte a igualar o `subtle`, e um
+> `strong` dessaturado — as três mutações foram verificadas.
+
 > **Changelog 17/08/2026 (tarde) — A correção de contraste da entrada
 > abaixo dessaturava o texto secundário; revertida para hexes fixos que
 > preservam hue/saturação.** `color-mix(in srgb, var(--foreground) 72%,
@@ -166,6 +234,10 @@
 > `--reader-floating-shadow`, de uma família de nomes diferente. Não
 > investiguei se é a família inteira (11 tokens) que ficou órfã ou só
 > parte dela. Fica para uma auditoria própria, não expandida aqui.
+>
+> ✅ **Confirmado em 17/08/2026 (noite):** é a família inteira. Os 11
+> tokens `--reader-header-*` têm zero consumidores, e
+> `--floating-header-divider` também. Ver a entrada de bordas no topo.
 >
 > **Consequência: a conversão de ícones e rótulos foi revertida.** Como a
 > ilha volta a ser escura sempre, os brancos e o `#9E8878` do componente

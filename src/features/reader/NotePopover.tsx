@@ -104,7 +104,7 @@ export function NotePopover({ selectedText, initialNote, onCancel, onSave, onDel
 
         <textarea
           ref={textareaRef}
-          className="mt-4 h-32 w-full resize-none rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
+          className="mt-4 h-32 w-full resize-none rounded-lg border border-border-strong bg-surface-panel px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
           value={note}
           placeholder="Escreva sua nota..."
           onChange={(event) => setNote(event.target.value)}
