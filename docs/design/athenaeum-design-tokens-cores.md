@@ -1,5 +1,102 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 18/08/2026 — O material glass ganha paleta própria: fundo
+> estratificado, texto secundário e capas.**
+>
+> O glass estava aplicado (entrada abaixo) mas **não lia como vidro**: com o
+> fundo do flat, a distância entre o fundo e a parada escura de
+> `--glass-surface` era de **ΔL\* 0.3** no claro — indistinguível. Vidro sem
+> camada separada é só uma superfície clara.
+>
+> ### ΔL\* é a métrica de camada; contraste WCAG é a de texto
+>
+> **São perguntas diferentes, e a segunda não responde a primeira.** WCAG
+> responde "dá para LER este texto sobre este fundo" e é uma razão entre
+> luminâncias relativas. Entre dois cremes vizinhos essa razão fica ~1.0 e
+> não diz nada sobre se as duas camadas se distinguem — 1.0 é o valor tanto
+> para "iguais" quanto para "quase iguais". Separação de camada é percepção
+> de **luminosidade**, e a escala perceptualmente uniforme para isso é o L\*
+> do CIELAB. Por isso os alvos desta leva são ΔL\*, não razões de contraste.
+>
+> Usar contraste WCAG para julgar camadas foi o que deixou o problema passar
+> na leva anterior: os quatro números de legibilidade estavam certos e
+> validados, e mesmo assim o vidro não aparecia.
+>
+> ### 1. Fundo estratificado
+>
+> Token novo `--glass-surface-app`: `#EDE2D4` no claro, `#120E0C` no escuro.
+> `--background` **não muda** — o que muda, e só dentro do seletor de
+> material, é o alias `--color-surface-app`, que `body`, as 14 utilitárias
+> `bg-surface-app` e a borda do polegar da barra de rolagem já liam. Trocar
+> só o `body` abriria costura visível contra as áreas pintadas pela
+> utilitária.
+>
+> | ΔL\* do fundo até… | Claro | Escuro |
+> | --- | --- | --- |
+> | `--glass-surface`, parada clara | 8.0 | 9.4 |
+> | `--glass-surface`, parada escura | 3.4 | 4.4 |
+> | `--glass-surface-elevated`, parada clara | 9.0 | 10.7 |
+> | `--glass-surface-elevated`, parada escura | 4.7 | 6.4 |
+>
+> As duas superfícies de vidro **não foram tocadas**: já estavam validadas.
+>
+> ### 2. Texto secundário próprio do glass claro
+>
+> Com o fundo em `#EDE2D4`, o `#7A6558` do flat cai a **4.29:1**. Token novo
+> `--glass-text-secondary` = **`#766255`**, derivado em HSL do próprio
+> `#7A6558` escurecendo só a luminosidade — **não** por `color-mix`, que
+> dessatura (regra estabelecida). Hue 23.6° (origem 22.9°) e saturação 0.163
+> (origem 0.162): dentro das tolerâncias de 4° e 0.02.
+>
+> | Sobre | Contraste |
+> | --- | --- |
+> | `#EDE2D4` (fundo) | **4.50:1** ✅ |
+> | `#F4ECE3` (surface, parada escura) | 4.92:1 ✅ |
+> | `#F7F0E8` (elevated, parada escura) | 5.09:1 ✅ |
+>
+> ⚠️ A margem sobre `#EDE2D4` é de **0.003** — é o menor escurecimento que
+> fecha 4.5:1, exatamente como a regra de derivação pede. Qualquer clareada
+> futura quebra AA e o teste. Se quiser folga real, `#756154` dá 4.57:1 com
+> hue/sat igualmente dentro da tolerância.
+>
+> O **escuro não recebe token próprio**: `#9E8878` dá **5.71:1** sobre
+> `#120E0C`. Um token escuro aqui seria cópia do valor de flat esperando
+> divergir. Por isso o bloco usa `[data-material="glass"]:not(.dark)` em vez
+> do par `[data-material="glass"]` / `.dark[data-material="glass"]` do resto
+> do arquivo — assim o escuro simplesmente não é tocado.
+>
+> `--color-sidebar-muted` **não** entra: vive sobre `--glass-surface`
+> (4.69:1 com o tom do flat, passa) e sobre `--color-sidebar-raised`, que não
+> está entre as superfícies para as quais este tom foi derivado.
+>
+> ### 3. Capas — papel tingido
+>
+> Sob glass, a saturação das capas cai de 28%/30% para **12%**; hue e
+> luminosidade ficam. O hue continua determinístico por documento
+> (`deriveCoverHue`), então a distinção entre documentos é **exatamente a
+> mesma** — muda a intensidade, não a identidade. Medido na tela: saturação
+> 0.121 nos dois temas.
+>
+> Armadilha registrada: `[data-material="glass"] .document-cover-*` empata em
+> especificidade com `.dark .document-cover-*` (0,2,0) e vem depois, então
+> venceria também no escuro e aplicaria luminosidade de tema claro ali. O par
+> `.dark[data-material="glass"]` (0,3,0) é **obrigatório**, e as duas regras
+> de linha que ele repete não são duplicação a limpar.
+>
+> ### Isolamento — a invariante principal
+>
+> O tema padrão está fechado e aprovado depois de uma reversão inteira.
+> `glassPalette.test.ts` trava o inventário **completo** dos 207 tokens de
+> `:root` e `.dark` por impressão digital, além de checar que nenhum token
+> `--glass-*` é declarado fora do escopo de material. Sete mutações
+> confirmadas, nas duas direções.
+>
+> Verificado também por captura: os seis estados de flat (grade, lista e
+> modal × dois temas) têm o **mesmo SHA-256** de antes desta leva. Os dois
+> modais só bateram depois de desfocar o campo de nome — o anel de autofoco
+> pinta de forma assíncrona e a captura pegava a corrida, não uma diferença
+> de estilo.
+
 > **Changelog 18/08/2026 — Os 7 tokens `--glass-*` deixam de ser órfãos: a
 > Library é o primeiro consumidor amplo.**
 >

@@ -89,9 +89,19 @@ describe("material glass: cada papel consome o token certo", () => {
   });
 
   it("surface-app (a raiz) nao vira superficie de vidro", () => {
-    // E fundo. Se virasse gradiente, as superficies acima perderiam o plano
+    // E fundo. Se virasse GRADIENTE, as superficies acima perderiam o plano
     // contra o qual se destacam.
-    expect(css).not.toMatch(/--color-surface-app:\s*var\(--glass-/);
+    //
+    // Esta assercao foi ESTREITADA em 18/08/2026, junto com a paleta propria
+    // do glass. Antes ela dizia que --color-surface-app nunca podia apontar
+    // para um --glass-*; hoje ele aponta para --glass-surface-app, que e uma
+    // cor CHAPADA e existe justamente para estratificar o fundo. A regra que
+    // importa sempre foi "o fundo nao e uma das duas superficies de vidro", e
+    // e essa que continua travada aqui — nao afrouxada, so dita com precisao.
+    expect(css).not.toMatch(/--color-surface-app:\s*var\(--glass-surface\)/);
+    expect(css).not.toMatch(/--color-surface-app:\s*var\(--glass-surface-elevated\)/);
+    expect(css).not.toMatch(/--color-surface-app:\s*linear-gradient/);
+    // E nao pode ganhar marcador de superficie por outro caminho.
     expect(css).not.toMatch(/\.material-surface[\w-]*\s*\{[^}]*--color-surface-app/);
   });
 

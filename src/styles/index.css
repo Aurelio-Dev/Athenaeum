@@ -400,6 +400,22 @@
    borda/sombra — clarear o fundo para "elevar" quebra os dois tons
    secundarios de uma vez. */
 [data-material="glass"] {
+  /* FUNDO ESTRATIFICADO. Sem isto o vidro nao le como vidro: com o fundo do
+     flat (#F5EDE4), a distancia ate a parada escura de --glass-surface era de
+     DeltaL* 0.3 no claro — indistinguivel. O fundo proprio abre a camada.
+
+     DeltaL* (CIELAB), e nao contraste WCAG: sao perguntas diferentes. WCAG
+     mede LEGIBILIDADE de texto sobre um fundo; separacao de CAMADAS em tons
+     vizinhos e percepcao de luminosidade, e a razao de contraste entre dois
+     cremes quase iguais fica ~1.0 e nao distingue nada. Ver o doc.
+
+     --background NAO muda: o tema padrao esta fechado. O que acontece aqui e
+     so a troca do CONSUMO, dentro do seletor de material — --color-surface-app
+     e o alias que body, as 14 utilitarias bg-surface-app e a borda do polegar
+     da barra de rolagem ja liam. Trocar so o body abriria costura visivel
+     entre ele e as areas pintadas pela utilitaria. */
+  --glass-surface-app: #EDE2D4;
+  --color-surface-app: var(--glass-surface-app);
   --glass-surface: linear-gradient(180deg, #FDFAF7 0%, #F4ECE3 100%);
   --glass-surface-elevated: linear-gradient(180deg, #FFFDFA 0%, #F7F0E8 100%);
   --glass-border-top: rgb(255 255 255 / 0.65);
@@ -418,6 +434,9 @@
    ordem de origem — mesmo racional da especificidade composta usada no
    chrome flutuante do Reader. */
 .dark[data-material="glass"] {
+  /* O alias --color-surface-app fica no bloco de cima e vale para os dois
+     temas; aqui basta o valor. */
+  --glass-surface-app: #120E0C;
   --glass-surface: linear-gradient(180deg, #262220 0%, #1C1815 100%);
   --glass-surface-elevated: linear-gradient(180deg, #292521 0%, #201C19 100%);
   --glass-border-top: rgb(255 255 255 / 0.10);
@@ -437,6 +456,31 @@
   --glass-immersive-surface: linear-gradient(180deg, #292521 0%, #201C19 100%);
   --glass-immersive-border-top: rgb(255 255 255 / 0.16);
   --glass-immersive-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.70);
+}
+
+/* Texto secundario proprio do glass CLARO.
+   Com o fundo em #EDE2D4, o #7A6558 do flat cai a 4.29:1 — abaixo de AA. O
+   tom novo e derivado em HSL a partir do proprio #7A6558, escurecendo so a
+   luminosidade ate fechar 4.5:1 na superficie mais restritiva. NAO por
+   color-mix: misturar com um neutro dessatura o tom e quebra a identidade
+   quente da paleta (regra ja estabelecida no doc, e o teste trava hue/sat).
+
+   Fecha 4.50:1 sobre #EDE2D4, 4.92:1 sobre #F4ECE3 e 5.09:1 sobre #F7F0E8 —
+   as paradas mais escuras de cada camada, que sao o pior caso do claro.
+
+   :not(.dark) em vez do par [data-material="glass"] /
+   .dark[data-material="glass"] usado no resto do arquivo: o ESCURO nao
+   precisa de token proprio (#9E8878 ja da 5.71:1 sobre #120E0C), e restaurar
+   #9E8878 num bloco escuro seria copiar um valor do flat para ca — se o flat
+   mudasse, as duas copias divergiriam em silencio. Assim o escuro simplesmente
+   nao e tocado.
+
+   --color-sidebar-muted NAO entra: vive sobre --glass-surface (4.69:1 com o
+   tom do flat, passa) e sobre --color-sidebar-raised, que nao esta entre as
+   superficies para as quais este tom foi derivado. */
+[data-material="glass"]:not(.dark) {
+  --glass-text-secondary: #766255;
+  --muted-foreground: var(--glass-text-secondary);
 }
 
 /* ------------------------------------------------------------
@@ -604,6 +648,44 @@ body {
 }
 
 .dark .document-cover-line-strong {
+  background: rgb(255 255 255 / 0.15);
+}
+
+/* Capas no material glass: papel tingido em vez de papel colorido.
+   So a SATURACAO cai (28%/30% -> 12%); hue e luminosidade ficam. O hue
+   continua determinístico por documento (deriveCoverHue), entao a distincao
+   entre documentos e exatamente a mesma — muda a intensidade, nao a
+   identidade.
+
+   ATENCAO A ESPECIFICIDADE: `[data-material="glass"] .document-cover-*` empata
+   com `.dark .document-cover-*` (0,2,0) e vem DEPOIS, entao venceria tambem no
+   escuro e aplicaria luminosidade de tema claro (74%) ali. Por isso o par
+   escuro abaixo, em 0,3,0, e obrigatorio — nao e duplicacao a ser "limpada". */
+[data-material="glass"] .document-cover-swatch {
+  background: hsl(var(--document-cover-hue) 12% 74%);
+}
+
+[data-material="glass"] .document-cover-line {
+  background: hsl(var(--document-cover-hue) 12% 34% / 0.24);
+}
+
+[data-material="glass"] .document-cover-line-strong {
+  background: hsl(var(--document-cover-hue) 12% 30% / 0.34);
+}
+
+.dark[data-material="glass"] .document-cover-swatch {
+  background: hsl(var(--document-cover-hue) 12% 18%);
+}
+
+/* Estes dois repetem o valor de `.dark` de proposito: as linhas do escuro sao
+   branco translucido, sem saturacao para baixar. Existem so para ganhar das
+   regras claras acima por especificidade. Se um dia as linhas do escuro
+   ganharem cor, e aqui que a versao dessaturada delas entra. */
+.dark[data-material="glass"] .document-cover-line {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.dark[data-material="glass"] .document-cover-line-strong {
   background: rgb(255 255 255 / 0.15);
 }
 
