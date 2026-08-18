@@ -43,21 +43,26 @@
 > ### 2. Texto secundário próprio do glass claro
 >
 > Com o fundo em `#EDE2D4`, o `#7A6558` do flat cai a **4.29:1**. Token novo
-> `--glass-text-secondary` = **`#766255`**, derivado em HSL do próprio
-> `#7A6558` escurecendo só a luminosidade — **não** por `color-mix`, que
-> dessatura (regra estabelecida). Hue 23.6° (origem 22.9°) e saturação 0.163
-> (origem 0.162): dentro das tolerâncias de 4° e 0.02.
+> `--glass-text-secondary`, derivado em HSL do próprio `#7A6558` escurecendo
+> só a luminosidade — **não** por `color-mix`, que dessatura (regra
+> estabelecida).
+>
+> ⚠️ **CORRIGIDO no mesmo dia (follow-up):** a primeira versão fechava em
+> `#766255` — **4.500:1** sobre `#EDE2D4`, margem de **0.003**. Era o menor
+> escurecimento que fechava 4.5:1, literal à regra de derivação, mas
+> qualquer clareada futura quebraria AA. Trocado para **`#756154`**, com
+> folga real:
 >
 > | Sobre | Contraste |
 > | --- | --- |
-> | `#EDE2D4` (fundo) | **4.50:1** ✅ |
-> | `#F4ECE3` (surface, parada escura) | 4.92:1 ✅ |
-> | `#F7F0E8` (elevated, parada escura) | 5.09:1 ✅ |
+> | `#EDE2D4` (fundo) | **4.57:1** ✅ |
+> | `#F4ECE3` (surface, parada escura) | 5.00:1 ✅ |
+> | `#F7F0E8` (elevated, parada escura) | 5.17:1 ✅ |
 >
-> ⚠️ A margem sobre `#EDE2D4` é de **0.003** — é o menor escurecimento que
-> fecha 4.5:1, exatamente como a regra de derivação pede. Qualquer clareada
-> futura quebra AA e o teste. Se quiser folga real, `#756154` dá 4.57:1 com
-> hue/sat igualmente dentro da tolerância.
+> Hue 23.6° (origem 22.9°, Δ 0.70°) e saturação 0.164 (origem 0.162, Δ
+> 0.002): dentro das tolerâncias de 4° e 0.02. `glassPalette.test.ts` lê o
+> hex do CSS (não repete o valor), então a exigência de margem passou a
+> estar travada nos números exatos, não só no limiar ≥4.5:1.
 >
 > O **escuro não recebe token próprio**: `#9E8878` dá **5.71:1** sobre
 > `#120E0C`. Um token escuro aqui seria cópia do valor de flat esperando

@@ -461,11 +461,14 @@
 /* Texto secundario proprio do glass CLARO.
    Com o fundo em #EDE2D4, o #7A6558 do flat cai a 4.29:1 — abaixo de AA. O
    tom novo e derivado em HSL a partir do proprio #7A6558, escurecendo so a
-   luminosidade ate fechar 4.5:1 na superficie mais restritiva. NAO por
-   color-mix: misturar com um neutro dessatura o tom e quebra a identidade
-   quente da paleta (regra ja estabelecida no doc, e o teste trava hue/sat).
+   luminosidade ate fechar 4.5:1 na superficie mais restritiva com folga real
+   (nao no minimo exato — a primeira versao deste token, #766255, fechava a
+   4.500:1 sobre #EDE2D4, uma margem de 0.003 que qualquer clareada futura
+   quebraria). NAO por color-mix: misturar com um neutro dessatura o tom e
+   quebra a identidade quente da paleta (regra ja estabelecida no doc, e o
+   teste trava hue/sat).
 
-   Fecha 4.50:1 sobre #EDE2D4, 4.92:1 sobre #F4ECE3 e 5.09:1 sobre #F7F0E8 —
+   Fecha 4.57:1 sobre #EDE2D4, 4.995:1 sobre #F4ECE3 e 5.17:1 sobre #F7F0E8 —
    as paradas mais escuras de cada camada, que sao o pior caso do claro.
 
    :not(.dark) em vez do par [data-material="glass"] /
@@ -479,7 +482,7 @@
    tom do flat, passa) e sobre --color-sidebar-raised, que nao esta entre as
    superficies para as quais este tom foi derivado. */
 [data-material="glass"]:not(.dark) {
-  --glass-text-secondary: #766255;
+  --glass-text-secondary: #756154;
   --muted-foreground: var(--glass-text-secondary);
 }
 

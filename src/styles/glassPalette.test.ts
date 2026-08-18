@@ -154,15 +154,15 @@ describe("--glass-text-secondary", () => {
     ].map(([onde, sup]) => ({ onde, razao: Number(contraste(TOM, sup).toFixed(2)) }));
 
     // O limiar vem primeiro: e ele que e a exigencia. Os valores exatos
-    // logo abaixo travam o tom escolhido — a margem sobre #EDE2D4 e de
-    // 0.003, entao qualquer clareada quebra os dois de uma vez.
+    // logo abaixo travam o tom escolhido — com folga real sobre #EDE2D4
+    // (0.07, nao os 0.003 da primeira versao deste token, #766255).
     for (const linha of medido) {
       expect(linha.razao, `${linha.onde} abaixo de AA`).toBeGreaterThanOrEqual(4.5);
     }
     expect(medido).toEqual([
-      { onde: "fundo app", razao: 4.5 },
-      { onde: "surface, parada escura", razao: 4.92 },
-      { onde: "elevated, parada escura", razao: 5.09 },
+      { onde: "fundo app", razao: 4.57 },
+      { onde: "surface, parada escura", razao: 5.0 },
+      { onde: "elevated, parada escura", razao: 5.17 },
     ]);
   });
 
