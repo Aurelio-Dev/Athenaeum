@@ -37,7 +37,7 @@ export function AiComposer({ value, disabled, onChange, onSubmit }: AiComposerPr
 
   return (
     <div className="shrink-0 border-t border-border-subtle bg-[var(--card)] p-4">
-      <div className="flex items-end gap-2 rounded-xl border border-border-strong bg-[var(--background)] px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+      <div className="flex items-end gap-2 rounded-xl border border-border-subtle bg-[var(--background)] px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
         <textarea
           ref={textareaRef}
           rows={1}

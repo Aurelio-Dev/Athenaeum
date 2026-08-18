@@ -369,7 +369,7 @@ export function ReaderAnnotationsDock({
             aria-label={isPopoutOpen ? `Focar janela de Anotações aberta para ${documentTitle}` : `Abrir Anotações de ${documentTitle} em uma janela`}
             title={isPopoutOpen ? "Focar janela aberta" : "Abrir em janela"}
             data-reader-popout-document-id={documentId}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-strong bg-[var(--background)] px-2 text-[10px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-[var(--background)] px-2 text-[10px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
             onClick={() => void handleOpenPopout()}
           >
             <PopOutIcon />
@@ -435,7 +435,7 @@ export function ReaderAnnotationsDock({
           disabled={!hasPendingSelection}
           aria-describedby={feedbackId}
           placeholder="Selecione um trecho para anotar..."
-          className="min-h-0 flex-1 resize-none rounded-lg border border-border-strong bg-[var(--background)] px-2.5 py-2 text-xs leading-[1.4] text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted-foreground)] focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-0 flex-1 resize-none rounded-lg border border-border-subtle bg-[var(--background)] px-2.5 py-2 text-xs leading-[1.4] text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted-foreground)] focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
           onChange={(event) => setNote(event.target.value)}
         />
         <button

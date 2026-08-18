@@ -710,7 +710,7 @@ export function LibraryView() {
           onContextMenu={openLibraryAreaContextMenu}
         >
           <div className="flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
-            <label className="ml-auto flex w-full max-w-[340px] items-center gap-2 rounded-lg border border-border-strong bg-surface-subtle px-3 py-2 text-text-subtle">
+            <label className="ml-auto flex w-full max-w-[340px] items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
               <SearchIcon />
               <input
                 value={searchTerm}

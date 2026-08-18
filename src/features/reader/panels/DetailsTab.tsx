@@ -413,7 +413,7 @@ export function DetailsTab({
               </div>
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-strong bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary"
                 onClick={() => onOpenNotebook(linkedNotebook.id, linkedNotebook.title)}
               >
                 Abrir no Caderno
@@ -425,7 +425,7 @@ export function DetailsTab({
                 title="Mais opções"
                 aria-haspopup="menu"
                 aria-expanded={notebookMenu.isOpen}
-                className="rounded-md border border-border-strong p-2 text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                className="rounded-md border border-border-subtle p-2 text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                 onClick={notebookMenu.open}
               >
                 <MoreVerticalIcon />
@@ -448,7 +448,7 @@ export function DetailsTab({
                   aria-label="Selecionar Caderno para vincular"
                   value={selectedNotebookId ?? ""}
                   disabled={isLinking}
-                  className="w-full min-w-0 rounded-md border border-border-strong bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
+                  className="w-full min-w-0 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
                   onChange={(event) => setSelectedNotebookId(Number(event.target.value))}
                 >
                   {notebooks.map((notebook) => (
@@ -460,7 +460,7 @@ export function DetailsTab({
                 <button
                   type="button"
                   disabled={selectedNotebookId === null || isLinking}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-strong bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
                   onClick={() => void handleLinkNotebook()}
                 >
                   <BookOpenIcon size={13} />
@@ -487,7 +487,7 @@ export function DetailsTab({
               type="button"
               aria-haspopup="menu"
               aria-expanded={optionsMenu.isOpen}
-              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-md border border-border-strong bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-primary"
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-primary"
               onClick={optionsMenu.open}
             >
               <span>Mais opções</span>
@@ -496,7 +496,7 @@ export function DetailsTab({
             <button
               type="button"
               disabled={isOpeningExternally}
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-border-strong bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
               onClick={() => void handleOpenExternally()}
             >
               <span>{isOpeningExternally ? "Abrindo..." : "Abrir original"}</span>

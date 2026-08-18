@@ -35,7 +35,7 @@ function ToggleSwitch({ checked, onCheckedChange, ariaLabel }: { checked: boolea
       aria-checked={checked}
       aria-label={ariaLabel}
       onClick={() => onCheckedChange(!checked)}
-      className={`relative h-7 w-12 rounded-full border border-border-strong transition ${checked ? "bg-primary" : "bg-surface-muted"}`}
+      className={`relative h-7 w-12 rounded-full border border-border-subtle transition ${checked ? "bg-primary" : "bg-surface-muted"}`}
     >
       <span className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition ${checked ? "left-[22px]" : "left-1"}`} />
     </button>
@@ -63,7 +63,7 @@ function StepControl<T extends number>({
         type="button"
         onClick={() => canDecrease && onChange(options[currentIndex - 1])}
         disabled={!canDecrease}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-strong bg-surface-panel text-base text-text-secondary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-surface-panel text-base text-text-secondary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         aria-label={`Diminuir ${ariaLabel.toLowerCase()}`}
       >
         −
@@ -73,7 +73,7 @@ function StepControl<T extends number>({
         type="button"
         onClick={() => canIncrease && onChange(options[currentIndex + 1])}
         disabled={!canIncrease}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-strong bg-surface-panel text-base text-text-secondary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-surface-panel text-base text-text-secondary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         aria-label={`Aumentar ${ariaLabel.toLowerCase()}`}
       >
         +
@@ -107,7 +107,7 @@ function MaterialControl({
     <div
       role="group"
       aria-label="Material da interface"
-      className="flex items-center gap-1 rounded-lg border border-border-strong bg-surface-panel p-1"
+      className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-panel p-1"
     >
       {materialOptions.map((option) => {
         const isSelected = option.value === material;
@@ -157,7 +157,7 @@ export function AppearanceSettings() {
           <select
             value={theme}
             onChange={(event) => setTheme(event.target.value as Theme)}
-            className="h-9 min-w-36 rounded-lg border border-border-strong bg-surface-panel px-3 text-xs font-semibold text-text-primary outline-none transition focus:border-primary"
+            className="h-9 min-w-36 rounded-lg border border-border-subtle bg-surface-panel px-3 text-xs font-semibold text-text-primary outline-none transition focus:border-primary"
             aria-label="Tema da interface"
           >
             <option value="light">Claro</option>
@@ -189,7 +189,7 @@ export function AppearanceSettings() {
       <button
         type="button"
         onClick={restoreDefaults}
-        className="self-start rounded-lg border border-border-strong bg-surface-panel px-3 py-2 text-xs font-semibold text-text-secondary transition hover:border-primary hover:text-primary"
+        className="self-start rounded-lg border border-border-subtle bg-surface-panel px-3 py-2 text-xs font-semibold text-text-secondary transition hover:border-primary hover:text-primary"
       >
         Restaurar padrões
       </button>

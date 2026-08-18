@@ -163,7 +163,7 @@ export function AiTab({
 
       <div className="flex min-h-11 shrink-0 items-center justify-center border-b border-border-subtle px-4 py-2">
         <span className="sr-only">Escopo</span>
-        <div role="radiogroup" aria-label="Escopo da IA" className="inline-flex items-center gap-1 rounded-full border border-border-strong p-1">
+        <div role="radiogroup" aria-label="Escopo da IA" className="inline-flex items-center gap-1 rounded-full border border-border-subtle p-1">
           {scopeOptions.map((option) => {
             const isActive = option.value === scope;
             return (

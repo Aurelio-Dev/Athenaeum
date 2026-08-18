@@ -386,7 +386,7 @@ export function ReaderFloatingChrome({
         } ${
           detailsOpen
             ? "border-primary bg-primary-soft"
-            : "border-border-strong bg-surface-card hover:bg-surface-muted"
+            : "border-border-subtle bg-surface-card hover:bg-surface-muted"
         }`}
         style={{ boxShadow: shadow }}
         onMouseDown={(event) => event.stopPropagation()}

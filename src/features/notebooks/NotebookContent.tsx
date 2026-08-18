@@ -1831,11 +1831,7 @@ export function NotebookContent({
                 title="Nova página"
                 className="mt-1 flex items-center gap-3 rounded-lg px-0 py-1.5 text-left text-sidebar-muted transition hover:text-sidebar-text"
               >
-                {/* border-border-strong, nao border-sidebar-border: este circulo
-                    e a UNICA afordancia visivel do botao "Nova pagina" — sem
-                    fundo, sem contorno de botao. Limite de componente (1.4.11),
-                    entao nao acompanha o token de divisoria da sidebar. */}
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-border-strong">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-sidebar-border">
                   <PlusIcon size={15} />
                 </span>
                 <span
@@ -1944,7 +1940,7 @@ export function NotebookContent({
                       type="button"
                       onClick={enterFocusMode}
                       title="Entrar no modo foco"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border-strong px-3 py-1 font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
                     >
                       <FocusModeIcon />
                       Foco
@@ -1964,7 +1960,7 @@ export function NotebookContent({
             <aside
               ref={detailsColumnRef}
               style={{ width: notebookDetailsColumnWidth, maxWidth: "calc(100% - 3rem)" }}
-              className="absolute bottom-0 right-0 top-0 z-30 flex flex-col overflow-hidden border-l border-border-subtle bg-[var(--card)]"
+              className="absolute bottom-0 right-0 top-0 z-30 flex flex-col overflow-hidden border-l border-border-strong bg-[var(--card)]"
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
               <div className="flex items-center justify-between gap-3">
@@ -2000,7 +1996,7 @@ export function NotebookContent({
                     </button>
 
                     {isReadingStatusDropdownOpen ? (
-                      <div role="menu" className="absolute left-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border border-border-subtle bg-surface-panel p-1 shadow-lg">
+                      <div role="menu" className="absolute left-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border border-border-muted bg-surface-panel p-1 shadow-lg">
                         {notebookReadingStatusOptions.map((option) => (
                           <button
                             key={option.value}
@@ -2038,7 +2034,7 @@ export function NotebookContent({
               {/* 2. Disciplina — campo author_discipline, com a disciplina como
                   rótulo principal. */}
               <NotebookInfoField label="Disciplina">
-                <div className="flex items-center gap-2 rounded-md border border-border-strong bg-[var(--card)] px-3 text-text-secondary focus-within:border-primary">
+                <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 text-text-secondary focus-within:border-primary">
                   <span className="shrink-0 text-text-subtle">
                     <OpenBookIcon />
                   </span>
@@ -2068,7 +2064,7 @@ export function NotebookContent({
 
                     <button
                       type="button"
-                      className="inline-flex items-center rounded-full border border-dashed border-border-strong px-2.5 py-0.5 text-[11px] font-medium text-text-secondary transition hover:border-primary hover:text-text-primary"
+                      className="inline-flex items-center rounded-full border border-dashed border-border-subtle px-2.5 py-0.5 text-[11px] font-medium text-text-secondary transition hover:border-primary hover:text-text-primary"
                       onClick={() => setIsTagDropdownOpen((current) => !current)}
                     >
                       + Tag
@@ -2076,7 +2072,7 @@ export function NotebookContent({
                   </div>
 
                   {isTagDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-3 shadow-lg">
+                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
                       <TagSelector
                         availableTags={availableTags}
                         selectedTags={notebookTags}
@@ -2119,7 +2115,7 @@ export function NotebookContent({
                 <button
                   type="button"
                   onClick={() => setIsPickerOpen(true)}
-                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-strong bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary"
+                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary"
                 >
                   <AttachIcon size={13} />
                   Vincular PDF
@@ -2141,12 +2137,12 @@ export function NotebookContent({
                   }}
                   onBlur={() => void saveNotebookInfoDraft()}
                   placeholder="Caderno sem título"
-                  className="h-10 w-full rounded-md border border-border-strong bg-[var(--card)] px-3 text-sm font-medium text-text-primary outline-none focus:border-primary"
+                  className="h-10 w-full rounded-md border border-border-subtle bg-[var(--card)] px-3 text-sm font-medium text-text-primary outline-none focus:border-primary"
                 />
               </NotebookInfoField>
 
               <NotebookInfoField label="Coleção">
-                <div className="relative flex min-h-10 items-center gap-2 rounded-md border border-border-strong bg-[var(--card)] px-3 text-text-secondary focus-within:border-primary">
+                <div className="relative flex min-h-10 items-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-3 text-text-secondary focus-within:border-primary">
                   <MenuGlyph name="folder" />
                   <select
                     value={infoDraftCollectionId}
@@ -2183,7 +2179,7 @@ export function NotebookContent({
                   }}
                   onBlur={() => void saveNotebookInfoDraft()}
                   placeholder="Descreva seu caderno..."
-                  className="h-24 w-full resize-y rounded-md border border-border-strong bg-surface-app px-3 py-3 text-sm font-normal text-text-primary outline-none placeholder:text-text-subtle focus:border-primary"
+                  className="h-24 w-full resize-y rounded-md border border-border-subtle bg-surface-app px-3 py-3 text-sm font-normal text-text-primary outline-none placeholder:text-text-subtle focus:border-primary"
                 />
               </NotebookInfoField>
 
@@ -2320,7 +2316,7 @@ export function NotebookContent({
             <div className="grid gap-5 px-6 py-5 text-sm">
               <fieldset className="grid gap-3">
                 <legend className="text-xs font-bold uppercase tracking-wide text-text-secondary">Escopo</legend>
-                <label className="grid cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border-strong bg-[var(--card)] px-4 py-3 transition hover:border-primary">
+                <label className="grid cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border-subtle bg-[var(--card)] px-4 py-3 transition hover:border-primary">
                   <input
                     type="radio"
                     name="notebook-export-scope"
@@ -2343,7 +2339,7 @@ export function NotebookContent({
                     </span>
                   </span>
                 </label>
-                <label className="grid cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border-strong bg-[var(--card)] px-4 py-3 transition hover:border-primary">
+                <label className="grid cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border-subtle bg-[var(--card)] px-4 py-3 transition hover:border-primary">
                   <input
                     type="radio"
                     name="notebook-export-scope"
@@ -2481,7 +2477,7 @@ export function NotebookContent({
               <button
                 type="button"
                 disabled={isPreparingExport || isWritingExport}
-                className="rounded-lg border border-border-strong px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={closeNotebookExportDialog}
               >
                 {preparedExport || exportResult ? "Fechar" : "Cancelar"}
@@ -2490,7 +2486,7 @@ export function NotebookContent({
                 <button
                   type="button"
                   disabled={isPreparingExport || isWritingExport}
-                  className="rounded-lg border border-border-strong px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-bold text-text-secondary transition hover:border-primary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => void prepareNotebookExport()}
                 >
                   {isPreparingExport ? "Preparando..." : "Trocar destino"}

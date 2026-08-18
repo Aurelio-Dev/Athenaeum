@@ -170,7 +170,7 @@ function createDraftItem(picked: PickedPdfFile, collection = ""): DraftItem {
 }
 
 const inputClassName =
-  "w-full min-w-0 rounded-lg border border-border-strong bg-surface-app px-3 py-2 text-sm text-text-primary outline-none focus:border-primary";
+  "w-full min-w-0 rounded-lg border border-border-muted bg-surface-app px-3 py-2 text-sm text-text-primary outline-none focus:border-primary";
 const labelClassName = "text-xs font-bold uppercase tracking-wide text-text-secondary";
 
 export function AddDocumentModal({

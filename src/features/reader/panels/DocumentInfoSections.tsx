@@ -349,7 +349,7 @@ export function DocumentTagsSection({ documentId, tags, databaseSource = "loaded
             aria-label="Adicionar tag"
             title="Adicionar tag"
             aria-expanded={isSelectorOpen}
-            className="inline-flex items-center rounded-full border border-dashed border-border-strong bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--muted-foreground)] transition hover:border-primary hover:text-[var(--foreground)]"
+            className="inline-flex items-center rounded-full border border-dashed border-border-subtle bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--muted-foreground)] transition hover:border-primary hover:text-[var(--foreground)]"
             onClick={() => void toggleSelector()}
           >
             +

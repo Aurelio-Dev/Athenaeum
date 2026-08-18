@@ -95,18 +95,7 @@
   /* Texto */
   --foreground: #1A1410;
   --card-foreground: #1A1410;
-  /* Texto secundario do tema claro. HEX FIXO, nao color-mix — ver o porque
-     no bloco de comentario grande logo acima da regra html[data-ui-contrast]
-     abaixo desta folha: resumindo, color-mix(--foreground, --background)
-     dessatura o tom (hue 23° -> 30°, sat 0.162 -> 0.074), o que quebra a
-     premissa "warm minimalism, nunca cinza frio" do design system.
-     #665449 preserva hue/sat do #7A6558 original (hue 22.8°, sat 0.166,
-     contra hue 22.94°/sat 0.162 da origem) e fecha AA nas seis superficies —
-     pior caso 4.54:1 sobre --color-sidebar-raised (#D8CCBD). Tabela completa
-     em docs/design/athenaeum-design-tokens-cores.md.
-     O tema ESCURO nao muda de mecanismo: o .dark abaixo fixa #9E8878, que ja
-     passa nas seis (pior 4.68:1). */
-  --muted-foreground: #665449;
+  --muted-foreground: #7A6558;
 
   /* Accent */
   --primary: #9C5A2E;
@@ -151,21 +140,11 @@
   --color-sidebar-border: var(--border);
   --color-sidebar-text: #2C1810;
   /* Texto/icones muted da sidebar (itens de nav, colecoes, "Nova colecao",
-     "Ajustes"). O cabecalho "MINHA BIBLIOTECA" e mantido em #9E8878 via
-     classe propria. No escuro fica #9E8878 (override no .dark), onde
-     escurecer sobre o fundo escuro pioraria a legibilidade.
-     HEX FIXO, mesmo racional de --muted-foreground acima (color-mix rumo a
-     um foreground dessatura o tom). Derivado do MESMO par hue/sat do
-     #7A6558 original (nao de --color-sidebar-text), porque a identidade
-     cromatica que importa preservar aqui e a do tom secundario, nao a do
-     texto principal da sidebar.
-     Este token vive sobre DUAS superficies — --sidebar no repouso e
-     --color-sidebar-raised no hover/ativo. A busca por L minimo que fecha
-     as duas converge no MESMO #665449 de --muted-foreground: nao e
-     coincidencia nem copia — os dois nascem do mesmo hue/sat e o par de
-     superficies mais restritivo em ambos os casos e o mesmo
-     (--color-sidebar-raised #D8CCBD). Pior caso aqui: 4.54:1. */
-  --color-sidebar-muted: #665449;
+     "Ajustes"). No claro usa um tom levemente mais escuro que o #9E8878 base
+     para dar mais presenca; o cabecalho "MINHA BIBLIOTECA" e mantido em
+     #9E8878 via classe propria. No escuro fica #9E8878 (override no .dark),
+     onde escurecer sobre o fundo escuro pioraria a legibilidade. */
+  --color-sidebar-muted: #7A6558;
   /* Linhas internas secundarias do icone de busca sem resultados. */
   --color-empty-state-detail: #D9C5B4;
 
@@ -207,54 +186,9 @@
   --notebook-focus-bar-bg: #F6F0E8;
   --notebook-focus-rail-bg: #F2EBE1;
 
-  /* ------------------------------------------------------------
-     BORDA: dois papeis, dois requisitos de contraste
-     ------------------------------------------------------------
-     Ate 17/08/2026 estes eram tres aliases IDENTICOS de --border, ou seja,
-     nomes sem semantica: quem escrevia "strong" recebia o mesmo traco de
-     quem escrevia "subtle". Agora a distincao e real.
-
-     --color-border-subtle  DIVISORIA decorativa. Regua entre secoes, borda
-       de card nao interativo, contorno de painel flutuante. A WCAG nao exige
-       contraste minimo para isto. Mantem o valor historico de --border.
-
-     --color-border-strong  LIMITE DE COMPONENTE. Campo, botao, wrapper de
-       campo, controle agrupado, card clicavel. A WCAG 1.4.11 exige 3:1
-       contra o que cerca o controle.
-
-     POR QUE 1.4.11 SE APLICA AQUI SEM EXCECAO: o criterio dispensa o
-     contraste quando o componente e identificavel por outra indicacao
-     visual. No Athenaeum nao existe essa outra indicacao — as superficies
-     nao se distinguem entre si (--card sobre --background da 1.07:1,
-     --muted sobre --card da 1.15:1). A borda e a UNICA portadora de limite;
-     sem ela o campo desaparece na superficie.
-
-     Valor derivado em HSL preservando hue e saturacao e variando so
-     luminosidade — mesma regra dos tokens de texto cromatico (color-mix
-     rumo a um foreground quase acromatico dessatura).
-
-     CORRIGIDO em 17/08/2026 (segunda leva): a primeira versao (#9A785B)
-     derivou do proprio --border (#D9CBBF, sat 0.255) em vez da origem real
-     do sistema de texto (#7A6558, sat 0.162). Isso deixou --color-border-
-     strong em sat 0.257 — quase o dobro da sat 0.166 de todo o resto do
-     sistema (texto secundario, sidebar-muted) — e proximo demais do accent
-     #9C5A2E (sat 0.545): so 1.33:1 de contraste entre os dois no claro.
-     Como a SELECAO do DocumentCard usa border-primary (o accent), um card
-     selecionado e um nao-selecionado ficavam visualmente proximos.
-
-     A saturacao e o canal que separa a borda de componente do accent — a
-     luminancia sozinha nao separa, os dois ocupam faixas parecidas de L.
-     Por isso a origem certa e a mesma dos tokens de TEXTO cromatico
-     (#7A6558 claro / #9E8878 escuro, sat ~0.162-0.164), nao a de --border.
-     Claro #987F6F: hue 23.4°/sat 0.166 contra hue 22.9°/sat 0.162 da
-     origem. Escuro #7D695A: hue 25.7°/sat 0.163 contra hue 25.3°/sat 0.164.
-
-     --color-border-muted foi REMOVIDO nesta mesma leva. Era o terceiro
-     alias e seus 22 usos se dividiam entre os dois papeis reais (14 eram
-     campo/botao, 8 eram painel/caixa); nenhum precisava de um terceiro
-     nivel. Ver a tabela de classificacao no doc de tokens. */
   --color-border-subtle: var(--border);
-  --color-border-strong: #987F6F;
+  --color-border-muted: var(--border);
+  --color-border-strong: var(--border);
 
   --color-primary: var(--primary);
   --color-primary-hover: #814A26;
@@ -426,11 +360,6 @@
   --notebook-focus-rail-bg: #18130E;
 
   --border: #3D2E22;
-  /* Limite de componente no escuro. --color-border-subtle nao precisa de
-     override: ele segue var(--border), que o .dark ja redefine acima. Este
-     precisa, porque e hex fixo (ver o bloco de comentario no :root — inclui
-     a correcao de saturacao de 17/08/2026, segunda leva). */
-  --color-border-strong: #7D695A;
   --input: #2E2018;
   --ring: #9C5A2E;
 
@@ -559,64 +488,17 @@
 
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam
    somente tons secundários e bordas, sem filtros que alterariam imagens ou
-   criariam novos contextos de empilhamento para os painéis flutuantes.
+   criariam novos contextos de empilhamento para os painéis flutuantes. */
+html[data-ui-contrast="90"] {
+  --muted-foreground: color-mix(in srgb, var(--foreground) 46%, var(--background));
+  --border: color-mix(in srgb, var(--foreground) 12%, var(--background));
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 44%, var(--sidebar));
+}
 
-   NÃO EXISTE nível abaixo de 100. Havia um nível 90 que derrubava
-   --muted-foreground para mix 46% e levava as seis superfícies claras a
-   2.95:1–3.74:1 — um controle de contraste que reduzia contraste abaixo do
-   mínimo legível. Foi removido: 100 é o piso, e os níveis só sobem a partir
-   dele.
-
-   POR QUE --muted-foreground E --color-sidebar-muted NÃO USAM color-mix
-   NESTES NÍVEIS (embora --border continue usando):
-   color-mix(in srgb, ...) interpola linearmente nos canais R/G/B
-   gama-codificados — não em HSL. Isso NÃO preserva matiz nem saturação:
-   misturar #7A6558 (hue 23°, sat 0.162) com um neutro quase acromático
-   (--foreground #1A1410, sat ~0.09) desloca o resultado para hue 30° e
-   dessatura para sat 0.074 — perda de 54% da saturação original. Numa
-   paleta cuja premissa é "warm minimalism, nunca cinza frio", isso é
-   regressão de identidade, não só uma questão de contraste — foi
-   descoberta assim, por inspeção visual, depois que o mix já passava em
-   todos os testes de contraste numérico.
-   --border não tem esse problema porque é usado como traço fino/divisor,
-   não como texto: a leitura de "cor" nele é secundária à de "presença", e
-   ele já era color-mix desde antes desta correção sem queixa de identidade.
-
-   Os hexes abaixo são derivados em HSL a partir da ORIGEM real de cada
-   token (#7A6558 para --muted-foreground/--color-sidebar-muted no claro,
-   #9E8878 no escuro), preservando hue e saturação e variando só a
-   luminosidade — a mesma lógica de uma escala tonal desenhada à mão.
-   Como hex fixo não se adapta a --foreground/--background como o mix
-   fazia, os dois temas precisam de blocos SEPARADOS aqui: os deste bloco
-   (sem .dark) valem para o claro; os blocos .dark[data-ui-contrast="N"]
-   abaixo vencem no escuro por especificidade (0,2,1 contra 0,1,1), mesmo
-   padrão já usado pelo eixo de material. --border continua num único
-   bloco por nível: o mix nele resolve corretamente nos dois temas porque
-   var(--foreground)/var(--background) já mudam de valor dentro de .dark.
-
-   Tabela completa de contraste e a prova de hue/saturação preservados:
-   docs/design/athenaeum-design-tokens-cores.md. Trava por teste:
-   mutedForegroundContrast.test.ts. */
 html[data-ui-contrast="110"] {
-  --muted-foreground: #4B3E36;
-  --color-sidebar-muted: #4B3E36;
+  --muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--background));
   --border: color-mix(in srgb, var(--foreground) 30%, var(--background));
-}
-
-html[data-ui-contrast="120"] {
-  --muted-foreground: #362D27;
-  --color-sidebar-muted: #362D27;
-  --border: color-mix(in srgb, var(--foreground) 40%, var(--background));
-}
-
-.dark[data-ui-contrast="110"] {
-  --muted-foreground: #B5A497;
-  --color-sidebar-muted: #B09E90;
-}
-
-.dark[data-ui-contrast="120"] {
-  --muted-foreground: #C9BDB4;
-  --color-sidebar-muted: #C4B6AC;
+  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 70%, var(--sidebar));
 }
 
 * {
@@ -702,7 +584,7 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-subtle);
+  background: var(--color-border-strong);
   border: 3px solid var(--color-surface-app);
   border-radius: 999px;
 }
@@ -1643,7 +1525,7 @@ select {
 }
 
 .notebook-editor [data-file-attachment-action] {
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
   background: var(--color-surface-card);
   color: var(--color-text-secondary);

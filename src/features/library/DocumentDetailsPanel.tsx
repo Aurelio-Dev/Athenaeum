@@ -189,7 +189,7 @@ function splitAuthors(authors: string) {
 
 const sectionLabelClassName = "text-xs font-semibold uppercase tracking-widest text-text-subtle";
 const metadataInputClassName =
-  "w-full min-w-0 rounded-lg border border-border-strong bg-surface-app px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary";
+  "w-full min-w-0 rounded-lg border border-border-muted bg-surface-app px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-subtle focus:border-primary";
 const metadataLabelClassName = "text-xs font-bold uppercase tracking-wide text-text-secondary";
 
 function MetadataRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
@@ -591,7 +591,7 @@ export function DocumentDetailsPanel({
             </div>
 
             {isTagDropdownOpen ? (
-              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-subtle bg-surface-panel p-3 shadow-lg">
+              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
                 <TagSelector
                   availableTags={availableTags}
                   selectedTags={document.tags}
@@ -617,7 +617,7 @@ export function DocumentDetailsPanel({
             readOnly={isTrashMode}
             rows={4}
             placeholder="Adicione anotações sobre este documento..."
-            className="mt-3 w-full resize-none rounded-lg border border-border-strong bg-surface-app p-3 text-sm text-text-primary outline-none focus:border-primary placeholder:text-text-subtle"
+            className="mt-3 w-full resize-none rounded-lg border border-border-subtle bg-surface-app p-3 text-sm text-text-primary outline-none focus:border-primary placeholder:text-text-subtle"
           />
         </section>
 

@@ -210,7 +210,7 @@ function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: An
   }
 
   return (
-    <article className="group relative overflow-hidden rounded-lg border border-border-strong bg-[var(--background)] transition hover:border-primary/70">
+    <article className="group relative overflow-hidden rounded-lg border border-border-subtle bg-[var(--background)] transition hover:border-primary/70">
       <span
         data-annotation-color-stripe
         className="pointer-events-none absolute inset-y-0 left-0 w-[3px]"
@@ -224,7 +224,7 @@ function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: An
             type="button"
             aria-label={`Ir para a página ${annotation.page}`}
             title={`Ir para a página ${annotation.page}`}
-            className="inline-flex shrink-0 items-center rounded-full border border-border-strong bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--muted-foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+            className="inline-flex shrink-0 items-center rounded-full border border-border-subtle bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--muted-foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
             onClick={() => onJumpToPage(annotation.page, annotation.id)}
           >
             p. {annotation.page}
@@ -539,7 +539,7 @@ export function AnnotationsTab({
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-border-subtle bg-[var(--card)]">
         <div className="flex h-11 items-center gap-2 px-3">
-          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-border-strong bg-[var(--background)] px-2.5 text-[var(--muted-foreground)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
+          <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-border-subtle bg-[var(--background)] px-2.5 text-[var(--muted-foreground)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
             <SearchIcon className="shrink-0" size={15} />
             <input
               value={searchTerm}

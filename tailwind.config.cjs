@@ -42,12 +42,9 @@ module.exports = {
           subtle: "var(--color-text-subtle)",
           inverse: "var(--color-text-inverse)",
         },
-        // Dois papeis, nao tres niveis de intensidade: subtle e divisoria
-        // decorativa, strong e limite de componente (1.4.11, 3:1). O antigo
-        // `muted` era um terceiro alias sem semantica e foi removido em
-        // 17/08/2026 — ver o comentario em styles/index.css.
         border: {
           subtle: "var(--color-border-subtle)",
+          muted: "var(--color-border-muted)",
           strong: "var(--color-border-strong)",
         },
         tag: {
