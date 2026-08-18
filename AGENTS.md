@@ -795,6 +795,77 @@ Do not introduce a parallel color system.
 
 ---
 
+## Material axis and layered palettes
+
+The interface has two orthogonal axes on the root element: color theme
+(`.dark`) and material (`data-material="flat"|"glass"`). Material describes
+how a surface is painted (flat vs. glass), not which palette applies — the
+two axes combine freely without duplicating the palette.
+
+`flat` is the default. It has no dedicated CSS block: it is the absence of
+`--glass-*` tokens. **Flat is closed and approved after a prior reversion of
+an out-of-scope contrast pass — do not change any flat value, in either
+theme, without explicit approval.**
+
+Relevant files:
+
+- `src/styles/index.css` — token declarations and the material blocks.
+- `src/styles/glassPalette.test.ts` — locks the complete flat token
+  inventory by fingerprint (hash + count), so an isolation regression fails
+  loudly instead of silently changing the approved theme.
+- `docs/design/athenaeum-design-tokens-cores.md` — canonical changelog and
+  rationale for every token derivation.
+
+### Isolation rule
+
+Any new value introduced for the glass material must live exclusively under
+`[data-material="glass"]` (or `.dark[data-material="glass"]` /
+`[data-material="glass"]:not(.dark)` where a token applies to only one
+theme). Never redefine an existing token inside `:root` or `.dark` to serve
+glass. Create a new `--glass-*` token and switch consumption only inside the
+material selector.
+
+### ΔL\* vs. WCAG contrast
+
+These answer different questions. WCAG contrast ratio answers "can this text
+be read against this background," and is only meaningful between a
+text/foreground color and its background. Between two visually close,
+non-text surfaces (e.g., a stratified background and the surface layered
+above it), the contrast ratio stays close to 1.0 whether the two are
+identical or barely distinguishable — it does not answer "do these two
+layers read as visually separate."
+
+Use ΔL\* (CIELAB lightness difference) to judge whether stacked, non-text
+surfaces separate visually. Use WCAG contrast only to judge text legibility.
+Do not use one metric to answer the other metric's question.
+
+### Chromatic text token derivation
+
+When a chromatic (non-neutral) text token needs a darker or lighter variant
+for contrast, derive it in HSL from the original hex, varying only
+lightness, and preserve hue and saturation. Never use `color-mix()` toward
+`--foreground`/`--background` for this: it desaturates the tone toward gray,
+breaking the palette's identity in a way a contrast check alone will not
+catch — the desaturated value can still pass AA.
+
+`color-mix()` remains appropriate for non-text, non-identity tokens such as
+`--border` and the `data-ui-contrast` stepper.
+
+### Test discipline for new guards
+
+A new guard test does not count as covering a regression until it has been
+proven to fail. Before treating a test as complete, mutate the code path it
+guards to the value it should reject, confirm the test fails with a clear
+message, then restore the original value.
+
+### Manual verification
+
+Test theming and material changes manually only through `npm run tauri:dev`
+against the isolated `.dev` profile (see Commands above) — never
+`npm run tauri dev`, which writes to the real user library.
+
+---
+
 ## TypeScript and React conventions
 
 - Use functional React components.
