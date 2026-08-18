@@ -1,5 +1,66 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 18/08/2026 — Os 7 tokens `--glass-*` deixam de ser órfãos: a
+> Library é o primeiro consumidor amplo.**
+>
+> Órfãos desde a reversão de 16/08 (entrada mais abaixo), com destino já
+> previsto. O destino se cumpriu: as superfícies da Library passam a
+> consumir os sete sob `[data-material="glass"]`.
+>
+> **Arquitetura — quatro classes marcadoras, por PAPEL e não por
+> componente.** Mesmo padrão do chrome flutuante do Reader: as classes não
+> têm estilo próprio em lugar nenhum do CSS, então o material flat continua
+> byte-idêntico. Verificado por captura de tela: o PNG do flat depois desta
+> leva tem o **mesmo SHA-256** do PNG do mesmo estado antes dela.
+>
+> | Classe | Superfície | Borda topo | Sombra | Onde |
+> | --- | --- | --- | --- | --- |
+> | `.material-surface` | `--glass-surface` | `--glass-border-top` | — | sidebar |
+> | `.material-surface-elevated` | `--glass-surface-elevated` | `--glass-border-top-elevated` | — | container da lista, painel Detalhes docado, controles da toolbar |
+> | `.material-surface-card` | `--glass-surface-elevated` | `--glass-border-top-elevated` | `--glass-shadow` | card da grade |
+> | `.material-surface-overlay` | `--glass-surface-elevated` | `--glass-border-top-elevated` | `--glass-shadow-elevated` | modais, menu de ordenação |
+>
+> Todas usam `--glass-border` como `border-color`. `surface-app` (a raiz)
+> **não participa**: é fundo, não superfície de vidro — se virasse
+> gradiente, as superfícies acima perderiam o plano contra o qual se
+> destacam.
+>
+> **REGRA: a sombra glass entra só onde já existe sombra no flat.** Glass é
+> acabamento de superfície, não licença para flutuar (changelog 15/07): a
+> Library é workspace docado e continua docada. Adicionar sombra a um painel
+> hoje docado é exatamente o que o faria ler como flutuante, então sidebar,
+> container da lista, painel Detalhes docado e controles da toolbar recebem
+> superfície e borda e seguem **sem sombra**. As duas sombras ficam
+> distribuídas por peso: `--glass-shadow` (0 8px 24px) no card, que já
+> flutuava pouco via `shadow-card`, e `--glass-shadow-elevated` (0 16px
+> 40px) no que realmente paira. Nenhum seletor desta leva toca margem, raio
+> de canto ou posição.
+>
+> **Contraste — confirmado, não recalculado** (pior parada de cada
+> gradiente: a mais escura no claro, a mais clara no escuro):
+>
+> | Superfície | Pior parada | `--muted-foreground` |
+> | --- | --- | --- |
+> | `--glass-surface` claro | `#F4ECE3` | 4.69:1 ✅ |
+> | `--glass-surface-elevated` claro | `#F7F0E8` | 4.85:1 ✅ |
+> | `--glass-surface` escuro | `#262220` | 4.69:1 ✅ |
+> | `--glass-surface-elevated` escuro | `#292521` | 4.52:1 ✅ |
+>
+> ⚠️ **Uma dívida aceita muda de número sob glass — reportado, não
+> ajustado.** O texto secundário da sidebar fica em **4.39:1** no flat
+> (abaixo de AA, dívida registrada na entrada da reversão) e em
+> **4.69–5.27:1** no glass, porque a superfície de vidro é mais clara que
+> `#EDE5DA`. O glass não corrige a dívida: ela continua inteira no material
+> padrão, e nada foi mexido para produzir isso. O chip de hover
+> (`--color-sidebar-raised`, 3.47:1) é opaco e **não** muda nos dois
+> materiais — medido nos dois. As demais dívidas (`--muted`/`--input` em
+> 4.39:1, borda de input em 1.27:1) também não mudam: essas superfícies não
+> estão mapeadas e seguem chapadas por cima do vidro.
+>
+> Travado por `materialGlassSurfaces.test.ts`, que verifica os dois lados do
+> contrato — nenhuma regra `.material-surface*` fora do escopo glass, e cada
+> papel com o seu token. Confirmado por mutação nas duas frentes.
+
 > **Changelog 18/08/2026 — REVERSÃO: o tema padrão volta aos valores
 > aprovados. As quatro entradas de correção de contraste abaixo saem do
 > código e ficam como registro histórico.**
@@ -372,6 +433,10 @@
 > O nome diz o contrato: `immersive`, não `elevated`. Reaproveitar
 > `--glass-surface-elevated` aqui reintroduziria o problema no dia em que
 > a variante clara mudasse.
+>
+> ✅ **RESOLVIDO em 18/08/2026:** os sete deixaram de ser órfãos — a Library
+> é o consumidor, exatamente o destino previsto abaixo. Ver a entrada do
+> topo. O parágrafo seguinte fica como registro do período órfão.
 >
 > **Efeito colateral desta reversão: 7 dos 12 tokens `--glass-*` ficaram
 > sem consumidor.** Como a ilha passou a usar só o trio `--glass-immersive-*`,

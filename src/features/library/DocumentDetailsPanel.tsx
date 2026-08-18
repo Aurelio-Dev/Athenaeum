@@ -260,7 +260,7 @@ function EditDocumentModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={onClose}>
       <section
-        className="flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
+        className="material-surface-overlay flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Revise os detalhes"
@@ -490,7 +490,7 @@ export function DocumentDetailsPanel({
   }
 
   return (
-    <aside className="min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0">
+    <aside className="material-surface-elevated min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0">
       <header className="flex items-center px-6 py-4">
         <span className={sectionLabelClassName}>Detalhes</span>
         <button type="button" aria-label="Fechar detalhes" className="ml-auto rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={onClose}>

@@ -529,7 +529,7 @@ export function AddDocumentModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={requestClose}>
       <section
         ref={modalRef}
-        className="flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
+        className="material-surface-overlay flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label={headerTitle}

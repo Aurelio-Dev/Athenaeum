@@ -198,7 +198,7 @@ export function Sidebar({
 
   return (
     <aside
-      className="flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar font-sans text-sidebar-text"
+      className="material-surface flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar font-sans text-sidebar-text"
       onContextMenu={onEmptyAreaContextMenu}
     >
       <div className="flex items-center gap-2 px-5 pb-2 pt-5">
@@ -384,7 +384,7 @@ export function Sidebar({
       {collectionDialog ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={closeCollectionDialog}>
           <section
-            className="w-full max-w-md rounded-xl bg-surface-panel text-text-primary shadow-2xl"
+            className="material-surface-overlay w-full max-w-md rounded-xl bg-surface-panel text-text-primary shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="collection-dialog-title"

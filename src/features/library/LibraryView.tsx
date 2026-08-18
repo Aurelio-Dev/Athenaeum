@@ -373,7 +373,7 @@ export function LibraryView() {
 
   const listClassName =
     viewMode === "list"
-      ? "divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface-card"
+      ? "material-surface-elevated divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface-card"
       : "grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]";
   const selectedDocument = selectedDocumentId ? documents.find((document) => document.id === selectedDocumentId) ?? null : null;
   const activeCollection =

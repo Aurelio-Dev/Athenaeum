@@ -29,7 +29,7 @@ export function ConfirmationDialog({
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={onCancel}>
       <section
-        className="w-full max-w-md rounded-xl bg-surface-panel shadow-2xl"
+        className="material-surface-overlay w-full max-w-md rounded-xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirmation-dialog-title"

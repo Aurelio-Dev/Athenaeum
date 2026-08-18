@@ -82,7 +82,7 @@ export function RenameLibraryItemModal({ title, initialName, onClose, onRename }
       }}
     >
       <section
-        className="w-full max-w-md rounded-lg bg-surface-panel text-text-primary shadow-2xl"
+        className="material-surface-overlay w-full max-w-md rounded-lg bg-surface-panel text-text-primary shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="rename-library-item-title"

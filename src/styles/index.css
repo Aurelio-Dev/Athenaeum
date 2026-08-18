@@ -486,6 +486,69 @@
   outline-offset: 2px;
 }
 
+/* ------------------------------------------------------------
+   Superficies da Library no material glass
+   ------------------------------------------------------------
+   Primeiro consumidor amplo dos sete tokens --glass-* (orfaos desde
+   julho). Mesma arquitetura do chrome flutuante acima: as classes
+   .material-surface* sao MARCADORAS, sem estilo proprio em lugar nenhum.
+   Fora deste bloco nao existe regra para elas, entao o material flat
+   continua byte-identico — nao ha o que reverter quando data-material
+   sai do <html>.
+
+   REGRA ESTRUTURAL (changelog 15/07): glass e acabamento de superficie,
+   nao licenca para flutuar. A Library e workspace DOCADO e continua
+   docada: nenhum destes seletores toca margem, raio de canto ou posicao,
+   e nada aqui converte reflow em overlay. So pintura.
+
+   Corolario que decide as sombras: adicionar sombra a um painel hoje
+   docado e exatamente o que o faria ler como flutuante. Por isso a sombra
+   glass entra SO onde ja existe sombra no flat — a grade (shadow-card) e
+   os overlays (shadow-2xl / shadow-lg). Sidebar, container da lista,
+   painel Detalhes docado e os controles da toolbar recebem superficie e
+   borda, e seguem sem sombra. As duas sombras glass ficam distribuidas
+   por peso: --glass-shadow (0 8px 24px) no card, que e um float modesto
+   dentro da grade, e --glass-shadow-elevated (0 16px 40px) no que
+   realmente paira sobre o conteudo.
+
+   A borda superior entra como box-shadow INSET, nao como border-top: uma
+   borda real somaria 1px a altura e deslocaria o conteudo em relacao ao
+   flat. Mesmo motivo do bloco da SelectionToolbar.
+
+   surface-app (a raiz) NAO participa: e fundo, nao superficie de vidro.
+   Se ela virasse gradiente, as superficies acima perderiam o plano de
+   fundo contra o qual se destacam.
+
+   Especificidade 0,2,0 vence as utilitarias do Tailwind (0,1,0) por
+   especificidade, nao por ordem de origem. */
+[data-material="glass"] .material-surface {
+  background: var(--glass-surface);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 0 var(--glass-border-top);
+}
+
+[data-material="glass"] .material-surface-elevated {
+  background: var(--glass-surface-elevated);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 0 var(--glass-border-top-elevated);
+}
+
+[data-material="glass"] .material-surface-card {
+  background: var(--glass-surface-elevated);
+  border-color: var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-border-top-elevated),
+    var(--glass-shadow);
+}
+
+[data-material="glass"] .material-surface-overlay {
+  background: var(--glass-surface-elevated);
+  border-color: var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-border-top-elevated),
+    var(--glass-shadow-elevated);
+}
+
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam
    somente tons secundários e bordas, sem filtros que alterariam imagens ou
    criariam novos contextos de empilhamento para os painéis flutuantes. */

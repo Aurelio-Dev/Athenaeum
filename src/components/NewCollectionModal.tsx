@@ -109,7 +109,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
       }}
     >
       <section
-        className="w-full max-w-lg rounded-lg bg-surface-panel text-text-primary shadow-2xl"
+        className="material-surface-overlay w-full max-w-lg rounded-lg bg-surface-panel text-text-primary shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-collection-title"
