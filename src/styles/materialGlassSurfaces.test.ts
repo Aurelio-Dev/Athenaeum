@@ -55,12 +55,21 @@ describe("material glass: flat permanece byte-identico", () => {
 });
 
 describe("material glass: cada papel consome o token certo", () => {
+  // Junta TODAS as regras glass de um papel, nao so a primeira: desde que o
+  // card passou a separar repouso de selecionado, um papel pode ocupar mais
+  // de uma regra (`.material-surface-card`, `...:not([aria-pressed="true"])`
+  // e `...[aria-pressed="true"]`). O sufixo tem de terminar ali — sem isso
+  // "material-surface" casaria tambem com "material-surface-card".
   function blocoDaRegra(seletor: string): string {
-    const achado = css.match(new RegExp(`\\[data-material="glass"\\]\\s+\\.${seletor}\\s*\\{([^}]*)\\}`));
-    if (!achado) {
+    const padrao = new RegExp(
+      `\\[data-material="glass"\\]\\s+\\.${seletor}(?![\\w-])[^{]*\\{([^}]*)\\}`,
+      "g",
+    );
+    const blocos = [...css.matchAll(padrao)].map((m: RegExpMatchArray) => m[1]);
+    if (blocos.length === 0) {
       throw new Error(`Regra glass nao encontrada para .${seletor}`);
     }
-    return achado[1];
+    return blocos.join("\n");
   }
 
   it("a superficie BASE (sidebar) usa --glass-surface, sem sombra propria", () => {
@@ -108,8 +117,10 @@ describe("material glass: cada papel consome o token certo", () => {
   it("os sete tokens --glass-* nao-immersive tem consumidor", () => {
     // A leva existe para tirar estes tokens do orfanato; se um ficar de fora,
     // o motivo tem de ser deliberado e visivel aqui.
+    // `[^{]*` no meio para alcancar tambem as variantes por estado
+    // (`:not([aria-pressed="true"])` / `[aria-pressed="true"]`).
     const escopoGlass = (
-      css.match(/\[data-material="glass"\]\s+\.material-surface[\w-]*\s*\{[^}]*\}/g) ?? []
+      css.match(/\[data-material="glass"\]\s+\.material-surface[\w-]*[^{]*\{[^}]*\}/g) ?? []
     ).join("\n");
     for (const token of [
       "--glass-surface",
@@ -122,6 +133,73 @@ describe("material glass: cada papel consome o token certo", () => {
     ]) {
       expect(escopoGlass, `${token} sem consumidor`).toContain(`var(${token})`);
     }
+  });
+});
+
+describe("material glass: o MATERIAL governa o repouso, o ESTADO governa o resto", () => {
+  // ESTE TESTE EXISTE POR CAUSA DE UMA REGRESSAO QUE PASSOU POR REVISAO.
+  //
+  // A regra do card declarava border-color e box-shadow inteiros em (0,2,0) e
+  // engolia o `border-primary ring-2 ring-primary-soft` do Tailwind (0,1,0):
+  // sob glass, card SELECIONADO ficava com a borda palida do material e sem
+  // anel — indistinguivel de um nao selecionado.
+  //
+  // O teste manual da leva que introduziu isso cobria quatro combinacoes de
+  // modo x material, todas com o card em REPOUSO. O estado selecionado nao
+  // estava na lista, entao a regressao passou. Por isso o alvo aqui e o
+  // ESTADO, e nao mais uma variacao de material.
+  const CARD = `\\[data-material="glass"\\] \\.material-surface-card`;
+
+  function regraDo(sufixoRegex: string): string {
+    const achado = css.match(new RegExp(`${CARD}${sufixoRegex}\\s*\\{([^}]*)\\}`));
+    if (!achado) throw new Error(`Regra nao encontrada: .material-surface-card${sufixoRegex}`);
+    return achado[1];
+  }
+
+  it("a regra de REPOUSO nao alcanca o card selecionado", () => {
+    // O ponto nao e vencer por especificidade: e NAO CASAR. Se esta regra
+    // voltar a alcancar o selecionado, a borda de accent some de novo.
+    const repouso = regraDo(':not\\(\\[aria-pressed="true"\\]\\)');
+    expect(repouso).toContain("border-color: var(--glass-border);");
+    expect(repouso).toContain("var(--glass-shadow)");
+
+    // E a regra sem qualificador de estado (que casa com os dois) so pode
+    // pintar o FUNDO — material puro. Se ela declarar borda ou sombra, volta
+    // a atropelar o estado.
+    const ambos = regraDo("");
+    expect(ambos).toContain("background: var(--glass-surface-elevated);");
+    expect(ambos).not.toContain("border-color");
+    expect(ambos).not.toContain("box-shadow");
+  });
+
+  it("o card SELECIONADO mantem o accent na borda e o anel visivel", () => {
+    const selecionado = regraDo('\\[aria-pressed="true"\\]');
+
+    // O anel tem de estar na sombra do selecionado.
+    expect(selecionado).toContain("0 0 0 2px var(--color-primary-soft)");
+    // E a sombra do material continua ali — selecionado nao perde o vidro.
+    expect(selecionado).toContain("var(--glass-shadow)");
+    // Sem border-color aqui: e o `border-primary` do JSX que pinta a borda.
+    // Se esta regra declarar border-color, a borda de accent morre de novo.
+    expect(selecionado).not.toContain("border-color");
+  });
+
+  it("o JSX ainda declara o par accent+anel que o CSS acima pressupoe", () => {
+    // ACOPLAMENTO REGISTRADO: a regra glass do selecionado repete o anel
+    // (`0 0 0 2px var(--color-primary-soft)`) porque box-shadow e uma
+    // propriedade so. Se o JSX trocar a largura do ring, o glass fica para
+    // tras em silencio — e este teste que acusa.
+    const jsx = readFileSync(new URL("../features/library/DocumentCard.tsx", import.meta.url), "utf8");
+    expect(jsx).toContain('"border-primary ring-2 ring-primary-soft"');
+    expect(jsx).toContain('aria-pressed={isSelected}');
+  });
+
+  it("sem !important em nenhuma regra de material", () => {
+    // A saida barata para este tipo de conflito e !important; ela resolve o
+    // sintoma e deixa o proximo estado sem saida.
+    const regrasMaterial = css.match(/\[data-material="glass"\][^{]*\{[^}]*\}/g) ?? [];
+    const comImportant = regrasMaterial.filter((r: string) => r.includes("!important"));
+    expect(comImportant).toEqual([]);
   });
 });
 

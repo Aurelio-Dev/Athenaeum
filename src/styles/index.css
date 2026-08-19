@@ -576,11 +576,44 @@
   box-shadow: inset 0 1px 0 0 var(--glass-border-top-elevated);
 }
 
+/* O MATERIAL governa o REPOUSO; o ESTADO governa o resto.
+   ------------------------------------------------------
+   O card da grade e o unico .material-surface* que tem estado proprio
+   (selecao). A versao anterior desta regra declarava border-color e
+   box-shadow inteiros em (0,2,0) e, com isso, engolia o
+   `border-primary ring-2 ring-primary-soft` do Tailwind (0,1,0): sob glass,
+   card selecionado ficava com a borda palida do material e SEM anel —
+   indistinguivel de um nao selecionado.
+
+   A separacao abaixo nao e ganho de especificidade, e de ALCANCE: a regra
+   de repouso simplesmente NAO CASA com o card selecionado, entao a borda de
+   accent do Tailwind volta a valer sozinha. Sem !important, e sem escalar
+   especificidade indefinidamente.
+
+   O fundo fica fora das duas: e material puro, vale nos dois estados.
+
+   ACOPLAMENTO REGISTRADO: a regra do selecionado repete o anel
+   (`0 0 0 2px var(--color-primary-soft)`) porque box-shadow e uma
+   propriedade so — nao da para o material contribuir a sombra e o Tailwind
+   o anel na mesma declaracao. Se o JSX trocar `ring-2` por outra largura, e
+   preciso mexer aqui tambem. Travado por teste. */
 [data-material="glass"] .material-surface-card {
   background: var(--glass-surface-elevated);
+}
+
+[data-material="glass"] .material-surface-card:not([aria-pressed="true"]) {
   border-color: var(--glass-border);
   box-shadow:
     inset 0 1px 0 0 var(--glass-border-top-elevated),
+    var(--glass-shadow);
+}
+
+/* Sem border-color aqui de proposito: e o `border-primary` do JSX que tem de
+   pintar a borda do card selecionado. */
+[data-material="glass"] .material-surface-card[aria-pressed="true"] {
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-border-top-elevated),
+    0 0 0 2px var(--color-primary-soft),
     var(--glass-shadow);
 }
 

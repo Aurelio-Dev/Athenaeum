@@ -1,5 +1,67 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 18/08/2026 — REGRESSÃO CORRIGIDA: o material engolia o estado
+> de seleção do card. Regra nova: o material governa o REPOUSO, o estado
+> governa o resto.**
+>
+> `[data-material="glass"] .material-surface-card` declarava `border-color` e
+> `box-shadow` **inteiros**, em especificidade (0,2,0). As classes de estado
+> do Tailwind (`border-primary ring-2 ring-primary-soft`) são (0,1,0). Sob
+> glass, um card selecionado ficava com a **borda pálida do material e sem
+> anel** — indistinguível de um não selecionado, com `aria-pressed="true"` e
+> as classes corretas presentes no DOM o tempo todo.
+>
+> ### Por que passou
+>
+> O teste manual da leva que introduziu isso cobria quatro combinações de
+> modo × material — **todas com o card em repouso**. O estado selecionado não
+> estava na lista. Uma matriz de materiais não encontra um bug de estado.
+>
+> ### A correção é de ALCANCE, não de especificidade
+>
+> ```css
+> /* material puro: vale nos dois estados */
+> [data-material="glass"] .material-surface-card { background: … }
+>
+> /* repouso: NAO casa com o selecionado */
+> [data-material="glass"] .material-surface-card:not([aria-pressed="true"]) { … }
+>
+> /* selecionado: sem border-color, para o accent do JSX valer */
+> [data-material="glass"] .material-surface-card[aria-pressed="true"] { … }
+> ```
+>
+> A regra de repouso simplesmente **não casa** com o card selecionado, então
+> a borda de accent volta a valer sozinha. Sem `!important` e sem escalar
+> especificidade — travado por teste, inclusive a ausência de `!important`
+> em qualquer regra de material.
+>
+> ⚠️ **Acoplamento registrado:** a regra do selecionado **repete** o anel
+> (`0 0 0 2px var(--color-primary-soft)`) porque `box-shadow` é uma
+> propriedade só — não dá para o material contribuir a sombra e o Tailwind o
+> anel na mesma declaração. Se o JSX trocar `ring-2` por outra largura, o
+> glass fica para trás em silêncio. Há um teste que lê o JSX e acusa.
+>
+> ### Os outros estados, medidos no DOM
+>
+> | Estado | Afetado pelo material? | Medição |
+> | --- | --- | --- |
+> | repouso | sim, por projeto | é o que o material pinta |
+> | **selecionado** | **sim — era a regressão** | corrigido |
+> | hover (real, `Input.dispatchMouseEvent`) | **não** | só `transform: translateY(-4px)`; nenhuma regra de material toca isso |
+> | foco por teclado | **não** | `outline: auto` do navegador, idêntico em flat e glass — `outline` é propriedade separada de `box-shadow` |
+> | arrastar | **não existe** | o card não tem `draggable` nem handler de drag (só `AddDocumentModal` e `DocumentPreview` têm) |
+>
+> Verificado nas quatro combinações modo × material: os quatro estados se
+> comportam de forma **idêntica** em flat e glass. Flat conferido por
+> SHA-256 do PNG — os quatro estados de grade/lista × claro/escuro seguem
+> byte-idênticos.
+>
+> **Nota de projeto, não corrigida aqui:** o anel de seleção
+> (`--color-primary-soft` = `var(--muted)`) é intrinsecamente fraco nos dois
+> materiais — ΔL\* ~1.1 contra o fundo no glass claro e ~2.6 no flat. Quem
+> sinaliza a seleção é a **borda de accent**; o anel é halo. Restaurei a
+> paridade com o flat, sem redesenhar o anel.
+
 > **Changelog 18/08/2026 — `--glass-border` passa a ler como aresta, não
 > como vão. Consequência de a Leva 4 ter recuado o fundo sem reavaliar a
 > borda.**
