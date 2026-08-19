@@ -394,7 +394,19 @@
   --glass-surface: linear-gradient(180deg, #FDFAF7 0%, #F4ECE3 100%);
   --glass-surface-elevated: linear-gradient(180deg, #FFFDFA 0%, #F7F0E8 100%);
   --glass-border-top: rgb(255 255 255 / 0.65);
-  --glass-border: rgb(44 26 16 / 0.08);
+  /* A borda tem de ler como ARESTA, nao como vao. Isso significa ficar mais
+     ESCURA que as duas superficies que ela separa — a de fora (o fundo) e a
+     de dentro (capa ou card).
+
+     A 0.08 ela nao ficava: composta sobre o card (#FFFDFA) dava #EEEBE7, que
+     e +2.8 DeltaL* mais CLARO que o fundo #EDE2D4 e ~+5.6 mais claro que a
+     capa. Duas superficies mais escuras com uma linha palida entre elas leem
+     como fresta, nao como limite. O valor nasceu certo e so ficou errado
+     quando a Leva 4 recuou o fundo para #EDE2D4 sem reavaliar a borda.
+
+     A 0.20 da #D5D0CB: -6.8 DeltaL* do fundo e -3.9 da capa (media de hue;
+     pior caso -2.6). Mais escura que ambas, nos dois sentidos. */
+  --glass-border: rgb(44 26 16 / 0.20);
   --glass-shadow: 0 8px 24px -8px rgb(44 26 16 / 0.18);
   --glass-border-top-elevated: rgb(255 255 255 / 0.85);
   --glass-shadow-elevated: 0 16px 40px -12px rgb(44 26 16 / 0.24);
@@ -415,7 +427,16 @@
   --glass-surface: linear-gradient(180deg, #262220 0%, #1C1815 100%);
   --glass-surface-elevated: linear-gradient(180deg, #292521 0%, #201C19 100%);
   --glass-border-top: rgb(255 255 255 / 0.10);
-  --glass-border: rgb(0 0 0 / 0.35);
+  /* No escuro, escurecer a borda NAO resolve: o fundo #120E0C ja esta perto
+     do preto, entao rgb(0 0 0 / 0.35) composto sobre o card da #1B1815, que
+     ainda fica +4.2 DeltaL* mais CLARO que o fundo. Nao ha para onde descer
+     — o mesmo problema do claro, mas sem saida por baixo.
+
+     Por isso o escuro inverte a estrategia: em vez de sombra, BORDA DE LUZ.
+     rgb(255 255 255 / 0.10) da #3E3B37, +20.8 do fundo e +10.0 do card. A
+     aresta passa a ser lida pelo lado claro, que e o idioma normal de vidro
+     em tema escuro. */
+  --glass-border: rgb(255 255 255 / 0.10);
   --glass-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.55);
   /* Portadores da elevacao no escuro (ver o comentario do bloco acima): a
      faixa de luminancia abaixo do teto #292521 nao comporta hierarquia, e

@@ -37,6 +37,88 @@ function regra(seletor: string): Regra {
 
 const ESCOPO_GLASS = '[data-material="glass"]';
 
+// ---------------------------------------------------------------------------
+// Matematica de cor compartilhada pelos describes abaixo.
+//
+// Vive aqui, e nao em tokenContrast.helpers, porque HSL-com-alpha, composicao
+// sobre fundo nao-branco e L* do CIELAB so aparecem neste arquivo. Vive no
+// escopo do MODULO, e nao dentro de um describe, porque tres blocos precisam
+// da mesma luminancia — tres copias divergiriam.
+// ---------------------------------------------------------------------------
+
+function hslParaRgb(hue: number, satPct: number, luzPct: number): [number, number, number] {
+  const s = satPct / 100;
+  const l = luzPct / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] =
+    hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+
+function hexParaRgb(hex: string): [number, number, number] {
+  const v = Number.parseInt(hex.slice(1), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+
+function paraHex(rgb: readonly number[]): string {
+  return "#" + rgb.map((v) => Math.round(v).toString(16).toUpperCase().padStart(2, "0")).join("");
+}
+
+function compositar(frente: readonly number[], alpha: number, fundo: readonly number[]): [number, number, number] {
+  return [0, 1, 2].map((i) => frente[i] * alpha + fundo[i] * (1 - alpha)) as [number, number, number];
+}
+
+function luminancia(rgb: readonly number[]): number {
+  const canais = rgb.map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2];
+}
+
+function contrasteRgb(a: readonly number[], b: readonly number[]): number {
+  const x = luminancia(a);
+  const y = luminancia(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+function estrelaL(rgb: readonly number[]): number {
+  const y = luminancia(rgb);
+  return y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y;
+}
+
+/** DeltaL* COM SINAL: positivo = `a` e mais CLARA que `b`. O sinal e o que
+ *  distingue "aresta" (borda mais escura que as vizinhas, no claro) de "vao"
+ *  (borda mais clara) — uma metrica sem sinal nao responde a pergunta. */
+function deltaLAssinado(a: readonly number[], b: readonly number[]): number {
+  return estrelaL(a) - estrelaL(b);
+}
+
+// Pior caso ao longo de TODO o hue (0-359): --document-cover-hue e por
+// documento, entao a garantia so vale se valer para qualquer hue, nao so
+// para um hue nomeado.
+function piorCaso(medir: (hue: number) => number): { valor: number; hue: number } {
+  let piorValor = Infinity;
+  let piorHue = 0;
+  for (let hue = 0; hue < 360; hue += 1) {
+    const valor = medir(hue);
+    if (valor < piorValor) {
+      piorValor = valor;
+      piorHue = hue;
+    }
+  }
+  return { valor: piorValor, hue: piorHue };
+}
+
+/** Extrai o alpha de uma declaracao `rgb(... / 0.NN)` do bloco pedido. */
+function alphaDaBorda(seletor: string): number {
+  const achado = regra(seletor).corpo.match(/--glass-border:\s*rgb\([^)]*\/\s*([\d.]+)\s*\)/);
+  if (!achado) throw new Error(`--glass-border nao encontrado em ${seletor}`);
+  return Number(achado[1]);
+}
+
 describe("isolamento: o material flat nao muda em nenhum valor", () => {
   // Impressao digital do inventario COMPLETO de tokens do tema padrao. Cobre
   // os dois blocos que definem flat, com as declaracoes normalizadas e
@@ -160,52 +242,7 @@ describe("isolamento: todo token novo vive sob [data-material=\"glass\"]", () =>
 describe("capas no glass CLARO: clareadas para respirar (follow-up de 7631155)", () => {
   // Julgamento visual, nao metrica: a 74% a capa dominava a tela mesmo com
   // saturacao ja em 12% — o problema era AREA (~2/3 do card), nao cor.
-  // Subida para 86% de luminosidade; sat e hue ficam. Local, e nao em
-  // tokenContrast.helpers, porque HSL-com-alpha e composicao sobre um fundo
-  // nao-branco nao aparecem em nenhum outro teste do projeto.
-  function hslParaRgb(hue: number, satPct: number, luzPct: number): [number, number, number] {
-    const s = satPct / 100;
-    const l = luzPct / 100;
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-    const m = l - c / 2;
-    const [r, g, b] =
-      hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
-    return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
-  }
-  function paraHex(rgb: readonly number[]): string {
-    return "#" + rgb.map((v) => Math.round(v).toString(16).toUpperCase().padStart(2, "0")).join("");
-  }
-  function compositar(frente: readonly number[], alpha: number, fundo: readonly number[]): [number, number, number] {
-    return [0, 1, 2].map((i) => frente[i] * alpha + fundo[i] * (1 - alpha)) as [number, number, number];
-  }
-  function luminancia(rgb: readonly number[]): number {
-    const canais = rgb.map((v) => {
-      const s = v / 255;
-      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2];
-  }
-  function contrasteRgb(a: readonly number[], b: readonly number[]): number {
-    const x = luminancia(a);
-    const y = luminancia(b);
-    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-  }
-  // Pior caso ao longo de TODO o hue (0-359): --document-cover-hue e por
-  // documento, entao a garantia so vale se valer para qualquer hue, nao so
-  // para os tres nomeados no brief.
-  function piorCaso(medir: (hue: number) => number): { valor: number; hue: number } {
-    let piorValor = Infinity;
-    let piorHue = 0;
-    for (let hue = 0; hue < 360; hue += 1) {
-      const valor = medir(hue);
-      if (valor < piorValor) {
-        piorValor = valor;
-        piorHue = hue;
-      }
-    }
-    return { valor: piorValor, hue: piorHue };
-  }
+  // Subida para 86% de luminosidade; sat e hue ficam.
 
   it("1. --document-cover-swatch: 86% de luminosidade, sat 12% mantida", () => {
     expect(regra(`${ESCOPO_GLASS} .document-cover-swatch`).corpo).toContain(
@@ -328,21 +365,74 @@ describe("--glass-text-secondary", () => {
   });
 });
 
+describe("--glass-border: aresta, nao vao (Leva 5)", () => {
+  // A borda separa a superficie de FORA (o fundo da pagina) da de DENTRO
+  // (a capa, nos ~2/3 de cima do card; o proprio card, no terco de baixo).
+  // Para ler como ARESTA no tema claro, ela tem de ser mais ESCURA que as
+  // duas. E o SINAL do DeltaL* que responde isso — modulo nao serve.
+  //
+  // A regressao que este teste trava: a Leva 4 recuou --glass-surface-app
+  // para #EDE2D4 sem reavaliar a borda, e a 0.08 ela passou a ficar mais
+  // CLARA que o fundo (+2.8). Duas superficies escuras com uma linha palida
+  // no meio leem como fresta.
+  const FUNDO_CLARO = hexParaRgb("#EDE2D4");
+  const CARD_CLARO_TOPO = hexParaRgb("#FFFDFA");
+  const FUNDO_ESCURO = hexParaRgb("#120E0C");
+  const CARD_ESCURO_TOPO = hexParaRgb("#292521");
+
+  it("CLARO: a borda fica MAIS ESCURA que o fundo e que a capa", () => {
+    const alpha = alphaDaBorda(ESCOPO_GLASS);
+    expect(alpha).toBe(0.2);
+
+    const borda = compositar(hexParaRgb("#2C1A10"), alpha, CARD_CLARO_TOPO);
+    expect(paraHex(borda)).toBe("#D5D0CB");
+
+    // Sinal negativo = mais escura. Se algum destes virar positivo, a borda
+    // voltou a ler como vao.
+    expect(Number(deltaLAssinado(borda, FUNDO_CLARO).toFixed(1))).toBe(-6.8);
+
+    // Contra a capa, no hue de MENOR separacao — e o pior caso real, ja que
+    // o hue e determinístico por documento.
+    const contraCapa = piorCaso((hue) => Math.abs(deltaLAssinado(borda, hslParaRgb(hue, 12, 86))));
+    expect(Number(contraCapa.valor.toFixed(1))).toBe(2.6);
+    for (let hue = 0; hue < 360; hue += 1) {
+      expect(deltaLAssinado(borda, hslParaRgb(hue, 12, 86)), `hue ${hue} nao ficou mais escura que a capa`).toBeLessThan(0);
+    }
+  });
+
+  it("ESCURO: preto nao resolve, entao a borda e de LUZ", () => {
+    // O fundo escuro (#120E0C) ja esta perto do preto: uma borda preta
+    // composta sobre o card ainda fica MAIS CLARA que ele. Registrado como
+    // teste para que a inversao de estrategia no escuro nao pareca arbitraria.
+    const bordaPretaAntiga = compositar([0, 0, 0], 0.35, CARD_ESCURO_TOPO);
+    expect(Number(deltaLAssinado(bordaPretaAntiga, FUNDO_ESCURO).toFixed(1))).toBe(4.2);
+
+    const declaracao = regra(`.dark${ESCOPO_GLASS}`).corpo.match(/--glass-border:\s*([^;]+);/);
+    expect(declaracao?.[1].trim()).toBe("rgb(255 255 255 / 0.10)");
+
+    const borda = compositar([255, 255, 255], 0.1, CARD_ESCURO_TOPO);
+    expect(paraHex(borda)).toBe("#3E3B37");
+    expect(Number(deltaLAssinado(borda, FUNDO_ESCURO).toFixed(1))).toBe(20.8);
+    expect(Number(deltaLAssinado(borda, CARD_ESCURO_TOPO).toFixed(1))).toBe(10.0);
+  });
+
+  it("o --border do FLAT nao foi tocado por esta leva", () => {
+    // Redundante com a impressao digital, de proposito: quando este quebra a
+    // mensagem diz o valor, e nao so "a impressao mudou".
+    expect(declaracoes(regra(":root").corpo)).toContain("--border: #D9CBBF");
+    expect(declaracoes(regra(".dark").corpo)).toContain("--border: #3D2E22");
+  });
+});
+
 describe("fundo estratificado: separacao de camadas por DeltaL*", () => {
   // DeltaL* (CIELAB), nao contraste WCAG. Sao perguntas diferentes: WCAG
   // responde "da para LER este texto sobre este fundo", e entre dois cremes
   // vizinhos a razao fica ~1.0 sem dizer nada sobre se as camadas se
   // distinguem. Separacao de camada e percepcao de luminosidade.
-  const estrelaL = (hexCor: string) => {
-    const v = Number.parseInt(hexCor.slice(1), 16);
-    const canais = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => {
-      const s = c / 255;
-      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-    });
-    const y = 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2];
-    return y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y;
-  };
-  const dL = (a: string, b: string) => Number(Math.abs(estrelaL(a) - estrelaL(b)).toFixed(1));
+  // Aqui a separacao interessa em MODULO (as camadas se distinguem ou nao),
+  // ao contrario do teste de borda, onde o SINAL e o que importa.
+  const dL = (a: string, b: string) =>
+    Number(Math.abs(deltaLAssinado(hexParaRgb(a), hexParaRgb(b))).toFixed(1));
 
   it("CLARO: o fundo novo abre a camada que o fundo do flat nao abria", () => {
     // Era DeltaL* 0.3 contra a parada escura de --glass-surface; virou 3.4.

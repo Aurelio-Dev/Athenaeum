@@ -1,5 +1,66 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 18/08/2026 — `--glass-border` passa a ler como aresta, não
+> como vão. Consequência de a Leva 4 ter recuado o fundo sem reavaliar a
+> borda.**
+>
+> ### A métrica é o SINAL do ΔL\*, não o módulo
+>
+> Uma borda separa duas superfícies: a de **fora** (o fundo da página) e a
+> de **dentro** (a capa, nos ~2/3 de cima do card; o próprio card, no terço
+> de baixo). Para ler como **aresta** no tema claro, ela tem de ser mais
+> **escura** que as duas. Se ficar mais clara, lê como **fresta** — e é
+> exatamente a mesma distância em módulo. Por isso o ΔL\* aqui é usado
+> **com sinal**; a versão sem sinal (usada para separação de camadas) não
+> responde a esta pergunta.
+>
+> A borda nasceu certa e só ficou errada quando a Leva 4 recuou
+> `--glass-surface-app` para `#EDE2D4` sem reavaliar a borda.
+>
+> ### Claro: 0.08 → 0.20
+>
+> | | Composto sobre o card | vs fundo `#EDE2D4` | vs capa (pior hue) |
+> | --- | --- | --- | --- |
+> | antes `rgb(44 26 16 / 0.08)` | `#EEEBE7` | **+2.8** (mais clara) ❌ | **+4.3** (mais clara) ❌ |
+> | depois `rgb(44 26 16 / 0.20)` | `#D5D0CB` | **−6.8** (mais escura) ✅ | **−2.6** (mais escura) ✅ |
+>
+> Verificado que fica mais escura que a capa em **todos os 360 hues**, não
+> só no pior caso — o hue é determinístico por documento.
+>
+> ### Escuro: preto não resolve, então a borda é de LUZ
+>
+> O fundo escuro (`#120E0C`) já está perto do preto: `rgb(0 0 0 / 0.35)`
+> composto sobre o card dá `#1B1815`, que **ainda é +4.2 mais claro que o
+> fundo**. Não há para onde descer. Por isso o escuro inverte a estratégia:
+>
+> `--glass-border` escuro passa a **`rgb(255 255 255 / 0.10)`** = `#3E3B37`
+> — **+20.8** do fundo e **+10.0** do card. A aresta é lida pelo lado claro,
+> que é o idioma normal de vidro em tema escuro.
+>
+> ### Efeito de canto — medido, não corrigido
+>
+> A capa tem `border-radius: 0` dentro de um card de raio 12px, então o
+> fundo do card aparece na curva. Medido por amostragem de pixel na
+> diagonal do canto: a transição é de **1px**, e a borda nova a **alivia** —
+> o pixel de transição sai de `#EDE9E6` (mais claro que o fundo, somando-se
+> à fresta) para `#E1DCD9` (praticamente colado na capa, `#E0DBD7`). Sem
+> correção nesta leva, como pedido.
+>
+> ### Divergências do brief, reportadas
+>
+> Os números que decidem a mudança conferem exatos (+2.8 / −6.8 / +4.2, e
+> `#EEEBE7` / `#D5D0CB`). Dois números de **contexto** não reproduzem:
+>
+> - o brief cita **+5.5** para a borda antiga vs capa; o **pior hue** dá
+>   +4.3 e a **média de hue** dá +5.6 — a diferença é a estatística usada,
+>   não o cálculo;
+> - o brief afirma que em flat a borda `#D9CBBF` está a "−7.9 e −5.2, mais
+>   escura que ambas". Medido: **−11.6** contra o fundo `#F5EDE4`, e
+>   **+5.8 em média** (pior hue **+0.1**) contra a capa flat
+>   `hsl(hue 28% 74%)` — ou seja, no flat a borda é **mais clara** que a
+>   capa, não mais escura. O flat não foi tocado; o registro fica para que
+>   a premissa não seja reaproveitada como fato.
+
 > **Changelog 18/08/2026 — Capas de documento clareadas no glass CLARO
 > (follow-up de 7631155). Só o claro; o escuro não muda.**
 >
