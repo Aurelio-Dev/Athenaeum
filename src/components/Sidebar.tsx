@@ -345,7 +345,7 @@ export function Sidebar({
           }}
         >
           <div
-            className="absolute w-52 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar-raised py-1 text-sm text-sidebar-text shadow-2xl"
+            className="material-liquid-overlay absolute w-52 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar-raised py-1 text-sm text-sidebar-text shadow-2xl"
             style={{ left: collectionContextMenu.x, top: collectionContextMenu.y }}
             role="menu"
             onMouseDown={(event) => event.stopPropagation()}

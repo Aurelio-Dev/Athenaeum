@@ -101,17 +101,13 @@ export function ContextMenu({
           data-context-menu-root="true"
           role={autoFocus ? "menu" : undefined}
           aria-orientation={autoFocus ? "vertical" : undefined}
-          className="fixed overflow-y-auto py-[5px] text-text-primary"
+          className="material-liquid-overlay fixed overflow-y-auto rounded-[10px] border border-border-subtle bg-surface-card py-[5px] text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.10),0_2px_6px_rgba(0,0,0,0.06)]"
           style={{
             left: position.left,
             top: position.top,
             width,
             maxHeight: Math.min(maxHeight ?? window.innerHeight - viewportMargin * 2, window.innerHeight - viewportMargin * 2),
             zIndex: 9999,
-            background: "var(--color-surface-card)",
-            border: "1px solid var(--color-border-subtle)",
-            borderRadius: 10,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06)",
           }}
           onPointerDown={(event) => event.stopPropagation()}
           onKeyDown={handleKeyDown}

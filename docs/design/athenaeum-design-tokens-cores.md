@@ -1,5 +1,44 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 20/08/2026 — Liquid Glass óptico e cobertura ampliada da
+> Library. Flat e glass sem wallpaper permanecem idênticos ao baseline
+> `c01c1e9`.**
+>
+> A referência visual foi traduzida em quatro sinais que o WebView2 consegue
+> compor de forma previsível: tinta translúcida, blur com saturação, aresta
+> especular direcional e profundidade por sombras inset/externa. O azul ou
+> qualquer outra dominante vem exclusivamente do wallpaper; não há token de
+> cor que pinte o vidro de azul. Refração óptica real não foi simulada porque
+> exigiria shader ou cópias deslocadas do backdrop, com custo e artefatos
+> desproporcionais para a Library.
+>
+> As arestas usam dois backgrounds (`padding-box` para a tinta e `border-box`
+> para o gradiente especular). Assim os cantos arredondados recebem luz no
+> topo/esquerda e sombra no fundo/direita sem pseudo-elemento e sem uma camada
+> de composição adicional. Raios, posição e espaçamento continuam sendo
+> definidos pelos componentes: material altera somente pintura.
+>
+> A cobertura passa a incluir a faixa superior da Library, cards de Caderno e
+> Quadro, o `ContextMenu` compartilhado, o menu de coleção da sidebar e os
+> dropdowns de tags. Controles dentro de uma superfície já filtrada recebem
+> tinta, borda e reflexo, mas nunca outro `backdrop-filter`. Overlays aninhados
+> também reutilizam o backdrop já composto pelo ancestral. Inputs, textarea,
+> preview de PDF, capas, conteúdo de Caderno/Quadro/Reader e os frames
+> imersivos continuam opacos e fora desta leva.
+>
+> O filtro é `blur(16px) saturate(1.18) brightness(1.02)` no claro e
+> `blur(16px) saturate(1.16) brightness(0.98)` no escuro. Ele só casa com
+> `data-wallpaper-translucent="true"`: no slider 0 o scrim está em alpha 1 e
+> o filtro é removido, evitando composição sem pixel visível. O piso do scrim
+> permanece 0,60 e a dívida de contraste registrada abaixo não foi ampliada
+> por uma nova curva.
+>
+> Marcadores `material-liquid-*` não possuem regra fora da conjunção
+> `[data-material="glass"][data-wallpaper="active"]`. Eles existem para
+> ampliar a cobertura sem mudar o glass sem imagem já aprovado. A família
+> histórica `material-surface-*` continua sendo a fonte dos papéis que já
+> existiam antes do wallpaper.
+
 > **Changelog 20/08/2026 — Wallpaper visível atrás das superfícies glass. O
 > material flat e o glass sem imagem permanecem idênticos.**
 >

@@ -104,6 +104,7 @@ describe("wallpaper: slider governa o alpha do scrim", () => {
     const root = document.documentElement;
 
     expect(root.dataset.wallpaper).toBe("active");
+    expect(root.dataset.wallpaperTranslucent).toBe("true");
     expect(root.style.getPropertyValue("--glass-wallpaper-scrim-alpha")).toBe("0.800");
     expect(root.style.getPropertyValue("--glass-wallpaper-image")).toContain(
       "wallpaper-1.png",
@@ -111,6 +112,15 @@ describe("wallpaper: slider governa o alpha do scrim", () => {
     expect(root.style.getPropertyValue("--glass-wallpaper-image-opacity")).toBe("");
     expect(root.style.opacity).toBe("");
     expect(css).not.toMatch(/wallpaper[^{}]*\{[^{}]*\bopacity\s*:/);
+  });
+
+  it("no extremo opaco nao marca a janela para backdrop-filter", () => {
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 0);
+    const root = document.documentElement;
+
+    expect(root.dataset.wallpaper).toBe("active");
+    expect(root.dataset.wallpaperTranslucent).toBeUndefined();
+    expect(root.style.getPropertyValue("--glass-wallpaper-scrim-alpha")).toBe("1.000");
   });
 });
 

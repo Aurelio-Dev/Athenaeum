@@ -709,93 +709,95 @@ export function LibraryView() {
           className={`min-h-0 min-w-0 flex-1 flex-col ${selectedDocument ? "hidden xl:flex" : "flex"}`}
           onContextMenu={openLibraryAreaContextMenu}
         >
-          <div className="flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
-            <label className="ml-auto flex w-full max-w-[340px] items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
-              <SearchIcon />
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Pesquisar na biblioteca..."
-                className="min-w-0 flex-1 border-0 bg-transparent text-[12px] leading-[18px] text-text-primary outline-none placeholder:text-text-subtle"
-              />
-            </label>
-            {isTrashRoute ? null : (
-              <button
-                type="button"
-                onClick={() => setIsAddPdfModalOpen(true)}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-text-inverse shadow-button transition hover:bg-primary-hover"
-              >
-                <PlusIcon />
-                Adicionar
-              </button>
-            )}
-          </div>
-
-          {/* Linha horizontal de largura total, logo acima do titulo da colecao
-              (diferente do divisor abaixo de "N itens", que e recuado). */}
-          <div className="border-t border-border-subtle" />
-
-          <header className="flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-5">
-            <LibraryHeader
-              title={getRouteTitle(activeRoute)}
-              countText={getHeaderCountText(collectionTab, activeRoute, documents.length, notebooks.length, canvases.length)}
-              description={activeCollection?.description || undefined}
-              tabs={
-                activeRoute.type === "collection" ? (
-                  <CollectionTabs activeTab={collectionTab} onTabChange={setCollectionTab} />
-                ) : undefined
-              }
-              onEdit={activeCollection ? () => setIsEditCollectionModalOpen(true) : undefined}
-            />
-            {isTrashRoute && trashCount > 0 ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-lg bg-status-red px-4 py-2.5 text-sm font-bold text-status-red-text transition hover:brightness-95"
-                onClick={() => setPendingConfirmation({ type: "empty-trash" })}
-              >
-                Esvaziar lixeira
-              </button>
-            ) : null}
-            {activeRoute.type === "collection" && collectionTab !== "documents" ? (
-              // Cadernos/Quadros trocam o sort + grid/lista por um "+ Criar"
-              // outline terracota, como no design.
-              <button
-                type="button"
-                onClick={() => {
-                  if (collectionTab === "notebooks") {
-                    void createNotebookInCollection();
-                  } else {
-                    void createCanvasInCollection();
-                  }
-                }}
-                className="inline-flex items-center gap-2 rounded-lg border border-primary bg-transparent px-4 py-2 text-[12px] font-bold leading-[18px] text-primary transition hover:bg-primary hover:text-text-inverse"
-              >
-                <PlusIcon />
-                Criar
-              </button>
-            ) : (
-              <LibraryToolbar
-                compact={isTrashRoute}
-                sortMode={sortMode}
-                viewMode={viewMode}
-                recentSortLabel={activeRoute.type === "reading-list" ? "Aberto recentemente" : "Recente"}
-                onSortModeChange={setSortMode}
-                onViewModeChange={setViewMode}
-              />
-            )}
-          </header>
-
-          {/* Divisor com o mesmo recuo horizontal (px-8) da grade de cards, para
-              comecar/terminar alinhado com os cards em vez de atravessar a
-              largura toda. mx-8 acompanha o px-8 da secao, entao continua
-              alinhado em qualquer largura. */}
-          <div className="mx-8 border-t border-border-subtle" />
-
-          {isTrashRoute ? (
-            <div className="border-b border-border-subtle bg-surface-app px-8 py-4 text-sm text-text-secondary">
-              Itens na lixeira sao excluidos permanentemente apos 30 dias.
+          <div className="material-liquid-bar contents">
+            <div className="material-liquid-bar-section flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
+              <label className="material-liquid-control ml-auto flex w-full max-w-[340px] items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
+                <SearchIcon />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Pesquisar na biblioteca..."
+                  className="min-w-0 flex-1 border-0 bg-transparent text-[12px] leading-[18px] text-text-primary outline-none placeholder:text-text-subtle"
+                />
+              </label>
+              {isTrashRoute ? null : (
+                <button
+                  type="button"
+                  onClick={() => setIsAddPdfModalOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-text-inverse shadow-button transition hover:bg-primary-hover"
+                >
+                  <PlusIcon />
+                  Adicionar
+                </button>
+              )}
             </div>
-          ) : null}
+
+            {/* Linha horizontal de largura total, logo acima do titulo da colecao
+                (diferente do divisor abaixo de "N itens", que e recuado). */}
+            <div className="border-t border-border-subtle" />
+
+            <header className="material-liquid-bar-section flex flex-wrap items-end gap-4 bg-surface-app px-8 pb-4 pt-5">
+              <LibraryHeader
+                title={getRouteTitle(activeRoute)}
+                countText={getHeaderCountText(collectionTab, activeRoute, documents.length, notebooks.length, canvases.length)}
+                description={activeCollection?.description || undefined}
+                tabs={
+                  activeRoute.type === "collection" ? (
+                    <CollectionTabs activeTab={collectionTab} onTabChange={setCollectionTab} />
+                  ) : undefined
+                }
+                onEdit={activeCollection ? () => setIsEditCollectionModalOpen(true) : undefined}
+              />
+              {isTrashRoute && trashCount > 0 ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg bg-status-red px-4 py-2.5 text-sm font-bold text-status-red-text transition hover:brightness-95"
+                  onClick={() => setPendingConfirmation({ type: "empty-trash" })}
+                >
+                  Esvaziar lixeira
+                </button>
+              ) : null}
+              {activeRoute.type === "collection" && collectionTab !== "documents" ? (
+                // Cadernos/Quadros trocam o sort + grid/lista por um "+ Criar"
+                // outline terracota, como no design.
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (collectionTab === "notebooks") {
+                      void createNotebookInCollection();
+                    } else {
+                      void createCanvasInCollection();
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary bg-transparent px-4 py-2 text-[12px] font-bold leading-[18px] text-primary transition hover:bg-primary hover:text-text-inverse"
+                >
+                  <PlusIcon />
+                  Criar
+                </button>
+              ) : (
+                <LibraryToolbar
+                  compact={isTrashRoute}
+                  sortMode={sortMode}
+                  viewMode={viewMode}
+                  recentSortLabel={activeRoute.type === "reading-list" ? "Aberto recentemente" : "Recente"}
+                  onSortModeChange={setSortMode}
+                  onViewModeChange={setViewMode}
+                />
+              )}
+            </header>
+
+            {/* Divisor com o mesmo recuo horizontal (px-8) da grade de cards, para
+                comecar/terminar alinhado com os cards em vez de atravessar a
+                largura toda. mx-8 acompanha o px-8 da secao, entao continua
+                alinhado em qualquer largura. */}
+            <div className="mx-8 border-t border-border-subtle" />
+
+            {isTrashRoute ? (
+              <div className="material-liquid-bar-section border-b border-border-subtle bg-surface-app px-8 py-4 text-sm text-text-secondary">
+                Itens na lixeira sao excluidos permanentemente apos 30 dias.
+              </div>
+            ) : null}
+          </div>
 
           <section className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
             {activeRoute.type === "collection" && collectionTab === "notebooks" ? (

@@ -90,7 +90,7 @@ export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente"
         <button
           type="button"
           onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
-          className="material-surface-elevated flex items-center gap-2 rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-[12px] font-normal leading-[18px] text-[#2C1810] dark:text-text-primary"
+          className="material-liquid-control material-surface-elevated flex items-center gap-2 rounded-lg border border-border-muted bg-surface-panel px-3 py-2 text-[12px] font-normal leading-[18px] text-[#2C1810] dark:text-text-primary"
         >
           {sortMode === "recentes" ? recentSortLabel : sortModeLabels[sortMode]}
           <ChevronDownIcon />
@@ -115,7 +115,7 @@ export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente"
       </div>
 
       {/* Controle segmentado grade/lista, como no Figma. */}
-      <div className="material-surface-elevated flex items-center rounded-lg border border-border-muted bg-surface-panel p-0.5">
+      <div className="material-liquid-control material-surface-elevated flex items-center rounded-lg border border-border-muted bg-surface-panel p-0.5">
         {viewModes.map(({ mode, label }) => (
           <button
             key={mode}

@@ -81,6 +81,7 @@ beforeEach(() => {
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
 
   delete document.documentElement.dataset.wallpaper;
+  delete document.documentElement.dataset.wallpaperTranslucent;
   document.documentElement.style.removeProperty("--glass-wallpaper-image");
   document.documentElement.style.removeProperty("--glass-wallpaper-scrim-alpha");
 
@@ -118,12 +119,27 @@ describe("wallpaper global da janela", () => {
       "C:\\dados\\wallpaper\\wallpaper-1.png",
     );
     expect(document.documentElement.dataset.wallpaper).toBe("active");
+    expect(document.documentElement.dataset.wallpaperTranslucent).toBe("true");
     expect(
       document.documentElement.style.getPropertyValue("--glass-wallpaper-image"),
     ).toContain("asset://localhost/");
     expect(
       document.documentElement.style.getPropertyValue("--glass-wallpaper-scrim-alpha"),
     ).toBe("0.800");
+  });
+
+  it("no slider zero mantem a imagem ativa, mas dispensa composicao translucida", async () => {
+    databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
+    databaseMocks.getWallpaperOpacity.mockResolvedValue(0);
+    tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
+
+    await render();
+
+    expect(document.documentElement.dataset.wallpaper).toBe("active");
+    expect(document.documentElement.dataset.wallpaperTranslucent).toBeUndefined();
+    expect(
+      document.documentElement.style.getPropertyValue("--glass-wallpaper-scrim-alpha"),
+    ).toBe("1.000");
   });
 
   it("relê a fonte de verdade quando outra janela muda a opacidade", async () => {

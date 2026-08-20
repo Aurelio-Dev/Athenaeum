@@ -469,6 +469,36 @@
    camada unica pintada no body. --color-surface-app permanece intacto: campos
    e areas internas que usam bg-surface-app continuam protegendo o texto. */
 [data-material="glass"][data-wallpaper="active"] {
+  /* Sinais opticos do Liquid Glass: a cor vem do wallpaper; o material so
+     adiciona tinta, aresta especular, profundidade e filtragem. As bordas em
+     gradiente usam duas camadas de background (padding-box / border-box), sem
+     pseudo-elemento nem uma camada de composicao extra por superficie. */
+  --glass-liquid-edge: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 0.92) 0%,
+    rgb(255 255 255 / 0.46) 30%,
+    rgb(255 255 255 / 0.14) 58%,
+    rgb(117 97 84 / 0.18) 82%,
+    rgb(255 255 255 / 0.56) 100%
+  );
+  --glass-liquid-edge-elevated: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 0.98) 0%,
+    rgb(255 255 255 / 0.58) 32%,
+    rgb(255 255 255 / 0.18) 60%,
+    rgb(117 97 84 / 0.16) 82%,
+    rgb(255 255 255 / 0.68) 100%
+  );
+  --glass-liquid-inset:
+    inset 0 1px 0 rgb(255 255 255 / 0.62),
+    inset 1px 0 0 rgb(255 255 255 / 0.28),
+    inset 0 -1px 0 rgb(117 97 84 / 0.12);
+  --glass-liquid-inset-elevated:
+    inset 0 1px 0 rgb(255 255 255 / 0.78),
+    inset 1px 0 0 rgb(255 255 255 / 0.36),
+    inset 0 -1px 0 rgb(117 97 84 / 0.14);
+  --glass-liquid-filter: blur(16px) saturate(1.18) brightness(1.02);
+  --glass-liquid-hover-glow: 0 12px 32px -18px rgb(255 255 255 / 0.72);
   --glass-surface: linear-gradient(
     180deg,
     rgb(253 250 247 / var(--glass-wallpaper-scrim-alpha)) 0%,
@@ -482,6 +512,32 @@
 }
 
 .dark[data-material="glass"][data-wallpaper="active"] {
+  --glass-liquid-edge: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 0.32) 0%,
+    rgb(255 255 255 / 0.14) 32%,
+    rgb(255 255 255 / 0.05) 58%,
+    rgb(0 0 0 / 0.38) 82%,
+    rgb(255 255 255 / 0.18) 100%
+  );
+  --glass-liquid-edge-elevated: linear-gradient(
+    145deg,
+    rgb(255 255 255 / 0.42) 0%,
+    rgb(255 255 255 / 0.19) 32%,
+    rgb(255 255 255 / 0.06) 60%,
+    rgb(0 0 0 / 0.42) 82%,
+    rgb(255 255 255 / 0.22) 100%
+  );
+  --glass-liquid-inset:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 1px 0 0 rgb(255 255 255 / 0.08),
+    inset 0 -1px 0 rgb(0 0 0 / 0.34);
+  --glass-liquid-inset-elevated:
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    inset 1px 0 0 rgb(255 255 255 / 0.10),
+    inset 0 -1px 0 rgb(0 0 0 / 0.40);
+  --glass-liquid-filter: blur(16px) saturate(1.16) brightness(0.98);
+  --glass-liquid-hover-glow: 0 12px 32px -18px rgb(126 171 255 / 0.28);
   --glass-surface: linear-gradient(
     180deg,
     rgb(38 34 32 / var(--glass-wallpaper-scrim-alpha)) 0%,
@@ -665,15 +721,121 @@
     var(--glass-shadow-elevated);
 }
 
-/* Blur so existe onde ha pixels do wallpaper atravessando o scrim. Cada alvo
-   vira uma camada de composicao propria; por isso nao se aplica ao glass sem
-   imagem nem ao chrome --glass-immersive-* sobre conteudo do usuario. */
-[data-material="glass"][data-wallpaper="active"] .material-surface,
-[data-material="glass"][data-wallpaper="active"] .material-surface-elevated,
+/* Liquid Glass so existe quando ha um backdrop real. O glass sem imagem fica
+   exatamente nas regras historicas acima. A pintura em duas camadas cria uma
+   aresta que muda de luz para sombra ao redor dos cantos, como vidro convexo,
+   sem pseudo-elementos. */
+[data-material="glass"][data-wallpaper="active"] .material-surface {
+  background:
+    var(--glass-surface) padding-box,
+    var(--glass-liquid-edge) border-box;
+  border-color: transparent;
+  box-shadow: var(--glass-liquid-inset);
+}
+
+[data-material="glass"][data-wallpaper="active"] .material-surface-elevated:not(.material-liquid-control) {
+  background:
+    var(--glass-surface-elevated) padding-box,
+    var(--glass-liquid-edge-elevated) border-box;
+  border-color: transparent;
+  box-shadow: var(--glass-liquid-inset-elevated);
+}
+
 [data-material="glass"][data-wallpaper="active"] .material-surface-card,
-[data-material="glass"][data-wallpaper="active"] .material-surface-overlay {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+[data-material="glass"][data-wallpaper="active"] .material-liquid-card {
+  background:
+    var(--glass-surface-elevated) padding-box,
+    var(--glass-liquid-edge-elevated) border-box;
+}
+
+[data-material="glass"][data-wallpaper="active"] .material-surface-card:not([aria-pressed="true"]),
+[data-material="glass"][data-wallpaper="active"] .material-liquid-card {
+  border-color: transparent;
+  box-shadow:
+    var(--glass-liquid-inset-elevated),
+    var(--glass-shadow);
+}
+
+[data-material="glass"][data-wallpaper="active"] .material-surface-card[aria-pressed="true"] {
+  box-shadow:
+    var(--glass-liquid-inset-elevated),
+    0 0 0 2px var(--color-primary-soft),
+    var(--glass-shadow);
+}
+
+[data-material="glass"][data-wallpaper="active"] .material-surface-card:not([aria-pressed="true"]):hover,
+[data-material="glass"][data-wallpaper="active"] .material-liquid-card:hover {
+  box-shadow:
+    var(--glass-liquid-inset-elevated),
+    var(--glass-liquid-hover-glow),
+    var(--glass-shadow);
+}
+
+[data-material="glass"][data-wallpaper="active"] .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"] .material-liquid-overlay {
+  background:
+    var(--glass-surface-elevated) padding-box,
+    var(--glass-liquid-edge-elevated) border-box;
+  border-color: transparent;
+  box-shadow:
+    var(--glass-liquid-inset-elevated),
+    var(--glass-shadow-elevated);
+}
+
+/* A faixa superior e docada: ganha vidro e uma aresta inferior, nunca sombra
+   externa. Seus filhos historicos mantem bg-surface-app no flat e no glass
+   sem imagem; so ficam transparentes dentro desta conjuncao. */
+[data-material="glass"][data-wallpaper="active"] .material-liquid-bar {
+  display: block;
+  background: var(--glass-surface);
+  box-shadow: var(--glass-liquid-inset);
+}
+
+[data-material="glass"][data-wallpaper="active"] .material-liquid-bar-section {
+  background: transparent;
+}
+
+/* Controles dentro de uma superficie ja filtrada recebem tinta e reflexo, mas
+   nao outro backdrop-filter. Isso evita o aspecto leitoso e uma nova camada de
+   composicao para cada botao, campo de busca ou controle segmentado. */
+[data-material="glass"][data-wallpaper="active"] .material-liquid-control {
+  background:
+    var(--glass-surface-elevated) padding-box,
+    var(--glass-liquid-edge-elevated) border-box;
+  border-color: transparent;
+  box-shadow: var(--glass-liquid-inset-elevated);
+}
+
+/* O filtro e removido no slider 0: a tinta esta em alpha 1 e nenhum pixel do
+   wallpaper atravessa. --glass-immersive-* continua fora desta lista. */
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-elevated:not(.material-liquid-control),
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-card,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-card,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar {
+  -webkit-backdrop-filter: var(--glass-liquid-filter);
+  backdrop-filter: var(--glass-liquid-filter);
+}
+
+/* Overlays que ja vivem dentro de outra superficie filtrada reutilizam o
+   backdrop composto pelo ancestral. Os ContextMenu portaled diretamente no
+   body continuam recebendo filtro pela regra acima. */
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface .material-liquid-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-elevated .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-elevated .material-liquid-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-card .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-card .material-liquid-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-overlay .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-overlay .material-liquid-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-card .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-card .material-liquid-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar .material-surface-overlay,
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar .material-liquid-overlay {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam

@@ -183,7 +183,7 @@ export function TagInput({
       </div>
 
       {isOpen ? (
-        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel py-1 shadow-lg">
+        <div className="material-liquid-overlay absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel py-1 shadow-lg">
           {suggestions.length === 0 && !canCreate ? (
             <p className="px-3 py-2 text-sm text-text-subtle">
               {availableTags.length === 0 ? "Nenhuma tag ainda. Digite para criar." : "Nenhuma tag encontrada."}

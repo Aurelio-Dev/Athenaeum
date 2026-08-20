@@ -38,12 +38,18 @@ export function applyWallpaperPresentation(assetUrl: string | null, opacity: num
 
   if (!assetUrl) {
     delete root.dataset.wallpaper;
+    delete root.dataset.wallpaperTranslucent;
     root.style.removeProperty("--glass-wallpaper-image");
     root.style.removeProperty("--glass-wallpaper-scrim-alpha");
     return;
   }
 
   root.dataset.wallpaper = "active";
+  if (normalizeWallpaperOpacity(opacity) > 0) {
+    root.dataset.wallpaperTranslucent = "true";
+  } else {
+    delete root.dataset.wallpaperTranslucent;
+  }
   root.style.setProperty("--glass-wallpaper-image", cssUrl(assetUrl));
   root.style.setProperty(
     "--glass-wallpaper-scrim-alpha",

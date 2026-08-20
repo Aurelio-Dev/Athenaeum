@@ -591,7 +591,7 @@ export function DocumentDetailsPanel({
             </div>
 
             {isTagDropdownOpen ? (
-              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
+              <div className="material-liquid-overlay absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border-muted bg-surface-panel p-3 shadow-lg">
                 <TagSelector
                   availableTags={availableTags}
                   selectedTags={document.tags}
