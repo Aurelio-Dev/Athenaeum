@@ -2431,3 +2431,75 @@ export async function setMaterialVariant(
   await setSetting(MATERIAL_VARIANT_SETTING_KEY, material, source);
   await emitMaterialVariantChanged(material);
 }
+
+// Papel de parede do app. Como o material, vive em app_settings e nao em
+// localStorage: e uma preferencia global, compartilhada pelas janelas nativas,
+// e precisa sobreviver a uma troca feita com a janela fechada.
+//
+// Duas chaves, no padrao chave-valor que a tabela ja tem — nenhuma migration
+// e necessaria:
+//
+// - wallpaper_file    -> NOME do arquivo dentro da pasta wallpaper/ do
+//                        diretorio de dados. Nunca o caminho absoluto: ele
+//                        muda entre maquinas e entre o perfil .dev e o de
+//                        producao. Quem traduz nome -> caminho e o comando
+//                        resolve_wallpaper_path, no Rust.
+// - wallpaper_opacity -> inteiro de 0 a 100, o valor do slider.
+const WALLPAPER_FILE_SETTING_KEY = "wallpaper_file";
+const WALLPAPER_OPACITY_SETTING_KEY = "wallpaper_opacity";
+
+export const MIN_WALLPAPER_OPACITY = 0;
+export const MAX_WALLPAPER_OPACITY = 100;
+
+// Meio termo: um papel de parede recem-escolhido precisa aparecer (senao o
+// usuario acha que a importacao falhou), mas ele fica ATRAS das superficies do
+// app e nao pode competir com o conteudo. O ajuste fino e do usuario.
+export const DEFAULT_WALLPAPER_OPACITY = 50;
+
+export async function getWallpaperFile(source: DatabaseHandleSource = "loaded"): Promise<string | null> {
+  const value = await getSetting(WALLPAPER_FILE_SETTING_KEY, source);
+  const fileName = value?.trim() ?? "";
+  return fileName.length > 0 ? fileName : null;
+}
+
+export async function setWallpaperFile(
+  fileName: string,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(WALLPAPER_FILE_SETTING_KEY, fileName, source);
+}
+
+// Apaga a linha em vez de gravar string vazia: "sem wallpaper" e a ausencia da
+// chave, o mesmo estado de quem nunca escolheu uma imagem. Guardar "" criaria
+// um segundo jeito de dizer a mesma coisa, que todo leitor teria de tratar.
+export async function clearWallpaperFile(source: DatabaseHandleSource = "loaded"): Promise<void> {
+  const database = await getDatabase(source);
+  await database.execute("DELETE FROM app_settings WHERE key = $1", [WALLPAPER_FILE_SETTING_KEY]);
+}
+
+// Valor gravado por uma versao futura, editado a mao ou corrompido nao pode
+// derrubar a tela de Ajustes: fora da faixa vira o padrao.
+export function normalizeWallpaperOpacity(value: string | number | null): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_WALLPAPER_OPACITY;
+  }
+
+  return Math.min(MAX_WALLPAPER_OPACITY, Math.max(MIN_WALLPAPER_OPACITY, Math.round(parsed)));
+}
+
+export async function getWallpaperOpacity(source: DatabaseHandleSource = "loaded"): Promise<number> {
+  return normalizeWallpaperOpacity(await getSetting(WALLPAPER_OPACITY_SETTING_KEY, source));
+}
+
+export async function setWallpaperOpacity(
+  opacity: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(
+    WALLPAPER_OPACITY_SETTING_KEY,
+    String(normalizeWallpaperOpacity(opacity)),
+    source,
+  );
+}

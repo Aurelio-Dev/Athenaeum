@@ -21,7 +21,11 @@ tauri-build = { version = "2.6.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.3", features = [] }
+# protocol-asset: registra o protocolo `asset`, que serve UM unico diretorio
+# ao WebView — o escopo declarado em tauri.conf.json (`$APPDATA/wallpaper/*`).
+# Sem esta feature o protocolo nao existe e a previa do wallpaper so poderia
+# ser desenhada mandando os bytes da imagem em base64 pelo IPC.
+tauri = { version = "2.11.3", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 rfd = "0.15"
 base64 = "0.22"

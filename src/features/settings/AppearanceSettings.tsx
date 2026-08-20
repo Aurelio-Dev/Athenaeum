@@ -7,7 +7,13 @@ import {
   type UiFontScale,
 } from "../../hooks/useAppearancePreferences";
 import { useTheme, type Theme } from "../../hooks/useTheme";
-import type { MaterialVariant } from "../../lib/database";
+import { useWallpaperSettings } from "../../hooks/useWallpaperSettings";
+import {
+  DEFAULT_WALLPAPER_OPACITY,
+  MAX_WALLPAPER_OPACITY,
+  MIN_WALLPAPER_OPACITY,
+  type MaterialVariant,
+} from "../../lib/database";
 
 type SettingRowProps = {
   label: string;
@@ -132,10 +138,117 @@ function MaterialControl({
   );
 }
 
+const secondaryButtonClassName =
+  "h-8 rounded-lg border border-border-subtle bg-surface-panel px-3 text-xs font-semibold text-text-secondary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
+
+// Controle do papel de parede: escolher, ver o que esta escolhido e remover.
+//
+// SEM PREVIEW ao passar o mouse ou receber foco, pela mesma razao do controle
+// de material acima: escolher uma imagem nao e so pintar a tela — copia um
+// arquivo para o diretorio de dados e apaga o anterior. Aplicar isso em hover
+// deixaria o usuario com um wallpaper que ele nao escolheu, e com o anterior
+// ja apagado do disco. Por isso so existe onClick aqui: nada de onMouseEnter,
+// onFocus ou navegacao por setas.
+function WallpaperControl({
+  previewUrl,
+  isLoading,
+  isImporting,
+  error,
+  onChoose,
+  onRemove,
+}: {
+  previewUrl: string | null;
+  isLoading: boolean;
+  isImporting: boolean;
+  error: string | null;
+  onChoose: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex h-11 w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-subtle bg-surface-muted"
+          aria-hidden={previewUrl ? undefined : true}
+        >
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt="Prévia do papel de parede"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-text-subtle">
+              Nenhuma
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onChoose}
+          disabled={isLoading || isImporting}
+          className={secondaryButtonClassName}
+        >
+          {isImporting ? "Copiando..." : previewUrl ? "Trocar imagem" : "Escolher imagem"}
+        </button>
+
+        {previewUrl ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={isImporting}
+            className={secondaryButtonClassName}
+          >
+            Remover
+          </button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <p role="alert" className="max-w-[280px] text-right text-xs leading-4 text-status-red-text">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function WallpaperOpacityControl({
+  opacity,
+  disabled,
+  onChange,
+}: {
+  opacity: number;
+  disabled: boolean;
+  onChange: (opacity: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        min={MIN_WALLPAPER_OPACITY}
+        max={MAX_WALLPAPER_OPACITY}
+        step={1}
+        value={opacity}
+        disabled={disabled}
+        aria-label="Opacidade do papel de parede"
+        aria-valuetext={`${opacity}%`}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-1.5 w-40 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+      />
+      <span className="w-10 text-right text-xs font-semibold tabular-nums text-text-primary">
+        {opacity}%
+      </span>
+    </div>
+  );
+}
+
 export function AppearanceSettings() {
   const { theme, setTheme, material, setMaterial } = useTheme();
   const { showDividerLines, setShowDividerLines } = useDividerLines();
   const { uiContrast, setUiContrast, uiFontScale, setUiFontScale } = useAppearancePreferences();
+  const wallpaper = useWallpaperSettings();
 
   function restoreDefaults() {
     setTheme("light");
@@ -143,6 +256,10 @@ export function AppearanceSettings() {
     setShowDividerLines(true);
     setUiContrast(100);
     setUiFontScale(100);
+    // A opacidade volta ao padrao, mas a IMAGEM nao e removida: restaurar
+    // padroes de aparencia nao pode apagar do disco um arquivo que o usuario
+    // importou. Para isso existe o botao Remover, que diz o que faz.
+    wallpaper.changeOpacity(DEFAULT_WALLPAPER_OPACITY);
   }
 
   return (
@@ -167,6 +284,31 @@ export function AppearanceSettings() {
 
         <SettingRow label="Material" description="Escolha o acabamento das superfícies. Funciona nos temas claro e escuro.">
           <MaterialControl material={material} onChange={setMaterial} />
+        </SettingRow>
+
+        <SettingRow
+          label="Papel de parede"
+          description="Escolha uma imagem para o fundo do app. Ela aparece atrás das superfícies translúcidas do material Vidro."
+        >
+          <WallpaperControl
+            previewUrl={wallpaper.previewUrl}
+            isLoading={wallpaper.isLoading}
+            isImporting={wallpaper.isImporting}
+            error={wallpaper.error}
+            onChoose={() => void wallpaper.chooseWallpaper()}
+            onRemove={() => void wallpaper.removeWallpaper()}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Opacidade do papel de parede"
+          description="Defina o quanto a imagem aparece por trás da interface."
+        >
+          <WallpaperOpacityControl
+            opacity={wallpaper.opacity}
+            disabled={wallpaper.fileName === null}
+            onChange={wallpaper.changeOpacity}
+          />
         </SettingRow>
 
         <SettingRow label="Linhas divisórias" description="Exibir linhas sutis entre seções e itens.">

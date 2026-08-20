@@ -33,6 +33,24 @@ vi.mock("../../hooks/useDividerLines", () => ({
   }),
 }));
 
+// O controle de wallpaper mora na mesma tela, mas tem teste proprio
+// (AppearanceSettings.wallpaper.test.tsx). Aqui ele e stubado para este arquivo
+// continuar sendo um teste do eixo de MATERIAL: sem stub, montar a tela abriria
+// o banco e o IPC so para exercitar o controle ao lado.
+vi.mock("../../hooks/useWallpaperSettings", () => ({
+  useWallpaperSettings: () => ({
+    fileName: null,
+    previewUrl: null,
+    opacity: 50,
+    isLoading: false,
+    isImporting: false,
+    error: null,
+    chooseWallpaper: vi.fn(),
+    removeWallpaper: vi.fn(),
+    changeOpacity: vi.fn(),
+  }),
+}));
+
 vi.mock("../../hooks/useAppearancePreferences", () => ({
   uiContrastOptions: [90, 100, 110],
   uiFontScaleOptions: [90, 95, 100, 105, 110, 115, 120],

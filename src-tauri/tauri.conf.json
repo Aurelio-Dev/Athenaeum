@@ -19,7 +19,16 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "$APPDATA/wallpaper/*"
+          ],
+          "deny": []
+        }
+      }
     }
   },
   "bundle": {
