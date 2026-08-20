@@ -41,6 +41,9 @@ export const READER_WINDOW_LABEL = "reader-window";
 // Preferencia global (nao pertence a um documento): o material das superficies
 // do app. Emitido para TODAS as janelas nativas, nao so para o Reader.
 export const MATERIAL_VARIANT_CHANGED_EVENT = "app:material-variant-changed";
+// Wallpaper e opacidade tambem sao preferencias globais. O evento nao carrega
+// caminhos: cada janela relê o nome confiavel do SQLite e o resolve no Rust.
+export const WALLPAPER_SETTINGS_CHANGED_EVENT = "app:wallpaper-settings-changed";
 
 // Eixo ortogonal ao tema claro/escuro: descreve como as superficies sao
 // pintadas, nao qual e a paleta. "flat" e o material historico do app.
@@ -48,6 +51,10 @@ export type MaterialVariant = "flat" | "glass";
 
 export type MaterialVariantChangedPayload = {
   material: MaterialVariant;
+  origin: string;
+};
+
+export type WallpaperSettingsChangedPayload = {
   origin: string;
 };
 
@@ -455,6 +462,18 @@ async function emitMaterialVariantChanged(material: MaterialVariant) {
     // entao a falha de sincronizacao entre janelas nao pode fazer o chamador
     // repetir uma operacao que ja foi persistida.
     console.warn("Nao foi possivel emitir a mudanca de material.", error);
+  }
+}
+
+async function emitWallpaperSettingsChanged() {
+  try {
+    await emit<WallpaperSettingsChangedPayload>(WALLPAPER_SETTINGS_CHANGED_EVENT, {
+      origin: getCurrentWebviewWindow().label,
+    });
+  } catch (error) {
+    // O SQLite ja confirmou a escrita. A janela de origem aplica a mudanca
+    // localmente; uma falha de evento nao pode transformar sucesso em erro.
+    console.warn("Nao foi possivel sincronizar o papel de parede entre as janelas.", error);
   }
 }
 
@@ -2467,6 +2486,7 @@ export async function setWallpaperFile(
   source: DatabaseHandleSource = "loaded",
 ): Promise<void> {
   await setSetting(WALLPAPER_FILE_SETTING_KEY, fileName, source);
+  await emitWallpaperSettingsChanged();
 }
 
 // Apaga a linha em vez de gravar string vazia: "sem wallpaper" e a ausencia da
@@ -2475,6 +2495,7 @@ export async function setWallpaperFile(
 export async function clearWallpaperFile(source: DatabaseHandleSource = "loaded"): Promise<void> {
   const database = await getDatabase(source);
   await database.execute("DELETE FROM app_settings WHERE key = $1", [WALLPAPER_FILE_SETTING_KEY]);
+  await emitWallpaperSettingsChanged();
 }
 
 // Valor gravado por uma versao futura, editado a mao ou corrompido nao pode
@@ -2502,4 +2523,5 @@ export async function setWallpaperOpacity(
     String(normalizeWallpaperOpacity(opacity)),
     source,
   );
+  await emitWallpaperSettingsChanged();
 }

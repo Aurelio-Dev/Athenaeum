@@ -34,7 +34,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-surface-app text-text-primary">
+    <div className="wallpaper-backdrop-root flex h-screen w-full overflow-hidden bg-surface-app text-text-primary">
       <Sidebar
         collections={collections}
         documents={documents}

@@ -454,6 +454,46 @@
   --glass-immersive-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.70);
 }
 
+/* Wallpaper — segunda camada do material glass.
+   ------------------------------------------------------------
+   Este bloco so casa quando o caminho persistido foi resolvido pelo Rust e
+   convertido para asset:// no frontend. Sem data-wallpaper="active", os
+   tokens opacos acima continuam byte-identicos ao glass aprovado.
+
+   O slider nao altera a opacidade da imagem. Ele reduz linearmente o alpha do
+   SCRIM: 0 -> 1.00, 50 -> 0.80, 100 -> 0.60. Preservar a imagem em alpha 1
+   mantem cor e contraste do wallpaper; e a tinta da superficie que protege o
+   texto. Os valores claros e escuros ficam separados para preservar a paleta.
+
+   A raiz visual da janela fica transparente so neste estado para revelar a
+   camada unica pintada no body. --color-surface-app permanece intacto: campos
+   e areas internas que usam bg-surface-app continuam protegendo o texto. */
+[data-material="glass"][data-wallpaper="active"] {
+  --glass-surface: linear-gradient(
+    180deg,
+    rgb(253 250 247 / var(--glass-wallpaper-scrim-alpha)) 0%,
+    rgb(244 236 227 / var(--glass-wallpaper-scrim-alpha)) 100%
+  );
+  --glass-surface-elevated: linear-gradient(
+    180deg,
+    rgb(255 253 250 / var(--glass-wallpaper-scrim-alpha)) 0%,
+    rgb(247 240 232 / var(--glass-wallpaper-scrim-alpha)) 100%
+  );
+}
+
+.dark[data-material="glass"][data-wallpaper="active"] {
+  --glass-surface: linear-gradient(
+    180deg,
+    rgb(38 34 32 / var(--glass-wallpaper-scrim-alpha)) 0%,
+    rgb(28 24 21 / var(--glass-wallpaper-scrim-alpha)) 100%
+  );
+  --glass-surface-elevated: linear-gradient(
+    180deg,
+    rgb(41 37 33 / var(--glass-wallpaper-scrim-alpha)) 0%,
+    rgb(32 28 25 / var(--glass-wallpaper-scrim-alpha)) 100%
+  );
+}
+
 /* Texto secundario proprio do glass CLARO.
    Com o fundo em #EDE2D4, o #7A6558 do flat cai a 4.29:1 — abaixo de AA. O
    tom novo e derivado em HSL a partir do proprio #7A6558, escurecendo so a
@@ -625,6 +665,17 @@
     var(--glass-shadow-elevated);
 }
 
+/* Blur so existe onde ha pixels do wallpaper atravessando o scrim. Cada alvo
+   vira uma camada de composicao propria; por isso nao se aplica ao glass sem
+   imagem nem ao chrome --glass-immersive-* sobre conteudo do usuario. */
+[data-material="glass"][data-wallpaper="active"] .material-surface,
+[data-material="glass"][data-wallpaper="active"] .material-surface-elevated,
+[data-material="glass"][data-wallpaper="active"] .material-surface-card,
+[data-material="glass"][data-wallpaper="active"] .material-surface-overlay {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam
    somente tons secundários e bordas, sem filtros que alterariam imagens ou
    criariam novos contextos de empilhamento para os painéis flutuantes. */
@@ -657,6 +708,22 @@ body {
   background: var(--color-surface-app);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
+}
+
+/* Camada unica, fixa ao viewport porque o scroll da Library acontece no
+   container interno. Cover preserva proporcao e recorta o excedente sem
+   distorcer. Fora do seletor composto abaixo o body do flat e do glass sem
+   wallpaper continua exatamente na regra historica acima. */
+[data-material="glass"][data-wallpaper="active"] body {
+  background-color: var(--glass-surface-app);
+  background-image: var(--glass-wallpaper-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+[data-material="glass"][data-wallpaper="active"] .wallpaper-backdrop-root {
+  background: transparent;
 }
 
 .document-cover-swatch {

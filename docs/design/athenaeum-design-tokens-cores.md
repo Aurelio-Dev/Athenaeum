@@ -1,5 +1,53 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 20/08/2026 — Wallpaper visível atrás das superfícies glass. O
+> material flat e o glass sem imagem permanecem idênticos.**
+>
+> A imagem persistida em `wallpaper_file` é resolvida exclusivamente pelo
+> comando Rust `resolve_wallpaper_path`, convertida para o protocolo `asset://`
+> e pintada uma única vez no fundo da janela com `background-size: cover`.
+> Nenhum caminho absoluto é persistido ou transportado por evento entre
+> janelas. A camada só é consumida sob a conjunção
+> `[data-material="glass"][data-wallpaper="active"]`; em flat ela não pinta
+> nenhum pixel.
+>
+> ### Curva do slider: alpha do scrim, não da imagem
+>
+> `wallpaper_opacity` continua exposto como visibilidade da imagem (0–100), mas
+> o valor aplicado é o alpha da tinta de `--glass-surface` e
+> `--glass-surface-elevated`. A imagem permanece sempre em alpha 1. A curva é
+> linear:
+>
+> `alpha do scrim = 1 − (slider / 100 × 0,40)`
+>
+> | Slider | Alpha do scrim | Resultado |
+> | --- | --- | --- |
+> | 0 | **1,00** | superfície totalmente opaca; imagem invisível |
+> | 50 (padrão) | **0,80** | equilíbrio inicial |
+> | 100 | **0,60** | maior visibilidade permitida |
+>
+> O piso de 0,60 evita remover toda a proteção do texto. As superfícies usam
+> `backdrop-filter: blur(12px)` somente quando o wallpaper está ativo. O trio
+> `--glass-immersive-*` não recebe alpha nem blur: continua sendo chrome opaco
+> sobre conteúdo do usuário.
+>
+> ### ⚠️ Dívida de contraste deliberada e aceita
+>
+> Por decisão de produto, o slider é livre e não mostra aviso, não bloqueia
+> combinações e não mede a imagem. Portanto, certos pares podem ficar abaixo de
+> WCAG AA. Medições registradas para as piores combinações:
+>
+> | Cenário | Scrim necessário para AA |
+> | --- | --- |
+> | tema claro, texto `#756154`, scrim `#F7F0E8`, imagem escura | passa só a partir de **95%** |
+> | tema escuro, texto `#9E8878`, scrim `#292521`, imagem clara | passa só a **100%** |
+> | tema claro com imagem clara | passa desde **60%** (**5,43:1**) |
+> | tema escuro com imagem escura | passa desde **60%** (**5,35:1**) |
+>
+> Esses percentuais são alpha do scrim, não posição do slider — os eixos são
+> inversos. A liberdade do controle, inclusive nos estados não conformes, é
+> intencional e não deve ganhar aviso ou trava sem nova decisão de produto.
+
 > **Changelog 18/08/2026 — REGRESSÃO CORRIGIDA: o material engolia o estado
 > de seleção do card. Regra nova: o material governa o REPOUSO, o estado
 > governa o resto.**

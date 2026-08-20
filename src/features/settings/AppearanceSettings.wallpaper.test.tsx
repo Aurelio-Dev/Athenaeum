@@ -18,6 +18,10 @@ const databaseMocks = vi.hoisted(() => ({
   setWallpaperOpacity: vi.fn(),
 }));
 
+const presentationMocks = vi.hoisted(() => ({
+  applyWallpaperPresentation: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: tauriMocks.invoke,
   convertFileSrc: tauriMocks.convertFileSrc,
@@ -32,6 +36,10 @@ vi.mock("../../lib/database", () => ({
   clearWallpaperFile: databaseMocks.clearWallpaperFile,
   getWallpaperOpacity: databaseMocks.getWallpaperOpacity,
   setWallpaperOpacity: databaseMocks.setWallpaperOpacity,
+}));
+
+vi.mock("../../hooks/useWallpaperBackdrop", () => ({
+  applyWallpaperPresentation: presentationMocks.applyWallpaperPresentation,
 }));
 
 vi.mock("../../hooks/useTheme", () => ({
@@ -124,6 +132,7 @@ beforeEach(() => {
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
   databaseMocks.getWallpaperOpacity.mockReset().mockResolvedValue(50);
   databaseMocks.setWallpaperOpacity.mockReset().mockResolvedValue(undefined);
+  presentationMocks.applyWallpaperPresentation.mockReset();
 
   container = document.createElement("div");
   document.body.appendChild(container);

@@ -8,6 +8,7 @@ import {
   setWallpaperFile,
   setWallpaperOpacity,
 } from "../lib/database";
+import { applyWallpaperPresentation } from "./useWallpaperBackdrop";
 
 // Estado do papel de parede para a tela de Ajustes.
 //
@@ -111,7 +112,9 @@ export function useWallpaperSettings(): WallpaperSettings {
         }
 
         setFileName(storedFileName);
-        setPreviewUrl(convertFileSrc(resolvedPath));
+        const assetUrl = convertFileSrc(resolvedPath);
+        setPreviewUrl(assetUrl);
+        applyWallpaperPresentation(assetUrl, storedOpacity);
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(describeError(loadError));
@@ -153,6 +156,9 @@ export function useWallpaperSettings(): WallpaperSettings {
   const changeOpacity = useCallback(
     (nextOpacity: number) => {
       setOpacity(nextOpacity);
+      if (previewUrl) {
+        applyWallpaperPresentation(previewUrl, nextOpacity);
+      }
       pendingOpacityRef.current = nextOpacity;
 
       if (opacityTimerRef.current !== null) {
@@ -169,7 +175,7 @@ export function useWallpaperSettings(): WallpaperSettings {
         }
       }, OPACITY_PERSIST_DELAY_MS);
     },
-    [persistOpacity],
+    [persistOpacity, previewUrl],
   );
 
   const chooseWallpaper = useCallback(async () => {
@@ -194,13 +200,15 @@ export function useWallpaperSettings(): WallpaperSettings {
       await setWallpaperFile(imported.file_name);
 
       setFileName(imported.file_name);
-      setPreviewUrl(convertFileSrc(imported.file_path));
+      const assetUrl = convertFileSrc(imported.file_path);
+      setPreviewUrl(assetUrl);
+      applyWallpaperPresentation(assetUrl, opacity);
     } catch (importError: unknown) {
       setError(describeError(importError));
     } finally {
       setIsImporting(false);
     }
-  }, []);
+  }, [opacity]);
 
   const removeWallpaper = useCallback(async () => {
     setError(null);
@@ -211,10 +219,11 @@ export function useWallpaperSettings(): WallpaperSettings {
 
       setFileName(null);
       setPreviewUrl(null);
+      applyWallpaperPresentation(null, opacity);
     } catch (removeError: unknown) {
       setError(describeError(removeError));
     }
-  }, []);
+  }, [opacity]);
 
   return {
     fileName,

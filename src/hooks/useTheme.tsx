@@ -9,6 +9,7 @@ import {
   type DatabaseHandleSource,
   type MaterialVariant,
 } from "../lib/database";
+import { useWallpaperBackdrop } from "./useWallpaperBackdrop";
 
 // Fonte UNICA da aparencia global do app: o MODO (claro/escuro) e o MATERIAL
 // (chapado/vidro). Vive num contexto para que o botao de contraste do rodape da
@@ -67,6 +68,7 @@ type ThemeProviderProps = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProviderProps) {
+  useWallpaperBackdrop(databaseSource);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   // Inicializador sincrono (mesmo padrao do modo acima): o primeiro commit ja
   // sai com o material em cache, entao nao ha janela pintada em 'flat'.

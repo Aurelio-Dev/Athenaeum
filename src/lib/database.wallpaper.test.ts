@@ -7,6 +7,10 @@ const databaseMocks = vi.hoisted(() => ({
   load: vi.fn(),
 }));
 
+const eventMocks = vi.hoisted(() => ({
+  emit: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/plugin-sql", () => ({
   default: {
     get: databaseMocks.get,
@@ -15,7 +19,7 @@ vi.mock("@tauri-apps/plugin-sql", () => ({
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  emit: vi.fn(),
+  emit: eventMocks.emit,
 }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
@@ -35,6 +39,7 @@ import {
   normalizeWallpaperOpacity,
   setWallpaperFile,
   setWallpaperOpacity,
+  WALLPAPER_SETTINGS_CHANGED_EVENT,
 } from "./database";
 
 beforeEach(() => {
@@ -46,6 +51,7 @@ beforeEach(() => {
     execute: databaseMocks.execute,
     select: databaseMocks.select,
   });
+  eventMocks.emit.mockReset().mockResolvedValue(undefined);
 });
 
 describe("papel de parede em app_settings", () => {
@@ -73,6 +79,9 @@ describe("papel de parede em app_settings", () => {
       "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
       ["wallpaper_file", "wallpaper-1755648000.webp"],
     );
+    expect(eventMocks.emit).toHaveBeenCalledWith(WALLPAPER_SETTINGS_CHANGED_EVENT, {
+      origin: "main",
+    });
   });
 
   it("remove a chave em vez de gravar vazio ao limpar o wallpaper", async () => {
@@ -81,6 +90,9 @@ describe("papel de parede em app_settings", () => {
     expect(databaseMocks.execute).toHaveBeenCalledWith("DELETE FROM app_settings WHERE key = $1", [
       "wallpaper_file",
     ]);
+    expect(eventMocks.emit).toHaveBeenCalledWith(WALLPAPER_SETTINGS_CHANGED_EVENT, {
+      origin: "main",
+    });
   });
 
   it("persiste a opacidade como inteiro", async () => {
@@ -90,6 +102,9 @@ describe("papel de parede em app_settings", () => {
       "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
       ["wallpaper_opacity", "35"],
     );
+    expect(eventMocks.emit).toHaveBeenCalledWith(WALLPAPER_SETTINGS_CHANGED_EVENT, {
+      origin: "main",
+    });
   });
 
   it("le a opacidade persistida", async () => {
@@ -125,5 +140,12 @@ describe("papel de parede em app_settings", () => {
       "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
       ["wallpaper_opacity", "100"],
     );
+  });
+
+  it("nao transforma falha de sincronizacao em falha da escrita confirmada", async () => {
+    eventMocks.emit.mockRejectedValue(new Error("evento indisponivel"));
+
+    await expect(setWallpaperOpacity(70, "preloaded")).resolves.toBeUndefined();
+    expect(databaseMocks.execute).toHaveBeenCalledTimes(1);
   });
 });
