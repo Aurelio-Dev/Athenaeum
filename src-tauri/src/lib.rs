@@ -1,7 +1,7 @@
 use base64::write::EncoderWriter;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -17,7 +17,9 @@ struct SelectedPdfFile {
 }
 
 #[tauri::command]
-fn select_pdf_file() -> Result<Option<SelectedPdfFile>, String> {
+fn select_pdf_file(
+    sources: tauri::State<'_, PdfImportSources>,
+) -> Result<Option<SelectedPdfFile>, String> {
     let Some(path) = rfd::FileDialog::new()
         .add_filter("PDF", &["pdf"])
         .pick_file()
@@ -25,16 +27,19 @@ fn select_pdf_file() -> Result<Option<SelectedPdfFile>, String> {
         return Ok(None);
     };
 
-    let file_name = path
+    let canonical_path = canonicalize_pdf_source(&path)?;
+    let file_name = canonical_path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("documento.pdf")
         .to_string();
-    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+    let bytes = std::fs::read(&canonical_path).map_err(|error| error.to_string())?;
+    sources.authorize(vec![canonical_path.clone()])?;
+    let _ = sources.take(&canonical_path, PdfSourceUse::Read)?;
 
     Ok(Some(SelectedPdfFile {
         file_name,
-        file_path: path.to_string_lossy().to_string(),
+        file_path: canonical_path.to_string_lossy().to_string(),
         data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
     }))
 }
@@ -43,17 +48,224 @@ fn select_pdf_file() -> Result<Option<SelectedPdfFile>, String> {
 // (diferente de select_pdf_file) — para um lote grande, embutir base64 de cada
 // arquivo seria pesado. Quando os bytes forem necessarios (extrair metadados ou
 // pre-visualizar), o frontend le sob demanda via read_pdf_file(caminho).
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct PickedPdfFile {
     file_name: String,
     file_path: String,
+}
+
+#[derive(Clone, Copy, Default)]
+struct PdfSourcePermissions {
+    can_read: bool,
+    can_import: bool,
+}
+
+// Origens de PDF autorizadas pelo seletor nativo ou por um drop observado
+// diretamente pelo runtime. O WebView recebe o caminho, mas nao e autoridade
+// para inclui-lo neste conjunto.
+#[derive(Default)]
+struct PdfImportSources(std::sync::Mutex<HashMap<PathBuf, PdfSourcePermissions>>);
+
+const MAX_AUTHORIZED_PDF_SOURCES: usize = 512;
+const PDF_IMPORT_DROPPED_EVENT: &str = "pdf-import:dropped";
+
+#[derive(Clone, Copy)]
+enum PdfSourceUse {
+    Read,
+    Import,
+}
+
+impl PdfImportSources {
+    fn authorize(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, String> {
+        if paths.len() > MAX_AUTHORIZED_PDF_SOURCES {
+            return Err(format!(
+                "Selecione no maximo {MAX_AUTHORIZED_PDF_SOURCES} PDFs por vez."
+            ));
+        }
+
+        let mut canonical_paths = Vec::with_capacity(paths.len());
+        for path in paths {
+            let canonical_path = canonicalize_pdf_source(&path)?;
+            if !canonical_paths.contains(&canonical_path) {
+                canonical_paths.push(canonical_path);
+            }
+        }
+
+        let mut authorized = self
+            .0
+            .lock()
+            .map_err(|_| "Estado de importacao de PDF indisponivel.".to_string())?;
+        let new_path_count = canonical_paths
+            .iter()
+            .filter(|path| !authorized.contains_key(*path))
+            .count();
+        if authorized.len() + new_path_count > MAX_AUTHORIZED_PDF_SOURCES {
+            authorized.clear();
+        }
+
+        for path in &canonical_paths {
+            authorized.insert(
+                path.clone(),
+                PdfSourcePermissions {
+                    can_read: true,
+                    can_import: true,
+                },
+            );
+        }
+
+        Ok(canonical_paths)
+    }
+
+    fn take(&self, path: &Path, source_use: PdfSourceUse) -> Result<bool, String> {
+        let mut authorized = self
+            .0
+            .lock()
+            .map_err(|_| "Estado de importacao de PDF indisponivel.".to_string())?;
+        let Some(permissions) = authorized.get_mut(path) else {
+            return Ok(false);
+        };
+
+        let permission = match source_use {
+            PdfSourceUse::Read => &mut permissions.can_read,
+            PdfSourceUse::Import => &mut permissions.can_import,
+        };
+        if !*permission {
+            return Ok(false);
+        }
+        *permission = false;
+
+        if !permissions.can_read && !permissions.can_import {
+            authorized.remove(path);
+        }
+
+        Ok(true)
+    }
+
+    fn restore(&self, path: PathBuf, source_use: PdfSourceUse) {
+        if let Ok(mut authorized) = self.0.lock() {
+            let permissions = authorized.entry(path).or_default();
+            match source_use {
+                PdfSourceUse::Read => permissions.can_read = true,
+                PdfSourceUse::Import => permissions.can_import = true,
+            }
+        }
+    }
+
+    fn consume(&self, path: &Path) {
+        if let Ok(mut authorized) = self.0.lock() {
+            authorized.remove(path);
+        }
+    }
+}
+
+fn canonicalize_pdf_source(path: &Path) -> Result<PathBuf, String> {
+    let canonical_path = std::fs::canonicalize(path)
+        .map_err(|_| "O PDF escolhido nao esta mais disponivel.".to_string())?;
+    let is_pdf = canonical_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
+
+    if !canonical_path.is_file() || !is_pdf {
+        return Err("A origem escolhida nao e um arquivo PDF.".to_string());
+    }
+
+    Ok(canonical_path)
+}
+
+fn managed_pdf_source(managed_pdf_dir: &Path, source: &Path) -> bool {
+    let Ok(canonical_managed_dir) = std::fs::canonicalize(managed_pdf_dir) else {
+        return false;
+    };
+
+    source.parent() == Some(canonical_managed_dir.as_path())
+}
+
+fn reserve_pdf_source(
+    managed_pdf_dir: &Path,
+    sources: &PdfImportSources,
+    source: &Path,
+    source_use: PdfSourceUse,
+) -> Result<(PathBuf, bool), String> {
+    // A mesma mensagem cobre inexistencia e falta de autorizacao para nao
+    // transformar o comando num oraculo de existencia de arquivos do usuario.
+    let canonical_source = canonicalize_pdf_source(source)
+        .map_err(|_| "PDF nao autorizado pelo usuario.".to_string())?;
+    if managed_pdf_source(managed_pdf_dir, &canonical_source) {
+        return Ok((canonical_source, false));
+    }
+
+    if !sources.take(&canonical_source, source_use)? {
+        return Err("PDF nao autorizado pelo usuario.".to_string());
+    }
+
+    Ok((canonical_source, true))
+}
+
+struct PdfSourceReservation<'a> {
+    sources: &'a PdfImportSources,
+    path: PathBuf,
+    source_use: PdfSourceUse,
+    restore_on_drop: bool,
+}
+
+impl<'a> PdfSourceReservation<'a> {
+    fn new(
+        managed_pdf_dir: &Path,
+        sources: &'a PdfImportSources,
+        source: &Path,
+        source_use: PdfSourceUse,
+    ) -> Result<Self, String> {
+        let (path, restore_on_drop) =
+            reserve_pdf_source(managed_pdf_dir, sources, source, source_use)?;
+        Ok(Self {
+            sources,
+            path,
+            source_use,
+            restore_on_drop,
+        })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn commit(mut self) {
+        if self.restore_on_drop {
+            self.sources.consume(&self.path);
+            self.restore_on_drop = false;
+        }
+    }
+}
+
+impl Drop for PdfSourceReservation<'_> {
+    fn drop(&mut self) {
+        if self.restore_on_drop {
+            self.sources.restore(self.path.clone(), self.source_use);
+        }
+    }
+}
+
+fn picked_pdf_file(path: PathBuf) -> PickedPdfFile {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("documento.pdf")
+        .to_string();
+
+    PickedPdfFile {
+        file_name,
+        file_path: path.to_string_lossy().to_string(),
+    }
 }
 
 // Selecao MULTIPLA nativa (um unico dialogo, varios PDFs). Devolve lista vazia
 // se o usuario cancelar. Nao substitui select_pdf_file — este e o caminho de
 // lote do novo modal de adicionar documentos.
 #[tauri::command]
-fn select_pdf_files() -> Result<Vec<PickedPdfFile>, String> {
+fn select_pdf_files(
+    sources: tauri::State<'_, PdfImportSources>,
+) -> Result<Vec<PickedPdfFile>, String> {
     let Some(paths) = rfd::FileDialog::new()
         .add_filter("PDF", &["pdf"])
         .pick_files()
@@ -61,20 +273,10 @@ fn select_pdf_files() -> Result<Vec<PickedPdfFile>, String> {
         return Ok(Vec::new());
     };
 
-    Ok(paths
+    Ok(sources
+        .authorize(paths)?
         .into_iter()
-        .map(|path| {
-            let file_name = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("documento.pdf")
-                .to_string();
-
-            PickedPdfFile {
-                file_name,
-                file_path: path.to_string_lossy().to_string(),
-            }
-        })
+        .map(picked_pdf_file)
         .collect())
 }
 
@@ -332,16 +534,34 @@ fn select_notebook_export_destination(
 }
 
 #[tauri::command]
-fn read_pdf_file(file_path: String) -> Result<String, String> {
-    let path = PathBuf::from(&file_path);
+fn read_pdf_file<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    sources: tauri::State<'_, PdfImportSources>,
+    file_path: String,
+) -> Result<String, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Nao foi possivel achar o diretorio de dados: {error}"))?;
+    read_pdf_file_from_path(&data_dir.join("pdfs"), &sources, Path::new(&file_path))
+}
 
-    if !path.exists() {
-        return Err("Arquivo nao encontrado.".to_string());
+fn read_pdf_file_from_path(
+    managed_pdf_dir: &Path,
+    sources: &PdfImportSources,
+    source: &Path,
+) -> Result<String, String> {
+    let (canonical_source, authorization_reserved) =
+        reserve_pdf_source(managed_pdf_dir, sources, source, PdfSourceUse::Read)?;
+    match std::fs::read(&canonical_source) {
+        Ok(bytes) => Ok(base64::engine::general_purpose::STANDARD.encode(bytes)),
+        Err(error) => {
+            if authorization_reserved {
+                sources.restore(canonical_source, PdfSourceUse::Read);
+            }
+            Err(format!("Nao foi possivel ler o PDF: {error}"))
+        }
     }
-
-    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
-
-    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 // ===========================================================================
@@ -588,8 +808,10 @@ async fn open_document_externally<R: tauri::Runtime>(
 async fn import_document<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     db_instances: tauri::State<'_, DbInstances>,
+    sources: tauri::State<'_, PdfImportSources>,
     request: ImportDocumentRequest,
 ) -> Result<String, String> {
+    validate_document_id(&request.id)?;
     // -------------------------------------------------------------------------
     // ETAPA 1 — Copiar o PDF para o storage do app (operacao de filesystem, FORA
     // da transacao do banco).
@@ -606,19 +828,20 @@ async fn import_document<R: tauri::Runtime>(
     let pdf_dir = data_dir.join("pdfs");
     std::fs::create_dir_all(&pdf_dir)
         .map_err(|error| format!("Nao foi possivel criar a pasta de PDFs: {error}"))?;
+    let source_reservation = PdfSourceReservation::new(
+        &pdf_dir,
+        &sources,
+        Path::new(&request.source_path),
+        PdfSourceUse::Import,
+    )?;
 
     // No storage, o arquivo se chama <id>.pdf (o id ja e unico). O nome original
     // de exibicao vai separado, na coluna file_name.
     let dest_path = pdf_dir.join(format!("{}.pdf", request.id));
     let dest_path_str = dest_path.to_string_lossy().into_owned();
 
-    let source_path = Path::new(&request.source_path);
-    if !source_path.exists() {
-        return Err("Arquivo de origem nao encontrado.".to_string());
-    }
-
     // Se a copia do arquivo falhar, nem tentamos abrir a transacao.
-    std::fs::copy(source_path, &dest_path)
+    std::fs::copy(source_reservation.path(), &dest_path)
         .map_err(|error| format!("Nao foi possivel copiar o PDF: {error}"))?;
 
     // -------------------------------------------------------------------------
@@ -729,6 +952,7 @@ async fn import_document<R: tauri::Runtime>(
 
     // Sucesso: devolve o caminho final (storage do app) para o frontend apontar o
     // documento para a copia estavel.
+    source_reservation.commit();
     Ok(dest_path_str)
 }
 
@@ -4006,6 +4230,8 @@ END;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // PDFs autorizados pelo seletor ou pelo evento nativo de arraste.
+        .manage(PdfImportSources::default())
         // Destinos de exportacao autorizados pelo dialogo nativo nesta sessao.
         .manage(NotebookExportDestinations::default())
         // Imagens autorizadas pelo dialogo nativo para virar wallpaper.
@@ -4025,6 +4251,39 @@ pub fn run() {
                 )?;
             }
             Ok(())
+        })
+        .on_webview_event(|webview, event| {
+            if webview.label() != "main" {
+                return;
+            }
+
+            let tauri::WebviewEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
+            else {
+                return;
+            };
+            let pdf_paths = paths
+                .iter()
+                .filter(|path| {
+                    path.extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if pdf_paths.is_empty() {
+                return;
+            }
+
+            let sources = webview.state::<PdfImportSources>();
+            match sources.authorize(pdf_paths) {
+                Ok(paths) => {
+                    let files = paths.into_iter().map(picked_pdf_file).collect::<Vec<_>>();
+                    if let Err(error) = webview.emit(PDF_IMPORT_DROPPED_EVENT, files) {
+                        eprintln!("Nao foi possivel entregar os PDFs arrastados: {error}");
+                    }
+                }
+                Err(error) => eprintln!("PDF arrastado recusado: {error}"),
+            }
         })
         .invoke_handler(tauri::generate_handler![
             close_notebook_window,
@@ -4079,6 +4338,87 @@ mod tests {
         .is_ok());
         assert!(validate_document_storage_id("../documento").is_err());
         assert!(validate_document_storage_id(&"a".repeat(256)).is_err());
+    }
+
+    fn pdf_authorization_test_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "athenaeum-pdf-authorization-{}-{name}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("criar diretorio de teste");
+        dir
+    }
+
+    #[test]
+    fn refuses_an_unauthorized_external_pdf_read() {
+        let dir = pdf_authorization_test_dir("unauthorized-read");
+        let managed_dir = dir.join("pdfs");
+        std::fs::create_dir_all(&managed_dir).unwrap();
+        let source = dir.join("externo.pdf");
+        std::fs::write(&source, b"%PDF-1.4 externo").unwrap();
+
+        let error = read_pdf_file_from_path(&managed_dir, &PdfImportSources::default(), &source)
+            .expect_err("caminho externo sem origem confiavel deve ser recusado");
+
+        assert!(error.contains("nao autorizado"), "mensagem: {error}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reads_an_authorized_pdf_once_and_keeps_its_import_slot() {
+        let dir = pdf_authorization_test_dir("authorized-read");
+        let managed_dir = dir.join("pdfs");
+        std::fs::create_dir_all(&managed_dir).unwrap();
+        let source = dir.join("externo.pdf");
+        let bytes = b"%PDF-1.4 autorizado";
+        std::fs::write(&source, bytes).unwrap();
+        let sources = PdfImportSources::default();
+        let canonical_source = sources
+            .authorize(vec![source.clone()])
+            .expect("autorizar selecao")
+            .remove(0);
+
+        let encoded = read_pdf_file_from_path(&managed_dir, &sources, &source)
+            .expect("primeira leitura autorizada");
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .unwrap(),
+            bytes
+        );
+        assert!(read_pdf_file_from_path(&managed_dir, &sources, &source).is_err());
+
+        let import_reservation = PdfSourceReservation::new(
+            &managed_dir,
+            &sources,
+            &source,
+            PdfSourceUse::Import,
+        )
+        .expect("slot de importacao continua autorizado");
+        import_reservation.commit();
+        assert!(PdfSourceReservation::new(
+            &managed_dir,
+            &sources,
+            &canonical_source,
+            PdfSourceUse::Import,
+        )
+        .is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn managed_pdfs_are_always_readable_without_session_authorization() {
+        let dir = pdf_authorization_test_dir("managed-read");
+        let managed_dir = dir.join("pdfs");
+        std::fs::create_dir_all(&managed_dir).unwrap();
+        let source = managed_dir.join("documento.pdf");
+        std::fs::write(&source, b"%PDF-1.4 gerenciado").unwrap();
+        let sources = PdfImportSources::default();
+
+        assert!(read_pdf_file_from_path(&managed_dir, &sources, &source).is_ok());
+        assert!(read_pdf_file_from_path(&managed_dir, &sources, &source).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

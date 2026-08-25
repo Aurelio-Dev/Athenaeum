@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import type { DragEvent, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { ChevronRightIcon } from "../../components/ui/SharedIcons";
 import { TagInput } from "../../components/ui/TagInput";
 import { extractPdfMetadata } from "../../lib/pdfMetadata";
@@ -10,6 +11,7 @@ import type { LibraryCollection, LibraryDocument, SubjectTag } from "../../types
 // cria a colecao por INSERT OR IGNORE, entao "Sem titulo" nasce se ainda nao
 // existir — mesmo nome da colecao padrao semeada no banco.
 const DEFAULT_COLLECTION_NAME = "Sem título";
+const PDF_IMPORT_DROPPED_EVENT = "pdf-import:dropped";
 
 type PickedPdfFile = {
   file_name: string;
@@ -139,10 +141,6 @@ function isPdfFileName(fileName: string) {
   return fileName.toLocaleLowerCase("pt-BR").endsWith(".pdf");
 }
 
-function getDroppedPath(file: File) {
-  return (file as File & { path?: string }).path;
-}
-
 function authorsKey(authors: string[]) {
   return authors
     .map((author) => author.trim().toLocaleLowerCase("pt-BR"))
@@ -236,7 +234,7 @@ export function AddDocumentModal({
     setItems((current) => current.map((item) => (item.key === key ? { ...item, ...updates } : item)));
   }
 
-  function addFiles(picked: PickedPdfFile[]) {
+  const addFiles = useCallback((picked: PickedPdfFile[]) => {
     setItems((current) => {
       const existingPaths = new Set(current.map((item) => item.filePath));
       const additions = picked
@@ -245,7 +243,30 @@ export function AddDocumentModal({
 
       return additions.length === 0 ? current : [...current, ...additions];
     });
-  }
+  }, [defaultCollectionName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void listen<PickedPdfFile[]>(PDF_IMPORT_DROPPED_EVENT, (event) => {
+      if (!cancelled) {
+        setIsDragging(false);
+        addFiles(event.payload);
+      }
+    }).then((stopListening) => {
+      if (cancelled) {
+        stopListening();
+      } else {
+        unlisten = stopListening;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [addFiles]);
 
   async function openPicker() {
     try {
@@ -253,19 +274,6 @@ export function AddDocumentModal({
       addFiles(picked);
     } catch (error) {
       console.error("Nao foi possivel abrir o seletor de arquivos.", error);
-    }
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setIsDragging(false);
-
-    const dropped = Array.from(event.dataTransfer.files)
-      .map((file) => ({ file_name: file.name, file_path: getDroppedPath(file) }))
-      .filter((file): file is PickedPdfFile => Boolean(file.file_path));
-
-    if (dropped.length > 0) {
-      addFiles(dropped);
     }
   }
 
@@ -567,7 +575,6 @@ export function AddDocumentModal({
                 isDragging ? "border-primary bg-primary-soft" : "border-border-strong hover:border-primary"
               }`}
               onClick={() => void openPicker()}
-              onDrop={handleDrop}
               onDragOver={(event) => {
                 event.preventDefault();
                 setIsDragging(true);
