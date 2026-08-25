@@ -163,6 +163,16 @@ describe("Liquid Glass da Library: cobertura semantica", () => {
     expect(ler(arquivo)).toContain(marcador);
   });
 
+  it("os tres tipos de card acumulam os marcadores do mesmo papel semantico", () => {
+    for (const arquivo of [
+      "src/features/library/DocumentCard.tsx",
+      "src/features/notebooks/NotebookCard.tsx",
+      "src/features/canvases/CanvasCard.tsx",
+    ]) {
+      expect(ler(arquivo)).toContain("material-liquid-card material-surface-card");
+    }
+  });
+
   it("menus contextuais nao mantem pintura inline que venceria o material", () => {
     const contextMenu = ler("src/components/ui/ContextMenu.tsx");
     expect(contextMenu).not.toContain('background: "var(--color-surface-card)"');
