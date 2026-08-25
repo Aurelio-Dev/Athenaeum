@@ -97,7 +97,7 @@ export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente"
         </button>
 
         {isOpen ? (
-          <div className="material-surface-overlay absolute top-full left-0 z-10 mt-1 min-w-full rounded-lg border border-border-muted bg-surface-panel p-1 shadow-lg">
+          <div className="material-liquid-overlay material-surface-overlay absolute top-full left-0 z-10 mt-1 min-w-full rounded-lg border border-border-muted bg-surface-panel p-1 shadow-lg">
             {sortModes.map((mode) => (
               <button
                 key={mode}

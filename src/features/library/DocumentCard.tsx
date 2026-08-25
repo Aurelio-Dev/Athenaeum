@@ -322,7 +322,7 @@ function DocumentGridCard({ activeRoute, collections, document, isSelected, mode
   return (
     <>
       <article
-        className={`material-surface-card group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:-translate-y-1 ${
+        className={`material-liquid-card material-surface-card group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:-translate-y-1 ${
           isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
         }`}
         role="button"

@@ -60,9 +60,9 @@ describe("wallpaper: isolamento do material", () => {
     expect(raizAtiva).toContain("background: transparent;");
     expect(appShell).toContain("wallpaper-backdrop-root");
 
-    const seletoresComBlur = [...css.matchAll(/([^{}]+)\{[^{}]*backdrop-filter:[^{}]*\}/g)].map(
-      (match: RegExpMatchArray) => match[1],
-    );
+    const seletoresComBlur = [...css.matchAll(/([^{}]+)\{([^{}]*backdrop-filter:[^{}]*)\}/g)]
+      .filter((match: RegExpMatchArray) => match[2].includes("blur("))
+      .map((match: RegExpMatchArray) => match[1]);
     expect(seletoresComBlur.length).toBeGreaterThan(0);
     expect(
       seletoresComBlur.every((seletor: string) =>
@@ -78,10 +78,12 @@ describe("wallpaper: isolamento do material", () => {
   it("--glass-immersive-* permanece opaco e fora do wallpaper", () => {
     for (const seletor of ['[data-material="glass"]', '.dark[data-material="glass"]']) {
       const bloco = regra(seletor);
+      const surface = bloco.match(/--glass-immersive-surface:\s*([^;]+);/)?.[1] ?? "";
       const immersive = bloco
         .split(";")
         .filter((declaracao) => declaracao.includes("--glass-immersive-"))
         .join(";");
+      expect(surface).not.toMatch(/#[0-9A-Fa-f]{8}\b|(?:rgb|hsl)a?\([^)]*\/|\b(?:rgba|hsla)\(/);
       expect(immersive).not.toContain("--glass-wallpaper-scrim-alpha");
       expect(immersive).not.toMatch(/rgb\([^)]*\/\s*var\(/);
     }
@@ -147,5 +149,13 @@ describe("flat: os PNGs de producao permanecem byte-identicos", () => {
   it.each(PNGS)("%s conserva o SHA-256 capturado antes da leva", (path, expected) => {
     const bytes = readFileSync(path);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(expected);
+  });
+
+  it("uma mutacao controlada de um byte e detectada pelo fingerprint", () => {
+    const [path, expected] = PNGS[0];
+    const bytesMutados = Uint8Array.from(readFileSync(path));
+    bytesMutados[bytesMutados.length - 1] ^= 0x01;
+
+    expect(createHash("sha256").update(bytesMutados).digest("hex")).not.toBe(expected);
   });
 });

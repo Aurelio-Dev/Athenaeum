@@ -1,8 +1,8 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
-> **Changelog 20/08/2026 — Liquid Glass óptico e cobertura ampliada da
-> Library. Flat e glass sem wallpaper permanecem idênticos ao baseline
-> `c01c1e9`.**
+> **Changelog 25/08/2026 — Gramática óptica do Liquid Glass refinada na
+> Library. Flat e glass sem wallpaper permanecem idênticos aos baselines
+> `c01c1e9` e `869952d`.**
 >
 > A referência visual foi traduzida em quatro sinais que o WebView2 consegue
 > compor de forma previsível: tinta translúcida, blur com saturação, aresta
@@ -11,6 +11,22 @@
 > cor que pinte o vidro de azul. Refração óptica real não foi simulada porque
 > exigiria shader ou cópias deslocadas do backdrop, com custo e artefatos
 > desproporcionais para a Library.
+>
+> A referência é um card único sobre uma foto desfocada de campo simples — o
+> cenário mais favorável possível para vidro. A Library distribui sidebar,
+> grade, painel Detalhes e menus sobre o mesmo fundo; por isso o efeito final é
+> deliberadamente mais discreto. Essa diferença pertence ao layout, não à
+> implementação: não se aumenta blur nem se reduz o scrim para perseguir o
+> mock.
+>
+> A gramática óptica separa tinta (`--glass-optical-tint*`), reflexo da aresta
+> no topo/esquerda (`--glass-optical-edge-specular*`), sombra da aresta no
+> fundo/direita (`--glass-optical-edge-shadow`), glow interno
+> (`--glass-optical-inner-glow*`), sombra externa
+> (`--glass-optical-outer-shadow*`), blur (`--glass-optical-blur`) e saturação
+> (`--glass-optical-saturation`). Os nomes descrevem o papel óptico; cards,
+> overlays e faixas apenas compõem esses papéis em intensidades adequadas à
+> elevação.
 >
 > As arestas usam dois backgrounds (`padding-box` para a tinta e `border-box`
 > para o gradiente especular). Assim os cantos arredondados recebem luz no
@@ -26,12 +42,39 @@
 > preview de PDF, capas, conteúdo de Caderno/Quadro/Reader e os frames
 > imersivos continuam opacos e fora desta leva.
 >
-> O filtro é `blur(16px) saturate(1.18) brightness(1.02)` no claro e
-> `blur(16px) saturate(1.16) brightness(0.98)` no escuro. Ele só casa com
+> O filtro é `blur(16px) saturate(1.18)` no claro e
+> `blur(16px) saturate(1.16)` no escuro. Blur e saturação são tokens
+> independentes; não há ajuste de brilho fundido ao filtro. Ele só casa com
 > `data-wallpaper-translucent="true"`: no slider 0 o scrim está em alpha 1 e
 > o filtro é removido, evitando composição sem pixel visível. O piso do scrim
 > permanece 0,60 e a dívida de contraste registrada abaixo não foi ampliada
 > por uma nova curva.
+>
+> ### Medição de composição no perfil `.dev`
+>
+> Percurso contínuo de 8 segundos (topo → fundo → topo, 815 px), com janelas
+> móveis de 1 segundo, em uma coleção com 12 documentos, 4 cadernos e 4
+> quadros. O mesmo percurso foi executado com slider 0 e slider 50:
+>
+> | Execução | Slider 0 — sem filtro | Slider 50 — filtro ativo |
+> | --- | --- | --- |
+> | primeira passagem | mínimo sustentado **48 FPS**; **3** frames >20 ms; máximo 183,4 ms | mínimo sustentado **56 FPS**; **2** frames >20 ms; máximo 83,0 ms |
+> | passagem aquecida | mínimo sustentado **56 FPS**; **2** frames >20 ms; máximo 66,4 ms | mínimo sustentado **59 FPS**; **1** frame >20 ms; máximo 33,3 ms |
+>
+> O caminho com filtro permaneceu acima do piso de 55 FPS nas duas passagens
+> e não aumentou a contagem de frames longos. Portanto, nesta medição, não há
+> evidência para acionar a alternativa de blur compartilhado da grade nem o
+> pré-blur estático da imagem.
+>
+> A validação visual percorreu claro/escuro × flat/glass × wallpaper
+> claro/escuro. Hover foi produzido por `Input.dispatchMouseEvent`, foco por
+> Tab e seleção por Enter. Cards de Documento, Caderno e Quadro, faixa docada,
+> busca/segmentado, `ContextMenu`, menu de ordenação, menu da Sidebar e tags
+> foram verificados em repouso, hover, foco e estado ativo/selecionado quando o
+> componente oferece esse estado. O ring selecionado permaneceu visível também
+> durante hover; preview e textarea ficaram opacos; menus aninhados ficaram sem
+> segundo filtro. Em flat, as capturas com wallpaper claro e escuro foram
+> byte-idênticas dentro de cada tema.
 >
 > Marcadores `material-liquid-*` não possuem regra fora da conjunção
 > `[data-material="glass"][data-wallpaper="active"]`. Eles existem para
