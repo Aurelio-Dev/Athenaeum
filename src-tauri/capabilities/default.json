@@ -10,25 +10,6 @@
     "core:window:allow-set-fullscreen",
     "sql:allow-load",
     "sql:allow-execute",
-    "sql:allow-select",
-    "sql:allow-close",
-    "fs:allow-remove",
-    {
-      "identifier": "fs:scope",
-      "allow": [
-        {
-          "path": "$DOCUMENT/**"
-        },
-        {
-          "path": "$DOWNLOAD/**"
-        },
-        {
-          "path": "$APPDATA/**"
-        },
-        {
-          "path": "$HOME/**"
-        }
-      ]
-    }
+    "sql:allow-select"
   ]
 }

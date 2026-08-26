@@ -4326,7 +4326,6 @@ pub fn run() {
         .manage(NotebookExportDestinations::default())
         // Imagens autorizadas pelo dialogo nativo para virar wallpaper.
         .manage(WallpaperImportSources::default())
-        .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:athenaeum.db", database_migrations())
