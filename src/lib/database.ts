@@ -250,10 +250,6 @@ type CountRow = {
   count: number;
 };
 
-type FilePathRow = {
-  filePath: string | null;
-};
-
 type CollectionLookupRow = {
   id: string;
   name: string;
@@ -2117,28 +2113,25 @@ export async function restoreDocument(documentId: string) {
   await database.execute("UPDATE documents SET deleted_at = NULL WHERE id = $1", [documentId]);
 }
 
-export async function getDocumentFilePaths(documentIds: string[]) {
-  if (documentIds.length === 0) {
-    return [];
-  }
-
+export async function getTrashDocumentIds() {
   const database = await getDatabase();
-  const placeholders = documentIds.map((_, index) => `$${index + 1}`).join(", ");
-  const rows = await database.select<FilePathRow[]>(`SELECT file_path AS filePath FROM documents WHERE id IN (${placeholders})`, documentIds);
+  const rows = await database.select<Array<{ id: string }>>("SELECT id FROM documents WHERE deleted_at IS NOT NULL ORDER BY id");
 
-  return rows.map((row) => row.filePath).filter((filePath): filePath is string => Boolean(filePath));
+  return rows.map((row) => row.id);
 }
 
-export async function getTrashFilePaths() {
-  const database = await getDatabase();
-  const rows = await database.select<FilePathRow[]>("SELECT file_path AS filePath FROM documents WHERE deleted_at IS NOT NULL");
+export type DocumentFileDeletionOutcome =
+  | "managed-file-deleted"
+  | "managed-file-missing"
+  | "no-file"
+  | "unmanaged-file-preserved";
 
-  return rows.map((row) => row.filePath).filter((filePath): filePath is string => Boolean(filePath));
-}
+export type DeleteDocumentPermanentlyResult = {
+  outcome: DocumentFileDeletionOutcome;
+};
 
-export async function permanentlyDeleteDocument(documentId: string) {
-  const database = await getDatabase();
-  await database.execute("DELETE FROM documents WHERE id = $1", [documentId]);
+export async function permanentlyDeleteDocument(documentId: string): Promise<DeleteDocumentPermanentlyResult> {
+  return invoke<DeleteDocumentPermanentlyResult>("delete_document_permanently", { documentId });
 }
 
 export async function emptyTrash() {

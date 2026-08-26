@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { MouseEvent as ReactMouseEvent, SVGProps } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { remove } from "@tauri-apps/plugin-fs";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
 import { SettingsPanel, settingsPanelHeight, settingsPanelWidth } from "../settings/SettingsPanel";
@@ -20,8 +19,7 @@ import {
   deleteCollection as deletePersistedCollection,
   dismissDocumentFromReadingList,
   emptyTrash,
-  getDocumentFilePaths,
-  getTrashFilePaths,
+  getTrashDocumentIds,
   isReaderInvalidationPayload,
   listAvailableTags,
   listCanvases,
@@ -239,6 +237,7 @@ export function LibraryView() {
   const [isEditCollectionModalOpen, setIsEditCollectionModalOpen] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+  const [fileDeletionNotice, setFileDeletionNotice] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget>(null);
   const libraryAreaContextMenu = useContextMenu();
   const hasAutoSelectedFirstDocumentRef = useRef(false);
@@ -640,33 +639,41 @@ export function LibraryView() {
     await invalidateLibraryQueries();
   }
 
-  async function removeFiles(filePaths: string[]) {
-    for (const filePath of filePaths) {
-      try {
-        await remove(filePath);
-      } catch (error) {
-        console.warn("Nao foi possivel remover o arquivo do disco.", filePath, error);
-      }
-    }
-  }
-
   async function confirmPendingAction() {
     if (!pendingConfirmation) {
       return;
     }
 
+    setFileDeletionNotice(null);
+
     if (pendingConfirmation.type === "permanent-delete") {
-      const filePaths = await getDocumentFilePaths([pendingConfirmation.document.id]);
-      await removeFiles(filePaths);
-      await permanentlyDeleteDocument(pendingConfirmation.document.id);
+      const result = await permanentlyDeleteDocument(pendingConfirmation.document.id);
+      if (result.outcome === "unmanaged-file-preserved") {
+        setFileDeletionNotice(
+          `O registro de "${pendingConfirmation.document.title}" foi excluído, mas o arquivo original permaneceu no local escolhido.`,
+        );
+      }
       setPendingConfirmation(null);
       await invalidateLibraryQueries();
       return;
     }
 
-    const filePaths = await getTrashFilePaths();
-    await removeFiles(filePaths);
+    const documentIds = await getTrashDocumentIds();
+    let preservedFileCount = 0;
+    for (const documentId of documentIds) {
+      const result = await permanentlyDeleteDocument(documentId);
+      if (result.outcome === "unmanaged-file-preserved") {
+        preservedFileCount += 1;
+      }
+    }
     await emptyTrash();
+    if (preservedFileCount > 0) {
+      setFileDeletionNotice(
+        preservedFileCount === 1
+          ? "Um registro foi excluído, mas o arquivo original permaneceu no local escolhido."
+          : `${preservedFileCount} registros foram excluídos, mas os arquivos originais permaneceram nos locais escolhidos.`,
+      );
+    }
     setPendingConfirmation(null);
     await invalidateLibraryQueries();
   }
@@ -1021,13 +1028,29 @@ export function LibraryView() {
           <SettingsPanel key={floatingPanel.id} panel={floatingPanel} onClose={() => closeFloatingPanel(floatingPanel.id)} />
         ))}
 
+      {fileDeletionNotice ? (
+        <div
+          role="status"
+          className="material-surface-elevated fixed bottom-6 left-1/2 z-[70] flex max-w-xl -translate-x-1/2 items-start gap-3 rounded-xl border border-border bg-surface-elevated px-4 py-3 text-sm text-text-primary shadow-lg"
+        >
+          <p className="flex-1">{fileDeletionNotice}</p>
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 font-bold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"
+            onClick={() => setFileDeletionNotice(null)}
+          >
+            Fechar
+          </button>
+        </div>
+      ) : null}
+
       {pendingConfirmation ? (
         <ConfirmationDialog
           title={pendingConfirmation.type === "empty-trash" ? "Esvaziar lixeira?" : "Excluir permanentemente?"}
           description={
             pendingConfirmation.type === "empty-trash"
-              ? "Todos os itens na lixeira serao excluidos do banco e os arquivos locais correspondentes serao removidos do disco."
-              : `Esta acao exclui "${pendingConfirmation.document.title}" do banco e remove o arquivo local correspondente.`
+              ? "Todos os itens serão excluídos do banco. Cópias gerenciadas serão removidas; arquivos originais legados permanecerão no disco."
+              : `Esta ação exclui "${pendingConfirmation.document.title}" do banco. A cópia gerenciada será removida; um arquivo original legado será preservado.`
           }
           confirmLabel={pendingConfirmation.type === "empty-trash" ? "Esvaziar lixeira" : "Excluir permanentemente"}
           tone="danger"

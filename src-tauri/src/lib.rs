@@ -956,6 +956,96 @@ async fn import_document<R: tauri::Runtime>(
     Ok(dest_path_str)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum DocumentFileDeletionOutcome {
+    ManagedFileDeleted,
+    ManagedFileMissing,
+    NoFile,
+    UnmanagedFilePreserved,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteDocumentPermanentlyResult {
+    outcome: DocumentFileDeletionOutcome,
+}
+
+fn remove_managed_document_pdf(
+    data_dir: &Path,
+    document_id: &str,
+    stored_file_path: Option<&str>,
+) -> Result<DocumentFileDeletionOutcome, String> {
+    let Some(stored_file_path) = stored_file_path.filter(|path| !path.trim().is_empty()) else {
+        return Ok(DocumentFileDeletionOutcome::NoFile);
+    };
+    let managed_pdf_dir = data_dir.join("pdfs");
+    let expected_path = managed_pdf_dir.join(format!("{document_id}.pdf"));
+    let stored_path = PathBuf::from(stored_file_path);
+
+    // Linhas anteriores a 56330d7 apontam para o arquivo original do usuario.
+    // Qualquer divergencia tambem pode ser adulteracao do banco: em ambos os
+    // casos, preservar e mais seguro que tentar adivinhar propriedade.
+    if stored_path != expected_path {
+        return Ok(DocumentFileDeletionOutcome::UnmanagedFilePreserved);
+    }
+    if !stored_path.exists() {
+        return Ok(DocumentFileDeletionOutcome::ManagedFileMissing);
+    }
+
+    let canonical_managed_dir = std::fs::canonicalize(&managed_pdf_dir)
+        .map_err(|error| format!("Nao foi possivel validar a pasta gerenciada de PDFs: {error}"))?;
+    let canonical_stored_path = std::fs::canonicalize(&stored_path)
+        .map_err(|error| format!("Nao foi possivel validar o PDF gerenciado: {error}"))?;
+    if canonical_stored_path.parent() != Some(canonical_managed_dir.as_path())
+        || canonical_stored_path.file_name() != expected_path.file_name()
+        || !canonical_stored_path.is_file()
+    {
+        return Ok(DocumentFileDeletionOutcome::UnmanagedFilePreserved);
+    }
+
+    std::fs::remove_file(&canonical_stored_path)
+        .map_err(|error| format!("Nao foi possivel remover o PDF gerenciado: {error}"))?;
+    Ok(DocumentFileDeletionOutcome::ManagedFileDeleted)
+}
+
+#[tauri::command]
+async fn delete_document_permanently<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    db_instances: tauri::State<'_, DbInstances>,
+    document_id: String,
+) -> Result<DeleteDocumentPermanentlyResult, String> {
+    validate_document_id(&document_id)?;
+    let instances = db_instances.0.read().await;
+    let pool = match instances.get(DATABASE_KEY) {
+        Some(DbPool::Sqlite(pool)) => pool,
+        _ => return Err("Banco de dados nao carregado.".to_string()),
+    };
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT file_path FROM documents WHERE id = ?")
+            .bind(&document_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|error| format!("Nao foi possivel consultar o documento: {error}"))?;
+    let Some((stored_file_path,)) = row else {
+        return Err("Documento nao encontrado.".to_string());
+    };
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Nao foi possivel achar o diretorio de dados: {error}"))?;
+    let outcome =
+        remove_managed_document_pdf(&data_dir, &document_id, stored_file_path.as_deref())?;
+
+    sqlx::query("DELETE FROM documents WHERE id = ?")
+        .bind(&document_id)
+        .execute(pool)
+        .await
+        .map_err(|error| format!("Nao foi possivel excluir o registro do documento: {error}"))?;
+
+    Ok(DeleteDocumentPermanentlyResult { outcome })
+}
+
 #[tauri::command]
 fn open_file_location(file_path: String) -> Result<(), String> {
     let path = PathBuf::from(file_path);
@@ -4289,6 +4379,7 @@ pub fn run() {
             close_notebook_window,
             close_reader_panel_window,
             close_reader_window,
+            delete_document_permanently,
             import_document,
             import_wallpaper,
             delete_notebook_file_attachment,
@@ -4418,6 +4509,50 @@ mod tests {
 
         assert!(read_pdf_file_from_path(&managed_dir, &sources, &source).is_ok());
         assert!(read_pdf_file_from_path(&managed_dir, &sources, &source).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deletes_only_the_exact_managed_document_pdf() {
+        let dir = pdf_authorization_test_dir("managed-delete");
+        let managed_dir = dir.join("pdfs");
+        std::fs::create_dir_all(&managed_dir).unwrap();
+        let document_id = "documento-550e8400-e29b-41d4-a716-446655440000";
+        let managed_file = managed_dir.join(format!("{document_id}.pdf"));
+        std::fs::write(&managed_file, b"%PDF-1.4 gerenciado").unwrap();
+
+        let outcome = remove_managed_document_pdf(
+            &dir,
+            document_id,
+            Some(managed_file.to_string_lossy().as_ref()),
+        )
+        .expect("remover copia gerenciada");
+
+        assert_eq!(outcome, DocumentFileDeletionOutcome::ManagedFileDeleted);
+        assert!(!managed_file.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn preserves_a_legacy_pdf_outside_the_managed_directory() {
+        let dir = pdf_authorization_test_dir("legacy-delete");
+        let managed_dir = dir.join("pdfs");
+        std::fs::create_dir_all(&managed_dir).unwrap();
+        let legacy_file = dir.join("original-do-usuario.pdf");
+        std::fs::write(&legacy_file, b"%PDF-1.4 original").unwrap();
+
+        let outcome = remove_managed_document_pdf(
+            &dir,
+            "documento-550e8400-e29b-41d4-a716-446655440000",
+            Some(legacy_file.to_string_lossy().as_ref()),
+        )
+        .expect("classificar referencia legada");
+
+        assert_eq!(
+            outcome,
+            DocumentFileDeletionOutcome::UnmanagedFilePreserved
+        );
+        assert!(legacy_file.exists(), "o arquivo original nunca pode ser apagado");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
