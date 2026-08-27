@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./useTheme";
 
 type TestMaterial = "flat" | "glass";
+type TestChrome = "docked" | "floating";
 
 const eventMocks = vi.hoisted(() => {
   const handlers = new Map<string, (event: { payload: unknown }) => void>();
@@ -19,6 +20,9 @@ const eventMocks = vi.hoisted(() => {
 });
 
 const databaseMocks = vi.hoisted(() => ({
+  getChromeVariant: vi.fn(),
+  setChromeVariant: vi.fn(),
+  clearChromeVariant: vi.fn(),
   getMaterialVariant: vi.fn(),
   setMaterialVariant: vi.fn(),
   getWallpaperFile: vi.fn(),
@@ -27,9 +31,15 @@ const databaseMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/database", () => ({
+  getChromeVariant: databaseMocks.getChromeVariant,
+  setChromeVariant: databaseMocks.setChromeVariant,
+  clearChromeVariant: databaseMocks.clearChromeVariant,
   getMaterialVariant: databaseMocks.getMaterialVariant,
   setMaterialVariant: databaseMocks.setMaterialVariant,
+  isChromeVariant: (value: unknown) => value === "docked" || value === "floating",
   isMaterialVariant: (value: unknown) => value === "flat" || value === "glass",
+  resolveChromeVariant: (stored: TestChrome | null, material: TestMaterial) =>
+    material === "flat" ? "docked" : stored ?? "floating",
   isMaterialVariantChangedPayload: (payload: unknown) => {
     if (typeof payload !== "object" || payload === null) {
       return false;
@@ -54,6 +64,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const materialEvent = "app:material-variant-changed";
 const materialStorageKey = "athenaeum-material";
+const chromeStorageKey = "athenaeum-chrome";
 
 // O jsdom desta configuracao nao expoe window.localStorage, e o ThemeProvider le
 // tanto o modo quanto o cache de material dele ja na montagem. Stub minimo em
@@ -121,6 +132,35 @@ function deferMaterialRead() {
   };
 }
 
+function deferChromeRead() {
+  let settle: ((chrome: TestChrome | null) => void) | null = null;
+  let fail: ((error: Error) => void) | null = null;
+
+  databaseMocks.getChromeVariant.mockReturnValue(
+    new Promise<TestChrome | null>((resolve, reject) => {
+      settle = resolve;
+      fail = reject;
+    }),
+  );
+
+  return {
+    async resolve(chrome: TestChrome | null) {
+      await act(async () => {
+        settle?.(chrome);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    },
+    async reject(message: string) {
+      await act(async () => {
+        fail?.(new Error(message));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    },
+  };
+}
+
 function dispatchMaterial(payload: unknown) {
   const handler = eventMocks.handlers.get(materialEvent);
   if (!handler) {
@@ -132,6 +172,12 @@ function dispatchMaterial(payload: unknown) {
 beforeEach(() => {
   eventMocks.handlers.clear();
   eventMocks.listen.mockClear();
+  databaseMocks.getChromeVariant.mockReset();
+  databaseMocks.getChromeVariant.mockResolvedValue(null);
+  databaseMocks.setChromeVariant.mockReset();
+  databaseMocks.setChromeVariant.mockResolvedValue(undefined);
+  databaseMocks.clearChromeVariant.mockReset();
+  databaseMocks.clearChromeVariant.mockResolvedValue(undefined);
   databaseMocks.getMaterialVariant.mockReset();
   databaseMocks.getMaterialVariant.mockResolvedValue("flat");
   databaseMocks.setMaterialVariant.mockReset();
@@ -143,6 +189,7 @@ beforeEach(() => {
   latestSetMaterial = null;
   document.documentElement.classList.remove("dark");
   delete document.documentElement.dataset.material;
+  delete document.documentElement.dataset.chrome;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -162,6 +209,7 @@ describe("eixo de material no ThemeProvider", () => {
     await renderProvider();
 
     expect(databaseMocks.getMaterialVariant).toHaveBeenCalledWith("preloaded");
+    expect(databaseMocks.getChromeVariant).toHaveBeenCalledWith("preloaded");
     expect(document.documentElement.dataset.material).toBe("glass");
   });
 
@@ -195,17 +243,23 @@ describe("eixo de material no ThemeProvider", () => {
 });
 
 describe("espelho do material em localStorage", () => {
-  it("bootstrapa em flat quando nao ha valor em cache e reconcilia com o SQLite", async () => {
+  it("resulta em flat e docked na primeira abertura sem preferencias", async () => {
     const materialRead = deferMaterialRead();
 
     await renderProvider();
-    // Ainda sem resposta do SQLite: sem cache, o bootstrap so pode ser flat.
+    // Ainda sem resposta do SQLite: sem cache, os defaults de bootstrap ja
+    // precisam compor a primeira abertura correta.
     expect(document.documentElement.dataset.material).toBe("flat");
+    expect(document.documentElement.dataset.chrome).toBe("docked");
 
-    await materialRead.resolve("glass");
+    // getMaterialVariant traduz a ausencia da linha para flat; esse contrato e
+    // coberto diretamente em database.materialVariant.test.ts.
+    await materialRead.resolve("flat");
 
-    expect(document.documentElement.dataset.material).toBe("glass");
-    expect(memoryStorage.get(materialStorageKey)).toBe("glass");
+    expect(document.documentElement.dataset.material).toBe("flat");
+    expect(document.documentElement.dataset.chrome).toBe("docked");
+    expect(memoryStorage.get(materialStorageKey)).toBe("flat");
+    expect(memoryStorage.has(chromeStorageKey)).toBe(false);
   });
 
   it("aplica o material em cache antes de o SQLite responder", async () => {
@@ -290,5 +344,52 @@ describe("espelho do material em localStorage", () => {
 
     expect(document.documentElement.dataset.material).toBe("glass");
     expect(memoryStorage.get(materialStorageKey)).toBe("glass");
+  });
+});
+
+describe("eixo de chrome no ThemeProvider", () => {
+  it("aplica o cache valido no primeiro commit antes de o SQLite responder", async () => {
+    memoryStorage.set(materialStorageKey, "glass");
+    memoryStorage.set(chromeStorageKey, "docked");
+    const materialRead = deferMaterialRead();
+    const chromeRead = deferChromeRead();
+
+    await renderProvider();
+
+    expect(document.documentElement.dataset.material).toBe("glass");
+    expect(document.documentElement.dataset.chrome).toBe("docked");
+    expect(databaseMocks.getChromeVariant).toHaveBeenCalledWith("preloaded");
+
+    await materialRead.resolve("glass");
+    await chromeRead.resolve("docked");
+  });
+
+  it("trata cache ausente ou invalido como automatico", async () => {
+    memoryStorage.set(materialStorageKey, "glass");
+    memoryStorage.set(chromeStorageKey, "islands");
+    const materialRead = deferMaterialRead();
+    const chromeRead = deferChromeRead();
+
+    await renderProvider();
+
+    expect(document.documentElement.dataset.chrome).toBe("floating");
+    expect(memoryStorage.has(chromeStorageKey)).toBe(false);
+
+    await materialRead.resolve("glass");
+    await chromeRead.resolve(null);
+  });
+
+  it("recalcula chrome ao trocar flat por glass sem persistir o eixo automatico", async () => {
+    await renderProvider(<MaterialConsumer />);
+
+    expect(document.documentElement.dataset.chrome).toBe("docked");
+
+    act(() => latestSetMaterial?.("glass"));
+
+    expect(document.documentElement.dataset.material).toBe("glass");
+    expect(document.documentElement.dataset.chrome).toBe("floating");
+    expect(databaseMocks.setMaterialVariant).toHaveBeenCalledWith("glass", "preloaded");
+    expect(databaseMocks.setChromeVariant).not.toHaveBeenCalled();
+    expect(databaseMocks.clearChromeVariant).not.toHaveBeenCalled();
   });
 });

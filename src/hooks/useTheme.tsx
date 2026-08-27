@@ -1,23 +1,27 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
+  getChromeVariant,
   getMaterialVariant,
+  isChromeVariant,
   isMaterialVariant,
   isMaterialVariantChangedPayload,
   MATERIAL_VARIANT_CHANGED_EVENT,
+  resolveChromeVariant,
   setMaterialVariant,
+  type ChromeVariant,
   type DatabaseHandleSource,
   type MaterialVariant,
 } from "../lib/database";
 import { useWallpaperBackdrop } from "./useWallpaperBackdrop";
 
-// Fonte UNICA da aparencia global do app: o MODO (claro/escuro) e o MATERIAL
-// (chapado/vidro). Vive num contexto para que o botao de contraste do rodape da
+// Fonte UNICA da aparencia global do app: o MODO (claro/escuro), o MATERIAL
+// (chapado/vidro) e a composicao do CHROME. Vive num contexto para que o botao de contraste do rodape da
 // sidebar e o controle "Tema" do SettingsPanel compartilhem o MESMO estado —
 // dois useState independentes desincronizariam (um trocaria o tema sem o outro
 // perceber).
 //
-// Os dois eixos sao ortogonais e persistem de formas diferentes:
+// Os eixos sao ortogonais e persistem de formas diferentes:
 //
 // - MODO so em localStorage. A leitura sincrona antes do primeiro paint evita o
 //   flash de tema errado na abertura, que uma leitura assincrona via IPC do
@@ -29,6 +33,9 @@ import { useWallpaperBackdrop } from "./useWallpaperBackdrop";
 //   uma troca feita com a janela fechada. O espelho existe so para o bootstrap
 //   ter um valor antes do primeiro paint — pelo mesmo motivo do modo, e porque
 //   sem ele as 4 janelas piscavam em 'flat' ate o IPC responder.
+// - CHROME em app_settings (chave chrome_variant), com espelho equivalente em
+//   localStorage. A ausencia e mantida como null porque significa resolucao
+//   automatica a partir do material, e nao uma escolha explicita.
 //
 // Divergencia entre os dois e esperada (outra janela trocou o material enquanto
 // esta estava fechada): quem chega depois nao ganha — o SQLite vence e o
@@ -37,6 +44,7 @@ export type Theme = "light" | "dark";
 
 const themeStorageKey = "athenaeum-theme";
 const materialStorageKey = "athenaeum-material";
+const chromeStorageKey = "athenaeum-chrome";
 
 function readStoredTheme(): Theme {
   return window.localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
@@ -47,6 +55,13 @@ function readStoredTheme(): Theme {
 function readCachedMaterial(): MaterialVariant {
   const cachedMaterial = window.localStorage.getItem(materialStorageKey);
   return isMaterialVariant(cachedMaterial) ? cachedMaterial : "flat";
+}
+
+// null e um estado persistivel do eixo: representa resolucao automatica, nao
+// uma terceira aparencia. Ausencia ou cache invalido preservam essa semantica.
+function readCachedChrome(): ChromeVariant | null {
+  const cachedChrome = window.localStorage.getItem(chromeStorageKey);
+  return isChromeVariant(cachedChrome) ? cachedChrome : null;
 }
 
 type ThemeContextValue = {
@@ -73,6 +88,7 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
   // Inicializador sincrono (mesmo padrao do modo acima): o primeiro commit ja
   // sai com o material em cache, entao nao ha janela pintada em 'flat'.
   const [material, setMaterialState] = useState<MaterialVariant>(readCachedMaterial);
+  const [storedChrome, setStoredChrome] = useState<ChromeVariant | null>(readCachedChrome);
   // Um valor vindo do evento (ou do proprio setMaterial local) e mais recente
   // que a leitura de montagem em voo. Sem esta marca, uma troca feita em outra
   // janela durante o bootstrap seria sobrescrita pelo valor antigo do SQLite.
@@ -86,41 +102,59 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
     window.localStorage.setItem(themeStorageKey, theme);
   }, [theme]);
 
-  // Eixo ortogonal ao .dark: o material entra por data-material no mesmo
-  // elemento raiz, para que [data-material="glass"] e .dark[data-material="glass"]
-  // se combinem sem duplicar a paleta.
+  // Eixos ortogonais ao .dark: material e chrome entram no mesmo elemento raiz.
   //
   // O espelho no localStorage e escrito AQUI, e nao dentro de setMaterial, para
   // que TODO caminho que muda o material passe por ele: troca local, evento de
   // outra janela e a reconciliacao com o SQLite. E isso que corrige o cache
   // quando ele diverge da fonte de verdade.
   useEffect(() => {
-    window.document.documentElement.dataset.material = material;
+    const root = window.document.documentElement;
+    root.dataset.material = material;
+    root.dataset.chrome = resolveChromeVariant(storedChrome, material);
     window.localStorage.setItem(materialStorageKey, material);
-  }, [material]);
+    if (storedChrome === null) {
+      window.localStorage.removeItem(chromeStorageKey);
+    } else {
+      window.localStorage.setItem(chromeStorageKey, storedChrome);
+    }
+  }, [material, storedChrome]);
 
   const applyMaterial = useCallback((nextMaterial: MaterialVariant) => {
     hasFresherMaterialRef.current = true;
     setMaterialState(nextMaterial);
   }, []);
 
-  // RECONCILIACAO na montagem: toda janela precisa do material persistido mesmo
-  // que nenhum evento chegue (abrir o Reader com o app ja em glass, por
-  // exemplo). O valor do SQLite vence o cache; se forem iguais, o setState e
-  // no-op e o efeito acima nao reescreve nada.
+  // RECONCILIACAO na montagem: toda janela precisa das preferencias persistidas
+  // mesmo que nenhum evento chegue (abrir o Reader com o app ja em glass, por
+  // exemplo). O SQLite vence os caches; se os valores forem iguais, os
+  // setStates sao no-op e o efeito acima nao reescreve nada.
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      // Falha de leitura devolve null em vez de 'flat': sem resposta da fonte de
-      // verdade nao ha o que reconciliar, e descartar o cache aqui traria de
-      // volta exatamente o flash que ele existe para evitar.
-      const storedMaterial = await getMaterialVariant(databaseSource).catch(() => null);
-      if (cancelled || storedMaterial === null || hasFresherMaterialRef.current) {
+      // As leituras compartilham a mesma passagem, mas falham de forma
+      // independente: sem resposta da fonte de verdade, o cache daquele eixo e
+      // preservado para nao reintroduzir o flash que ele evita.
+      const [materialResult, chromeResult] = await Promise.allSettled([
+        getMaterialVariant(databaseSource),
+        getChromeVariant(databaseSource),
+      ]);
+      if (cancelled) {
         return;
       }
 
-      setMaterialState(storedMaterial);
+      if (materialResult.status === "fulfilled" && !hasFresherMaterialRef.current) {
+        setMaterialState(materialResult.value);
+      }
+
+        // TODO(leva 2): quando o controle de Ajustes puder escrever neste eixo,
+      // este setState precisa da mesma protecao que hasFresherMaterialRef da ao
+      // material — hoje nada mais escreve em storedChrome, entao a corrida nao
+      // existe ainda.
+      if (chromeResult.status === "fulfilled") {
+        setStoredChrome(chromeResult.value);
+      }
     })();
 
     return () => {

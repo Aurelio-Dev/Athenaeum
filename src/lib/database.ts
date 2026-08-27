@@ -49,6 +49,11 @@ export const WALLPAPER_SETTINGS_CHANGED_EVENT = "app:wallpaper-settings-changed"
 // pintadas, nao qual e a paleta. "flat" e o material historico do app.
 export type MaterialVariant = "flat" | "glass";
 
+// Preferencia de composicao do chrome. Diferente do material, null nao e um
+// default disfarçado: significa que o usuario nunca escolheu uma variante e
+// que a resolucao deve acompanhar o material atual.
+export type ChromeVariant = "docked" | "floating";
+
 export type MaterialVariantChangedPayload = {
   material: MaterialVariant;
   origin: string;
@@ -131,6 +136,21 @@ export function isReaderAnnotationsFilterScopeChangedPayload(
 
 export function isMaterialVariant(value: unknown): value is MaterialVariant {
   return value === "flat" || value === "glass";
+}
+
+export function isChromeVariant(value: unknown): value is ChromeVariant {
+  return value === "docked" || value === "floating";
+}
+
+export function resolveChromeVariant(
+  stored: ChromeVariant | null,
+  material: MaterialVariant,
+): ChromeVariant {
+  if (material === "flat") {
+    return "docked";
+  }
+
+  return stored ?? "floating";
 }
 
 export function isMaterialVariantChangedPayload(payload: unknown): payload is MaterialVariantChangedPayload {
@@ -2404,6 +2424,11 @@ export async function setSetting(key: string, value: string, source: DatabaseHan
   );
 }
 
+export async function deleteSetting(key: string, source: DatabaseHandleSource = "loaded"): Promise<void> {
+  const database = await getDatabase(source);
+  await database.execute("DELETE FROM app_settings WHERE key = $1", [key]);
+}
+
 // Preferencia de abertura do leitor. Sem valor persistido (primeira abertura)
 // o leitor abre maximizado; depois disso vale o ultimo estado escolhido pelo
 // usuario no botao maximizar/restaurar.
@@ -2442,6 +2467,27 @@ export async function setMaterialVariant(
 ): Promise<void> {
   await setSetting(MATERIAL_VARIANT_SETTING_KEY, material, source);
   await emitMaterialVariantChanged(material);
+}
+
+const CHROME_VARIANT_SETTING_KEY = "chrome_variant";
+
+// Ausencia e valor invalido preservam o estado automatico. Nao convertemos
+// null em uma variante concreta porque a escolha resolvida depende do material
+// e uma preferencia explicita deve voltar a valer quando o material mudar.
+export async function getChromeVariant(source: DatabaseHandleSource = "loaded"): Promise<ChromeVariant | null> {
+  const value = await getSetting(CHROME_VARIANT_SETTING_KEY, source);
+  return isChromeVariant(value) ? value : null;
+}
+
+export async function setChromeVariant(
+  value: ChromeVariant,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(CHROME_VARIANT_SETTING_KEY, value, source);
+}
+
+export async function clearChromeVariant(source: DatabaseHandleSource = "loaded"): Promise<void> {
+  await deleteSetting(CHROME_VARIANT_SETTING_KEY, source);
 }
 
 // Papel de parede do app. Como o material, vive em app_settings e nao em
