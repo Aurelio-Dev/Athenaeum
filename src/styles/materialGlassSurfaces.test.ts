@@ -213,7 +213,11 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     ["src/features/library/LibraryToolbar.tsx", "material-surface-elevated", "bg-surface-panel", "controles da toolbar"],
     ["src/features/library/LibraryToolbar.tsx", "material-surface-overlay", "bg-surface-panel", "menu de ordenacao"],
     ["src/features/library/LibraryView.tsx", "material-surface-elevated", "bg-surface-card", "container da lista"],
+    // O card da grade aparece nas tres abas mutuamente exclusivas da Library;
+    // Documentos, Cadernos e Quadros carregam o mesmo marcador por decisao.
     ["src/features/library/DocumentCard.tsx", "material-surface-card", "bg-surface-card", "card da grade"],
+    ["src/features/notebooks/NotebookCard.tsx", "material-surface-card", "bg-surface-card", "card da grade de cadernos"],
+    ["src/features/canvases/CanvasCard.tsx", "material-surface-card", "bg-surface-card", "card da grade de quadros"],
     ["src/features/library/DocumentDetailsPanel.tsx", "material-surface-elevated", "bg-surface-panel", "painel Detalhes docado"],
     ["src/features/library/DocumentDetailsPanel.tsx", "material-surface-overlay", "bg-surface-panel", "painel Detalhes em modal"],
     ["src/features/library/AddDocumentModal.tsx", "material-surface-overlay", "bg-surface-panel", "modal de adicionar"],
