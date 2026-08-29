@@ -14,6 +14,8 @@ const databaseMocks = vi.hoisted(() => ({
   getWallpaperFile: vi.fn(),
   setWallpaperFile: vi.fn(),
   clearWallpaperFile: vi.fn(),
+  getWallpaperBrightness: vi.fn(),
+  setWallpaperBrightness: vi.fn(),
   getWallpaperOpacity: vi.fn(),
   setWallpaperOpacity: vi.fn(),
   getGlassNoticeSeen: vi.fn(),
@@ -31,12 +33,17 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 vi.mock("../../lib/database", () => ({
+  MIN_WALLPAPER_BRIGHTNESS: 50,
+  MAX_WALLPAPER_BRIGHTNESS: 150,
+  DEFAULT_WALLPAPER_BRIGHTNESS: 100,
   MIN_WALLPAPER_OPACITY: 0,
   MAX_WALLPAPER_OPACITY: 100,
   DEFAULT_WALLPAPER_OPACITY: 50,
   getWallpaperFile: databaseMocks.getWallpaperFile,
   setWallpaperFile: databaseMocks.setWallpaperFile,
   clearWallpaperFile: databaseMocks.clearWallpaperFile,
+  getWallpaperBrightness: databaseMocks.getWallpaperBrightness,
+  setWallpaperBrightness: databaseMocks.setWallpaperBrightness,
   getWallpaperOpacity: databaseMocks.getWallpaperOpacity,
   setWallpaperOpacity: databaseMocks.setWallpaperOpacity,
   getGlassNoticeSeen: databaseMocks.getGlassNoticeSeen,
@@ -108,10 +115,20 @@ function preview() {
 
 function opacitySlider() {
   const element = container?.querySelector<HTMLInputElement>(
-    'input[aria-label="Opacidade do papel de parede"]',
+    'input[aria-label="Visibilidade do papel de parede"]',
   );
   if (!element) {
     throw new Error("Slider de opacidade nao encontrado.");
+  }
+  return element;
+}
+
+function brightnessSlider() {
+  const element = container?.querySelector<HTMLInputElement>(
+    'input[aria-label="Brilho do papel de parede"]',
+  );
+  if (!element) {
+    throw new Error("Slider de brilho nao encontrado.");
   }
   return element;
 }
@@ -138,6 +155,8 @@ beforeEach(() => {
   databaseMocks.getWallpaperFile.mockReset().mockResolvedValue(null);
   databaseMocks.setWallpaperFile.mockReset().mockResolvedValue(undefined);
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
+  databaseMocks.getWallpaperBrightness.mockReset().mockResolvedValue(100);
+  databaseMocks.setWallpaperBrightness.mockReset().mockResolvedValue(undefined);
   databaseMocks.getWallpaperOpacity.mockReset().mockResolvedValue(50);
   databaseMocks.setWallpaperOpacity.mockReset().mockResolvedValue(undefined);
   databaseMocks.getGlassNoticeSeen.mockReset().mockResolvedValue(false);
@@ -167,6 +186,7 @@ describe("controle de papel de parede em Aparencia", () => {
     expect(queryButton("Remover")).toBeUndefined();
     expect(button("Escolher imagem")).toBeTruthy();
     expect(opacitySlider().disabled).toBe(true);
+    expect(brightnessSlider().disabled).toBe(true);
   });
 
   it("importa a imagem escolhida e so entao grava a chave", async () => {
@@ -203,6 +223,7 @@ describe("controle de papel de parede em Aparencia", () => {
     );
     expect(button("Trocar imagem")).toBeTruthy();
     expect(opacitySlider().disabled).toBe(false);
+    expect(brightnessSlider().disabled).toBe(false);
   });
 
   it("mostra estado de carregamento enquanto a copia acontece", async () => {
@@ -291,6 +312,7 @@ describe("controle de papel de parede em Aparencia", () => {
     expect(preview()).toBeNull();
     expect(queryButton("Remover")).toBeUndefined();
     expect(opacitySlider().disabled).toBe(true);
+    expect(brightnessSlider().disabled).toBe(true);
   });
 
   it("falha ao remover mantem a previa e nao limpa a chave", async () => {
@@ -332,6 +354,34 @@ describe("controle de papel de parede em Aparencia", () => {
     expect(opacitySlider().value).toBe("18");
   });
 
+  it("restaura o brilho persistido na abertura", async () => {
+    databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
+    databaseMocks.getWallpaperBrightness.mockResolvedValue(130);
+    tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
+    await render();
+
+    expect(brightnessSlider().value).toBe("130");
+    expect(preview()?.style.filter).toBe("brightness(1.3)");
+  });
+
+  it("mantem brilho e visibilidade mais recentes na apresentacao imediata", async () => {
+    databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
+    tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
+    await render();
+    presentationMocks.applyWallpaperPresentation.mockClear();
+
+    await act(async () => {
+      setSliderValue(opacitySlider(), 35);
+      setSliderValue(brightnessSlider(), 130);
+    });
+
+    const assetUrl = "http://asset.localhost/C%3A%5Cdados%5Cwallpaper%5Cwallpaper-1.png";
+    expect(presentationMocks.applyWallpaperPresentation.mock.calls).toEqual([
+      [assetUrl, 35, 100],
+      [assetUrl, 35, 130],
+    ]);
+  });
+
   it("persiste a opacidade uma vez so quando o arrasto assenta", async () => {
     databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
     tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
@@ -357,6 +407,29 @@ describe("controle de papel de parede em Aparencia", () => {
     expect(databaseMocks.setWallpaperOpacity).toHaveBeenCalledWith(12);
   });
 
+  it("persiste o brilho uma vez so quando o arrasto assenta", async () => {
+    databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
+    tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
+    await render();
+
+    const slider = brightnessSlider();
+    await act(async () => {
+      setSliderValue(slider, 110);
+      setSliderValue(slider, 125);
+      setSliderValue(slider, 140);
+    });
+
+    expect(brightnessSlider().value).toBe("140");
+    expect(databaseMocks.setWallpaperBrightness).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(databaseMocks.setWallpaperBrightness).toHaveBeenCalledTimes(1);
+    expect(databaseMocks.setWallpaperBrightness).toHaveBeenCalledWith(140);
+  });
+
   it("nao perde a opacidade pendente se o painel fechar antes do debounce", async () => {
     databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
     tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
@@ -368,9 +441,21 @@ describe("controle de papel de parede em Aparencia", () => {
     expect(databaseMocks.setWallpaperOpacity).toHaveBeenCalledWith(7);
   });
 
+  it("nao perde o brilho pendente se o painel fechar antes do debounce", async () => {
+    databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
+    tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
+    await render();
+
+    await act(async () => setSliderValue(brightnessSlider(), 80));
+    act(() => root?.unmount());
+
+    expect(databaseMocks.setWallpaperBrightness).toHaveBeenCalledWith(80);
+  });
+
   it("restaurar padroes devolve a opacidade sem apagar a imagem do usuario", async () => {
     databaseMocks.getWallpaperFile.mockResolvedValue("wallpaper-1.png");
     databaseMocks.getWallpaperOpacity.mockResolvedValue(90);
+    databaseMocks.getWallpaperBrightness.mockResolvedValue(145);
     tauriMocks.invoke.mockResolvedValue("C:\\dados\\wallpaper\\wallpaper-1.png");
     await render();
 
@@ -381,6 +466,8 @@ describe("controle de papel de parede em Aparencia", () => {
 
     expect(opacitySlider().value).toBe("50");
     expect(databaseMocks.setWallpaperOpacity).toHaveBeenCalledWith(50);
+    expect(brightnessSlider().value).toBe("100");
+    expect(databaseMocks.setWallpaperBrightness).toHaveBeenCalledWith(100);
     // Restaurar padroes de aparencia nao pode apagar um arquivo do disco.
     expect(tauriMocks.invoke).not.toHaveBeenCalledWith("remove_wallpaper");
     expect(databaseMocks.clearWallpaperFile).not.toHaveBeenCalled();

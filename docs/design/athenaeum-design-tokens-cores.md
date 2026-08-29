@@ -1,5 +1,30 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 29/08/2026 — Brilho do papel de parede isolado da interface.**
+>
+> A preferência `wallpaper_brightness` vive em `app_settings`, usa a faixa
+> `50–150` e tem `100` como padrão neutro. O arquivo original não é alterado:
+> o valor controla apenas a apresentação CSS e é sincronizado entre janelas
+> pelo mesmo evento global do wallpaper.
+>
+> Em `100%`, o caminho histórico permanece intacto: a imagem continua como
+> `background-image` do `body`, sem filtro nem nova camada de composição. Fora
+> do padrão, `data-wallpaper-brightness-adjusted="true"` remove a imagem do
+> `body` e a pinta em `body::before`, fixo ao viewport. Somente esse
+> pseudo-elemento recebe `filter: brightness(...)`; aplicar o filtro no
+> `body`, no `#root` ou em `.wallpaper-backdrop-root` alteraria também textos,
+> painéis e conteúdo.
+>
+> A regra exige `[data-material="glass"][data-wallpaper="active"]`. Flat e
+> glass sem imagem permanecem inalterados. O brilho é independente da
+> visibilidade do wallpaper: visibilidade regula o scrim das superfícies;
+> brilho regula os pixels da imagem que alimentam o fundo e o backdrop.
+>
+> `wallpaperGlassRendering.test.ts` fecha o escopo do filtro no
+> `body::before`. O guard foi provado por mutação, movendo temporariamente a
+> regra para `body`: o teste falhou apontando a ausência da camada isolada e
+> passou novamente depois da restauração.
+
 > **Changelog 28/08/2026 — Eixo de material, eixo de chrome e a arte do
 > LiquidGlass:** esta entrada registra decisões que já estavam no código e
 > nos testes há semanas, mas nunca chegaram a este documento. Um

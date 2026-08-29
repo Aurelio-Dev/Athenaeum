@@ -26,6 +26,7 @@ const eventMocks = vi.hoisted(() => {
 });
 
 const databaseMocks = vi.hoisted(() => ({
+  getWallpaperBrightness: vi.fn(),
   getWallpaperFile: vi.fn(),
   getWallpaperOpacity: vi.fn(),
   clearWallpaperFile: vi.fn(),
@@ -41,11 +42,14 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("../lib/database", () => ({
+  DEFAULT_WALLPAPER_BRIGHTNESS: 100,
   WALLPAPER_SETTINGS_CHANGED_EVENT: "app:wallpaper-settings-changed",
+  getWallpaperBrightness: databaseMocks.getWallpaperBrightness,
   getWallpaperFile: databaseMocks.getWallpaperFile,
   getWallpaperOpacity: databaseMocks.getWallpaperOpacity,
   clearWallpaperFile: databaseMocks.clearWallpaperFile,
   normalizeWallpaperOpacity: (value: number) => Math.min(100, Math.max(0, Math.round(value))),
+  normalizeWallpaperBrightness: (value: number) => Math.min(150, Math.max(50, Math.round(value))),
 }));
 
 let container: HTMLDivElement | null = null;
@@ -76,14 +80,17 @@ beforeEach(() => {
   tauriMocks.invoke.mockReset();
   tauriMocks.convertFileSrc.mockClear();
   eventMocks.listen.mockClear();
+  databaseMocks.getWallpaperBrightness.mockReset().mockResolvedValue(100);
   databaseMocks.getWallpaperFile.mockReset().mockResolvedValue(null);
   databaseMocks.getWallpaperOpacity.mockReset().mockResolvedValue(50);
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
 
   delete document.documentElement.dataset.wallpaper;
   delete document.documentElement.dataset.wallpaperTranslucent;
+  delete document.documentElement.dataset.wallpaperBrightnessAdjusted;
   document.documentElement.style.removeProperty("--glass-wallpaper-image");
   document.documentElement.style.removeProperty("--glass-wallpaper-scrim-alpha");
+  document.documentElement.style.removeProperty("--glass-wallpaper-brightness");
 
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -126,6 +133,7 @@ describe("wallpaper global da janela", () => {
     expect(
       document.documentElement.style.getPropertyValue("--glass-wallpaper-scrim-alpha"),
     ).toBe("0.800");
+    expect(document.documentElement.dataset.wallpaperBrightnessAdjusted).toBeUndefined();
   });
 
   it("no slider zero mantem a imagem ativa, mas dispensa composicao translucida", async () => {
@@ -148,12 +156,17 @@ describe("wallpaper global da janela", () => {
     await render();
 
     databaseMocks.getWallpaperOpacity.mockResolvedValue(100);
+    databaseMocks.getWallpaperBrightness.mockResolvedValue(140);
     await dispatchWallpaperEvent();
 
     expect(databaseMocks.getWallpaperFile).toHaveBeenCalledTimes(2);
     expect(
       document.documentElement.style.getPropertyValue("--glass-wallpaper-scrim-alpha"),
     ).toBe("0.600");
+    expect(document.documentElement.dataset.wallpaperBrightnessAdjusted).toBe("true");
+    expect(
+      document.documentElement.style.getPropertyValue("--glass-wallpaper-brightness"),
+    ).toBe("1.400");
   });
 
   it("limpa a chave zumbi quando o arquivo persistido sumiu", async () => {

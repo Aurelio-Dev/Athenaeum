@@ -11,8 +11,11 @@ import {
 import { useTheme, type Theme } from "../../hooks/useTheme";
 import { useWallpaperSettings } from "../../hooks/useWallpaperSettings";
 import {
+  DEFAULT_WALLPAPER_BRIGHTNESS,
   DEFAULT_WALLPAPER_OPACITY,
+  MAX_WALLPAPER_BRIGHTNESS,
   MAX_WALLPAPER_OPACITY,
+  MIN_WALLPAPER_BRIGHTNESS,
   MIN_WALLPAPER_OPACITY,
   deleteSetting,
   getGlassNoticeSeen,
@@ -202,6 +205,7 @@ const secondaryButtonClassName =
 // onFocus ou navegacao por setas.
 function WallpaperControl({
   previewUrl,
+  brightness,
   isLoading,
   isImporting,
   error,
@@ -209,6 +213,7 @@ function WallpaperControl({
   onRemove,
 }: {
   previewUrl: string | null;
+  brightness: number;
   isLoading: boolean;
   isImporting: boolean;
   error: string | null;
@@ -227,6 +232,7 @@ function WallpaperControl({
               src={previewUrl}
               alt="Prévia do papel de parede"
               className="h-full w-full object-cover"
+              style={{ filter: `brightness(${brightness / 100})` }}
             />
           ) : (
             <span className="text-[10px] font-semibold uppercase tracking-wide text-text-subtle">
@@ -265,31 +271,37 @@ function WallpaperControl({
   );
 }
 
-function WallpaperOpacityControl({
-  opacity,
+function WallpaperPercentageControl({
+  value,
+  min,
+  max,
   disabled,
+  ariaLabel,
   onChange,
 }: {
-  opacity: number;
+  value: number;
+  min: number;
+  max: number;
   disabled: boolean;
-  onChange: (opacity: number) => void;
+  ariaLabel: string;
+  onChange: (value: number) => void;
 }) {
   return (
     <div className="flex items-center gap-3">
       <input
         type="range"
-        min={MIN_WALLPAPER_OPACITY}
-        max={MAX_WALLPAPER_OPACITY}
+        min={min}
+        max={max}
         step={1}
-        value={opacity}
+        value={value}
         disabled={disabled}
-        aria-label="Opacidade do papel de parede"
-        aria-valuetext={`${opacity}%`}
+        aria-label={ariaLabel}
+        aria-valuetext={`${value}%`}
         onChange={(event) => onChange(Number(event.target.value))}
         className="h-1.5 w-40 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
       />
       <span className="w-10 text-right text-xs font-semibold tabular-nums text-text-primary">
-        {opacity}%
+        {value}%
       </span>
     </div>
   );
@@ -381,6 +393,7 @@ export function AppearanceSettings() {
     // padroes de aparencia nao pode apagar do disco um arquivo que o usuario
     // importou. Para isso existe o botao Remover, que diz o que faz.
     wallpaper.changeOpacity(DEFAULT_WALLPAPER_OPACITY);
+    wallpaper.changeBrightness(DEFAULT_WALLPAPER_BRIGHTNESS);
   }
 
   return (
@@ -429,6 +442,7 @@ export function AppearanceSettings() {
         >
           <WallpaperControl
             previewUrl={wallpaper.previewUrl}
+            brightness={wallpaper.brightness}
             isLoading={wallpaper.isLoading}
             isImporting={wallpaper.isImporting}
             error={wallpaper.error}
@@ -438,13 +452,30 @@ export function AppearanceSettings() {
         </SettingRow>
 
         <SettingRow
-          label="Opacidade do papel de parede"
+          label="Visibilidade do papel de parede"
           description="Defina o quanto a imagem aparece por trás da interface."
         >
-          <WallpaperOpacityControl
-            opacity={wallpaper.opacity}
+          <WallpaperPercentageControl
+            value={wallpaper.opacity}
+            min={MIN_WALLPAPER_OPACITY}
+            max={MAX_WALLPAPER_OPACITY}
             disabled={wallpaper.fileName === null}
+            ariaLabel="Visibilidade do papel de parede"
             onChange={wallpaper.changeOpacity}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Brilho do papel de parede"
+          description="Ajuste a luminosidade da imagem sem alterar a interface."
+        >
+          <WallpaperPercentageControl
+            value={wallpaper.brightness}
+            min={MIN_WALLPAPER_BRIGHTNESS}
+            max={MAX_WALLPAPER_BRIGHTNESS}
+            disabled={wallpaper.fileName === null}
+            ariaLabel="Brilho do papel de parede"
+            onChange={wallpaper.changeBrightness}
           />
         </SettingRow>
 

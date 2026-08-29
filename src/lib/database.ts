@@ -41,8 +41,9 @@ export const READER_WINDOW_LABEL = "reader-window";
 // Preferencia global (nao pertence a um documento): o material das superficies
 // do app. Emitido para TODAS as janelas nativas, nao so para o Reader.
 export const MATERIAL_VARIANT_CHANGED_EVENT = "app:material-variant-changed";
-// Wallpaper e opacidade tambem sao preferencias globais. O evento nao carrega
-// caminhos: cada janela relê o nome confiavel do SQLite e o resolve no Rust.
+// Wallpaper, visibilidade e brilho tambem sao preferencias globais. O evento
+// nao carrega caminhos: cada janela rele o nome confiavel do SQLite e o resolve
+// no Rust.
 export const WALLPAPER_SETTINGS_CHANGED_EVENT = "app:wallpaper-settings-changed";
 
 // Eixo ortogonal ao tema claro/escuro: descreve como as superficies sao
@@ -2516,9 +2517,11 @@ export async function setGlassNoticeSeen(source: DatabaseHandleSource = "loaded"
 //                        muda entre maquinas e entre o perfil .dev e o de
 //                        producao. Quem traduz nome -> caminho e o comando
 //                        resolve_wallpaper_path, no Rust.
-// - wallpaper_opacity -> inteiro de 0 a 100, o valor do slider.
+// - wallpaper_opacity    -> inteiro de 0 a 100, o valor do slider.
+// - wallpaper_brightness -> inteiro de 50 a 150; 100 preserva a imagem.
 const WALLPAPER_FILE_SETTING_KEY = "wallpaper_file";
 const WALLPAPER_OPACITY_SETTING_KEY = "wallpaper_opacity";
+const WALLPAPER_BRIGHTNESS_SETTING_KEY = "wallpaper_brightness";
 
 export const MIN_WALLPAPER_OPACITY = 0;
 export const MAX_WALLPAPER_OPACITY = 100;
@@ -2527,6 +2530,10 @@ export const MAX_WALLPAPER_OPACITY = 100;
 // usuario acha que a importacao falhou), mas ele fica ATRAS das superficies do
 // app e nao pode competir com o conteudo. O ajuste fino e do usuario.
 export const DEFAULT_WALLPAPER_OPACITY = 50;
+
+export const MIN_WALLPAPER_BRIGHTNESS = 50;
+export const MAX_WALLPAPER_BRIGHTNESS = 150;
+export const DEFAULT_WALLPAPER_BRIGHTNESS = 100;
 
 export async function getWallpaperFile(source: DatabaseHandleSource = "loaded"): Promise<string | null> {
   const value = await getSetting(WALLPAPER_FILE_SETTING_KEY, source);
@@ -2574,6 +2581,35 @@ export async function setWallpaperOpacity(
   await setSetting(
     WALLPAPER_OPACITY_SETTING_KEY,
     String(normalizeWallpaperOpacity(opacity)),
+    source,
+  );
+  await emitWallpaperSettingsChanged();
+}
+
+export function normalizeWallpaperBrightness(value: string | number | null): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_WALLPAPER_BRIGHTNESS;
+  }
+
+  return Math.min(
+    MAX_WALLPAPER_BRIGHTNESS,
+    Math.max(MIN_WALLPAPER_BRIGHTNESS, Math.round(parsed)),
+  );
+}
+
+export async function getWallpaperBrightness(source: DatabaseHandleSource = "loaded"): Promise<number> {
+  return normalizeWallpaperBrightness(await getSetting(WALLPAPER_BRIGHTNESS_SETTING_KEY, source));
+}
+
+export async function setWallpaperBrightness(
+  brightness: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(
+    WALLPAPER_BRIGHTNESS_SETTING_KEY,
+    String(normalizeWallpaperBrightness(brightness)),
     source,
   );
   await emitWallpaperSettingsChanged();

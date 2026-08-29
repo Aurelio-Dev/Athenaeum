@@ -1297,6 +1297,29 @@ body {
   background-size: cover;
 }
 
+/* Brilho diferente de 100% exige uma camada propria: aplicar filter no body
+   alteraria tambem toda a interface. O caminho historico acima permanece
+   intacto no valor padrao; so o estado ajustado cria esta composicao fixa. */
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-brightness-adjusted="true"] body {
+  position: relative;
+  isolation: isolate;
+  background-image: none;
+}
+
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-brightness-adjusted="true"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--glass-surface-app);
+  background-image: var(--glass-wallpaper-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: brightness(var(--glass-wallpaper-brightness));
+}
+
 [data-material="glass"][data-wallpaper="active"] .wallpaper-backdrop-root {
   background: transparent;
 }

@@ -60,12 +60,14 @@ vi.mock("../../hooks/useWallpaperSettings", () => ({
     fileName: null,
     previewUrl: null,
     opacity: 50,
+    brightness: 100,
     isLoading: false,
     isImporting: false,
     error: null,
     chooseWallpaper: vi.fn(),
     removeWallpaper: vi.fn(),
     changeOpacity: vi.fn(),
+    changeBrightness: vi.fn(),
   }),
 }));
 

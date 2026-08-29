@@ -2141,8 +2141,9 @@ async fn load_notebook_file_attachments(
 // disco. Um wallpaper 4K em base64 seria ~21MB de string atravessando a
 // fronteira para nada.
 //
-// O que fica em app_settings (wallpaper_file / wallpaper_opacity) e escrito
-// pelo TypeScript: sao dois upserts chave-valor independentes, cada um atomico
+// O que fica em app_settings (wallpaper_file / wallpaper_opacity /
+// wallpaper_brightness) e escrito pelo TypeScript: sao upserts chave-valor
+// independentes, cada um atomico
 // numa unica instrucao SQL, e AGENTS.md e explicito em nao criar comando Rust
 // para o que o plugin-sql ja resolve com seguranca.
 // ===========================================================================

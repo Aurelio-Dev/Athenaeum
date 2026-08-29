@@ -27,6 +27,7 @@ const databaseMocks = vi.hoisted(() => ({
   setMaterialVariant: vi.fn(),
   getWallpaperFile: vi.fn(),
   getWallpaperOpacity: vi.fn(),
+  getWallpaperBrightness: vi.fn(),
   clearWallpaperFile: vi.fn(),
 }));
 
@@ -52,10 +53,13 @@ vi.mock("../lib/database", () => ({
   },
   MATERIAL_VARIANT_CHANGED_EVENT: "app:material-variant-changed",
   WALLPAPER_SETTINGS_CHANGED_EVENT: "app:wallpaper-settings-changed",
+  DEFAULT_WALLPAPER_BRIGHTNESS: 100,
   getWallpaperFile: databaseMocks.getWallpaperFile,
   getWallpaperOpacity: databaseMocks.getWallpaperOpacity,
+  getWallpaperBrightness: databaseMocks.getWallpaperBrightness,
   clearWallpaperFile: databaseMocks.clearWallpaperFile,
   normalizeWallpaperOpacity: (value: number) => Math.min(100, Math.max(0, Math.round(value))),
+  normalizeWallpaperBrightness: (value: number) => Math.min(150, Math.max(50, Math.round(value))),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -196,6 +200,7 @@ beforeEach(() => {
   databaseMocks.setMaterialVariant.mockResolvedValue(undefined);
   databaseMocks.getWallpaperFile.mockReset().mockResolvedValue(null);
   databaseMocks.getWallpaperOpacity.mockReset().mockResolvedValue(50);
+  databaseMocks.getWallpaperBrightness.mockReset().mockResolvedValue(100);
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
   memoryStorage.clear();
   latestSetMaterial = null;
