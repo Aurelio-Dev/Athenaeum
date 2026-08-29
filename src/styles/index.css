@@ -819,6 +819,79 @@
   backdrop-filter: none;
 }
 
+/* Library em ilhas flutuantes.
+   ------------------------------------------------------------
+   O padding pertence ao AppShell, e não aos filhos: ele reserva a margem
+   externa sem empurrar as sombras para fora de um contêiner overflow-hidden.
+   O gap do workspace separa as três regiões sem introduzir margens individuais
+   que poderiam escapar dessa área reservada. */
+[data-material="glass"][data-chrome="floating"] {
+  /* Estes valores só existem no chrome flutuante. A sombra herda a variante
+     por --glass-shadow-elevated, enquanto a geometria permanece igual nos
+     dois temas glass. */
+  --glass-island-gutter: 24px;
+  --glass-island-window-inset: 24px;
+  --glass-island-radius: 16px;
+  --glass-island-outline: rgba(255, 255, 255, 0.08);
+  --glass-island-shadow: var(--glass-shadow-elevated);
+}
+
+[data-material="glass"][data-chrome="floating"] .wallpaper-backdrop-root {
+  padding: var(--glass-island-window-inset);
+  gap: var(--glass-island-gutter);
+}
+
+[data-material="glass"][data-chrome="floating"] main > div:has(> .material-island) {
+  gap: var(--glass-island-gutter);
+}
+
+/* material-island é apenas o gancho de geometria. O raio pertence às duas
+   ilhas pintadas; a área central participa somente da calha. */
+[data-material="glass"][data-chrome="floating"] .material-island.material-surface,
+[data-material="glass"][data-chrome="floating"] .material-island.material-surface-elevated {
+  border-radius: var(--glass-island-radius);
+}
+
+/* Sidebar e Detalhes deixam de usar as bordas que funcionavam como divisórias
+   no layout docado. O contorno vira sombra, não border-color: a preferência
+   de ocultar divisórias zera bordas com !important e não pode apagar a aresta
+   das ilhas. box-shadow substitui, em vez de acumular, a declaração anterior;
+   por isso cada regra repete seu brilho especular com o token correspondente. */
+[data-material="glass"][data-chrome="floating"] .wallpaper-backdrop-root > aside.material-surface {
+  border-color: transparent;
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-border-top),
+    0 0 0 1px var(--glass-island-outline),
+    var(--glass-island-shadow);
+}
+
+[data-material="glass"][data-chrome="floating"] .wallpaper-backdrop-root main > div > aside.material-surface-elevated {
+  border-color: transparent;
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-border-top-elevated),
+    0 0 0 1px var(--glass-island-outline),
+    var(--glass-island-shadow);
+}
+
+/* A faixa superior foi desenhada para uma superfície central docada. Entre
+   ilhas ela não é um painel: volta a contents, sem tinta, sombra ou filtro,
+   para que busca e ação flutuem diretamente sobre o fundo. O modo docado com
+   wallpaper continua coberto pela regra anterior e permanece inalterado. */
+[data-material="glass"][data-chrome="floating"] .material-liquid-bar {
+  display: contents;
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* A regra acima perde em especificidade para o filtro do wallpaper
+   translúcido; esta repete o reset com data-chrome para vencê-lo nesse caso. */
+[data-material="glass"][data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam
    somente tons secundários e bordas, sem filtros que alterariam imagens ou
    criariam novos contextos de empilhamento para os painéis flutuantes. */

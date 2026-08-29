@@ -12,6 +12,7 @@ const css = ler("src/styles/index.css");
 const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
 const ESCOPO_ATIVO = '[data-material="glass"][data-wallpaper="active"]';
 const ESCOPO_TRANSLUCIDO = `${ESCOPO_ATIVO}[data-wallpaper-translucent="true"]`;
+const ESCOPO_FLUTUANTE = '[data-material="glass"][data-chrome="floating"]';
 
 function regrasGlassSemWallpaper(codigo: string): string {
   const limpo = codigo.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -19,7 +20,10 @@ function regrasGlassSemWallpaper(codigo: string): string {
     .map((match: RegExpMatchArray) => [match[1].trim(), match[2].trim()] as const)
     .filter(([seletor]) =>
       seletor.includes('[data-material="glass"]')
-      && !seletor.includes('[data-wallpaper="active"]'),
+      && !seletor.includes('[data-wallpaper="active"]')
+      // O baseline é o glass docado. O chrome flutuante tem regras próprias
+      // deliberadamente fora do wallpaper e não pode alterar esta referência.
+      && !seletor.includes('[data-chrome="floating"]'),
     )
     .map(([seletor, corpo]) =>
       `${seletor.replace(/\s+/g, " ")} { ${corpo.replace(/\s+/g, " ")} }`,
@@ -35,7 +39,11 @@ describe("Liquid Glass da Library: isolamento", () => {
 
     expect(seletores.length).toBeGreaterThan(0);
     expect(
-      seletores.filter((seletor: string) => !seletor.includes(ESCOPO_ATIVO)),
+      seletores.filter(
+        (seletor: string) =>
+          !seletor.includes(ESCOPO_ATIVO)
+          && !(seletor.includes(ESCOPO_FLUTUANTE) && seletor.includes(".material-liquid-bar")),
+      ),
     ).toEqual([]);
   });
 
@@ -48,7 +56,7 @@ describe("Liquid Glass da Library: isolamento", () => {
     }
   });
 
-  it("glass sem wallpaper preserva a impressao digital do baseline 869952d", () => {
+  it("glass docado sem wallpaper preserva a impressao digital do baseline 869952d", () => {
     const normalizado = regrasGlassSemWallpaper(css);
     expect(normalizado.split("\n")).toHaveLength(17);
     expect(createHash("sha256").update(normalizado).digest("hex")).toBe(

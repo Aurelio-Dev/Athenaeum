@@ -100,6 +100,155 @@ describe("material island: marcador exclusivamente geometrico", () => {
   });
 });
 
+describe("material glass: Library no chrome flutuante", () => {
+  const ESCOPO_ILHAS = '[data-material="glass"][data-chrome="floating"]';
+  const regras = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((m: RegExpMatchArray) => ({ seletor: m[1].trim(), corpo: m[2].trim() }));
+
+  function partesDoSeletor(seletor: string): string[] {
+    return seletor.split(",").map((parte) => parte.trim());
+  }
+
+  function propriedades(corpo: string): string[] {
+    return [...corpo.matchAll(/(?:^|;)\s*([\w-]+)\s*:/g)]
+      .map((m: RegExpMatchArray) => m[1]);
+  }
+
+  function regraDaLeva(criterio: (regra: { seletor: string; corpo: string }) => boolean) {
+    const encontrada = regras.find(criterio);
+    if (!encontrada) throw new Error("Regra de ilhas da Library nao encontrada");
+    return encontrada;
+  }
+
+  it("toda regra de chrome e consumo de token de ilha fica no escopo flutuante", () => {
+    const regrasDaLeva = regras.filter((regra) =>
+      regra.seletor.includes("[data-chrome")
+      || regra.corpo.includes("--glass-island-")
+      || regra.seletor.includes(`.${MARCADOR_DE_ILHA}`),
+    );
+
+    expect(regrasDaLeva, "nenhuma regra de ilhas encontrada").not.toEqual([]);
+    const partesForaDoEscopo = regrasDaLeva.flatMap((regra) =>
+      partesDoSeletor(regra.seletor).filter((parte) => !parte.includes(ESCOPO_ILHAS)),
+    );
+    expect(partesForaDoEscopo, "regra de ilhas fora do chrome flutuante").toEqual([]);
+  });
+
+  it("declara e consome os cinco tokens fechados das ilhas", () => {
+    const blocoGlass = regraDaLeva((regra) => regra.seletor === ESCOPO_ILHAS).corpo;
+    const tokens = {
+      "--glass-island-gutter": "24px",
+      "--glass-island-window-inset": "24px",
+      "--glass-island-radius": "16px",
+      "--glass-island-outline": "rgba(255, 255, 255, 0.08)",
+      "--glass-island-shadow": "var(--glass-shadow-elevated)",
+    };
+
+    const tokensDeclarados = [...blocoGlass.matchAll(/(--glass-island-[\w-]+)\s*:/g)]
+      .map((m: RegExpMatchArray) => m[1]);
+    expect(tokensDeclarados).toEqual(Object.keys(tokens));
+
+    for (const [token, valor] of Object.entries(tokens)) {
+      expect(blocoGlass, `${token} ausente ou alterado`).toContain(`${token}: ${valor};`);
+      const consumidores = regras.filter((regra) => regra.corpo.includes(`var(${token})`));
+      expect(consumidores.length, `${token} sem consumidor`).toBeGreaterThan(0);
+      expect(
+        consumidores.every((regra) =>
+          partesDoSeletor(regra.seletor).every((parte) => parte.includes(ESCOPO_ILHAS)),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("reserva a margem no AppShell e usa gap, nunca margem, entre as regioes", () => {
+    const appShell = regraDaLeva((regra) =>
+      regra.seletor === `${ESCOPO_ILHAS} .wallpaper-backdrop-root`,
+    ).corpo;
+    const workspace = regraDaLeva((regra) =>
+      regra.seletor === `${ESCOPO_ILHAS} main > div:has(> .material-island)`,
+    ).corpo;
+    const raio = regraDaLeva((regra) => regra.corpo.includes("var(--glass-island-radius)"));
+
+    expect(appShell).toContain("padding: var(--glass-island-window-inset);");
+    expect(appShell).toContain("gap: var(--glass-island-gutter);");
+    expect(appShell).not.toContain("margin:");
+    expect(workspace).toContain("gap: var(--glass-island-gutter);");
+    expect(workspace).not.toContain("margin:");
+    expect(partesDoSeletor(raio.seletor)).toEqual([
+      `${ESCOPO_ILHAS} .material-island.material-surface`,
+      `${ESCOPO_ILHAS} .material-island.material-surface-elevated`,
+    ]);
+    expect(raio.corpo).toBe("border-radius: var(--glass-island-radius);");
+
+    const margensDaLeva = regras
+      .filter((regra) => regra.seletor.includes(ESCOPO_ILHAS))
+      .flatMap((regra) => propriedades(regra.corpo).filter((propriedade) => propriedade.startsWith("margin")));
+    expect(margensDaLeva, "a calha nao pode vir de margem nos filhos").toEqual([]);
+  });
+
+  it("da acabamento somente as duas ilhas pintadas e neutraliza suas divisorias", () => {
+    const regrasDasDuasSuperficies = regras.filter((regra) =>
+      regra.seletor.includes("aside.material-surface"),
+    );
+    const acabamentosEsperados = [
+      {
+        superficie: "sidebar",
+        seletor: `${ESCOPO_ILHAS} .wallpaper-backdrop-root > aside.material-surface`,
+        tokenDeBrilho: "--glass-border-top",
+      },
+      {
+        superficie: "painel Detalhes",
+        seletor: `${ESCOPO_ILHAS} .wallpaper-backdrop-root main > div > aside.material-surface-elevated`,
+        tokenDeBrilho: "--glass-border-top-elevated",
+      },
+    ];
+
+    expect(regrasDasDuasSuperficies).toHaveLength(acabamentosEsperados.length);
+    expect(
+      regrasDasDuasSuperficies.every((regra) =>
+        partesDoSeletor(regra.seletor).every((parte) => parte.includes(ESCOPO_ILHAS)),
+      ),
+      "acabamento das ilhas fora do escopo flutuante",
+    ).toBe(true);
+
+    for (const { superficie, seletor, tokenDeBrilho } of acabamentosEsperados) {
+      const regra = regrasDasDuasSuperficies.find((candidata) => candidata.seletor === seletor);
+      const corpo = regra?.corpo ?? "";
+      const inset = `inset 0 1px 0 0 var(${tokenDeBrilho})`;
+      const contorno = "0 0 0 1px var(--glass-island-outline)";
+      const sombra = "var(--glass-island-shadow)";
+
+      expect(regra, `regra de acabamento da ${superficie} ausente`).toBeDefined();
+      expect(corpo, `${superficie}: borda deve ficar transparente`).toContain("border-color: transparent;");
+      expect(corpo, `${superficie}: brilho especular incorreto ou ausente`).toContain(inset);
+      expect(corpo, `${superficie}: contorno ausente`).toContain(contorno);
+      expect(corpo, `${superficie}: sombra elevada ausente`).toContain(sombra);
+      expect(corpo.indexOf(inset), `${superficie}: brilho deve vir antes do contorno`).toBeLessThan(corpo.indexOf(contorno));
+      expect(corpo.indexOf(contorno), `${superficie}: contorno deve vir antes da sombra`).toBeLessThan(corpo.indexOf(sombra));
+    }
+  });
+
+  it("a faixa superior nao vira painel no flutuante e permanece docada com wallpaper", () => {
+    const barraFlutuante = regraDaLeva((regra) =>
+      regra.seletor === `${ESCOPO_ILHAS} .material-liquid-bar`,
+    ).corpo;
+    const barraTranslucida = regraDaLeva((regra) =>
+      regra.seletor === `${ESCOPO_ILHAS}[data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar`,
+    ).corpo;
+
+    expect(barraFlutuante).toContain("display: contents;");
+    expect(barraFlutuante).toContain("background: none;");
+    expect(barraFlutuante).toContain("box-shadow: none;");
+    expect(barraFlutuante).toContain("-webkit-backdrop-filter: none;");
+    expect(barraFlutuante).toContain("backdrop-filter: none;");
+    expect(barraTranslucida).toContain("-webkit-backdrop-filter: none;");
+    expect(barraTranslucida).toContain("backdrop-filter: none;");
+    expect(css).toMatch(
+      /\[data-material="glass"\]\[data-wallpaper="active"\]\s+\.material-liquid-bar\s*\{[^}]*display:\s*block;/,
+    );
+  });
+});
+
 describe("material glass: flat permanece byte-identico", () => {
   it("nenhuma classe .material-surface* tem regra fora de [data-material=\"glass\"]", () => {
     // Extrai o SELETOR de cada regra (o texto antes de `{`), com os
