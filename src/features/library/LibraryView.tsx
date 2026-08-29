@@ -731,7 +731,7 @@ export function LibraryView() {
                 <button
                   type="button"
                   onClick={() => setIsAddPdfModalOpen(true)}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-text-inverse shadow-button transition hover:bg-primary-hover"
+                  className="material-surface-action inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-text-inverse shadow-button transition hover:bg-primary-hover"
                 >
                   <PlusIcon />
                   Adicionar
@@ -889,6 +889,7 @@ export function LibraryView() {
                 titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
                 verticalPosition="raised"
+                surfaceMarker="action"
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
             ) : activeRoute.type === "all" && allDocuments.length === 0 ? (
@@ -899,6 +900,7 @@ export function LibraryView() {
                 titleClassName="text-text-secondary"
                 description="Adicione PDFs e artigos para começar."
                 verticalPosition="raised"
+                surfaceMarker="action"
                 action={{ label: "Adicionar documento", onClick: () => setIsAddPdfModalOpen(true) }}
               />
             ) : (

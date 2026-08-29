@@ -415,6 +415,20 @@
   --glass-immersive-surface: linear-gradient(180deg, #292521 0%, #201C19 100%);
   --glass-immersive-border-top: rgb(255 255 255 / 0.16);
   --glass-immersive-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.70);
+  --glass-action-tint: rgb(255 255 255 / 0.24);
+  --glass-action-tint-hover: rgb(255 255 255 / 0.32);
+  --glass-action-tint-active: rgb(255 255 255 / 0.40);
+  --glass-action-blur: 12px;
+  --glass-action-saturation: 170%;
+  --glass-action-rim: rgb(255 255 255 / 0.50);
+  --glass-action-rim-inner: rgb(255 255 255 / 0.75);
+  --glass-action-shadow: 0 6px 16px rgb(0 0 0 / 0.16);
+  --glass-action-shadow-hover: 0 8px 22px rgb(0 0 0 / 0.20);
+  --glass-action-shadow-active: 0 2px 6px rgb(0 0 0 / 0.18);
+  --glass-action-label: #FFFFFF;
+  --glass-action-label-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  --glass-action-focus-ring: rgb(255 255 255 / 0.85);
+  --glass-action-focus-ring-outer: rgb(0 0 0 / 0.45);
 }
 
 /* Vence o bloco acima por especificidade (0,2,0 contra 0,1,0), nao por
@@ -452,6 +466,20 @@
   --glass-immersive-surface: linear-gradient(180deg, #292521 0%, #201C19 100%);
   --glass-immersive-border-top: rgb(255 255 255 / 0.16);
   --glass-immersive-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.70);
+  --glass-action-tint: rgb(255 255 255 / 0.16);
+  --glass-action-tint-hover: rgb(255 255 255 / 0.22);
+  --glass-action-tint-active: rgb(255 255 255 / 0.28);
+  --glass-action-blur: 12px;
+  --glass-action-saturation: 170%;
+  --glass-action-rim: rgb(255 255 255 / 0.28);
+  --glass-action-rim-inner: rgb(255 255 255 / 0.50);
+  --glass-action-shadow: 0 6px 16px rgb(0 0 0 / 0.40);
+  --glass-action-shadow-hover: 0 8px 22px rgb(0 0 0 / 0.48);
+  --glass-action-shadow-active: 0 2px 6px rgb(0 0 0 / 0.42);
+  --glass-action-label: #FFFFFF;
+  --glass-action-label-shadow: 0 1px 2px rgb(0 0 0 / 0.40);
+  --glass-action-focus-ring: rgb(255 255 255 / 0.70);
+  --glass-action-focus-ring-outer: rgb(0 0 0 / 0.55);
 }
 
 /* Wallpaper — segunda camada do material glass.
@@ -681,6 +709,57 @@
     var(--glass-shadow-elevated);
 }
 
+/* Acao primaria: vidro neutro independente do accent historico do botao.
+   O marcador so recebe pintura sob glass; no flat permanece inteiramente
+   inerte e as utilitarias existentes continuam sendo a unica origem visual. */
+[data-material="glass"] .material-surface-action {
+  background-color: var(--glass-action-tint);
+  box-shadow:
+    0 0 0 1px var(--glass-action-rim),
+    inset 0 1px 0 var(--glass-action-rim-inner),
+    var(--glass-action-shadow);
+  color: var(--glass-action-label);
+  text-shadow: var(--glass-action-label-shadow);
+  -webkit-backdrop-filter:
+    blur(var(--glass-action-blur))
+    saturate(var(--glass-action-saturation));
+  backdrop-filter:
+    blur(var(--glass-action-blur))
+    saturate(var(--glass-action-saturation));
+}
+
+[data-material="glass"] .material-surface-action:hover {
+  background-color: var(--glass-action-tint-hover);
+  box-shadow:
+    0 0 0 1px var(--glass-action-rim),
+    inset 0 1px 0 var(--glass-action-rim-inner),
+    var(--glass-action-shadow-hover);
+}
+
+[data-material="glass"] .material-surface-action:active {
+  background-color: var(--glass-action-tint-active);
+  box-shadow:
+    0 0 0 1px var(--glass-action-rim),
+    inset 0 1px 0 var(--glass-action-rim-inner),
+    var(--glass-action-shadow-active);
+}
+
+[data-material="glass"] .material-surface-action:focus-visible {
+  box-shadow:
+    0 0 0 1px var(--glass-action-focus-ring-outer),
+    0 0 0 3px var(--glass-action-focus-ring),
+    inset 0 1px 0 var(--glass-action-rim-inner),
+    var(--glass-action-shadow);
+}
+
+[data-material="glass"] .material-surface-action:focus-visible:hover {
+  box-shadow:
+    0 0 0 1px var(--glass-action-focus-ring-outer),
+    0 0 0 3px var(--glass-action-focus-ring),
+    inset 0 1px 0 var(--glass-action-rim-inner),
+    var(--glass-action-shadow-hover);
+}
+
 /* Liquid Glass so existe quando ha um backdrop real. O glass sem imagem fica
    exatamente nas regras historicas acima. A pintura em duas camadas cria uma
    aresta que muda de luz para sombra ao redor dos cantos, como vidro convexo,
@@ -815,6 +894,15 @@
 [data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"]
   :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)
   :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* A acao dentro de uma superficie ja filtrada, inclusive a barra docada,
+   reutiliza o backdrop composto pelo ancestral. */
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"]
+  :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)
+  .material-surface-action {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

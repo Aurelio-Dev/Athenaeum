@@ -23,7 +23,10 @@ function regrasGlassSemWallpaper(codigo: string): string {
       && !seletor.includes('[data-wallpaper="active"]')
       // O baseline é o glass docado. O chrome flutuante tem regras próprias
       // deliberadamente fora do wallpaper e não pode alterar esta referência.
-      && !seletor.includes('[data-chrome="floating"]'),
+      && !seletor.includes('[data-chrome="floating"]')
+      // A acao primaria tem contrato proprio em materialGlassSurfaces.test;
+      // ela nao faz parte da referencia historica dos paineis da Library.
+      && !seletor.includes('.material-surface-action'),
     )
     .map(([seletor, corpo]) =>
       `${seletor.replace(/\s+/g, " ")} { ${corpo.replace(/\s+/g, " ")} }`,
@@ -59,8 +62,13 @@ describe("Liquid Glass da Library: isolamento", () => {
   it("glass docado sem wallpaper preserva a impressao digital do baseline 869952d", () => {
     const normalizado = regrasGlassSemWallpaper(css);
     expect(normalizado.split("\n")).toHaveLength(17);
+    // Hash anterior: 14efc6b05c250a9c51f92df13bb1cb01b11fc6d31cfe41eb220e68f33f129063.
+    // A família --glass-action-* passou a ser declarada nos blocos
+    // [data-material="glass"] e .dark[data-material="glass"], que integram a
+    // string normalizada. As regras consumidoras da ação permanecem fora deste
+    // baseline pelo filtro de .material-surface-action acima.
     expect(createHash("sha256").update(normalizado).digest("hex")).toBe(
-      "14efc6b05c250a9c51f92df13bb1cb01b11fc6d31cfe41eb220e68f33f129063",
+      "d1ccac9dc01e7227c1c1676937b66b07429a7d272f9e966b7a47dcf4417fa8ea",
     );
   });
 
@@ -147,7 +155,11 @@ describe("Liquid Glass da Library: composicao", () => {
 
     expect(regrasSemFiltro).toContain(ESCOPO_TRANSLUCIDO);
     const grupo = ":is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)";
-    expect(regrasSemFiltro.split(grupo)).toHaveLength(3);
+    // Os dois primeiros usos sao o reset historico superficie-sobre-superficie;
+    // o terceiro e a acao dentro da mesma superficie, que tambem reaproveita o
+    // backdrop ja composto pelo ancestral.
+    expect(regrasSemFiltro.split(grupo)).toHaveLength(4);
+    expect(regrasSemFiltro).toContain(`${grupo}\n  .material-surface-action`);
   });
 });
 

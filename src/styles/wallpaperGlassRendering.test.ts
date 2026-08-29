@@ -46,7 +46,7 @@ describe("wallpaper: isolamento do material", () => {
     );
   });
 
-  it("transparencia, imagem e blur so existem no seletor glass + wallpaper", () => {
+  it("transparencia e imagem exigem wallpaper; blur tambem admite a acao primaria", () => {
     const ativo = regra('[data-material="glass"][data-wallpaper="active"]');
     const bodyAtivo = regra('[data-material="glass"][data-wallpaper="active"] body');
     const raizAtiva = regra(
@@ -64,12 +64,16 @@ describe("wallpaper: isolamento do material", () => {
       .filter((match: RegExpMatchArray) => match[2].includes("blur("))
       .map((match: RegExpMatchArray) => match[1]);
     expect(seletoresComBlur.length).toBeGreaterThan(0);
+    // A ação primária é a exceção nominal: seu vidro vale em todo material
+    // glass, com ou sem wallpaper. Qualquer terceiro blur sem um destes dois
+    // escopos continua sendo uma regressão.
     expect(
       seletoresComBlur.every((seletor: string) =>
         seletor
           .split(",")
           .every((parte: string) =>
-            parte.includes('[data-material="glass"][data-wallpaper="active"]'),
+            parte.includes('[data-material="glass"][data-wallpaper="active"]')
+            || parte.includes(".material-surface-action"),
           ),
       ),
     ).toBe(true);

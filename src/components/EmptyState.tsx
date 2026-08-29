@@ -1,5 +1,9 @@
 import type { ElementType } from "react";
 
+// O Reader reutiliza este componente; a lista única evita divergência entre
+// o botão histórico e a variante opt-in da Library.
+const BASE_ACTION_BUTTON_CLASSES = "inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-primary";
+
 export interface EmptyStateProps {
   icon?: ElementType;
   iconClassName?: string;
@@ -11,6 +15,7 @@ export interface EmptyStateProps {
   titleClassName?: string;
   description: string;
   verticalPosition?: "centered" | "raised";
+  surfaceMarker?: "action";
   action?: {
     label: string;
     onClick: () => void;
@@ -21,7 +26,7 @@ export interface EmptyStateProps {
 
 // Estado vazio neutro e reutilizavel. O visual chega como icone ou ilustracao;
 // o EmptyState nao decide cor por estado nem desenha SVG proprio.
-export function EmptyState({ icon: Icon, iconClassName, illustration, title, titleClassName, description, verticalPosition = "centered", action }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, iconClassName, illustration, title, titleClassName, description, verticalPosition = "centered", surfaceMarker, action }: EmptyStateProps) {
   return (
     <div className={`flex h-full flex-col items-center justify-center p-12 text-center ${verticalPosition === "raised" ? "-translate-y-7" : ""}`}>
       {illustration ? <img src={illustration.src} alt={illustration.alt} className="h-12 w-12 opacity-70" /> : null}
@@ -34,7 +39,7 @@ export function EmptyState({ icon: Icon, iconClassName, illustration, title, tit
             type="button"
             onClick={action.onClick}
             disabled={action.disabled}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-primary"
+            className={surfaceMarker ? `material-surface-action ${BASE_ACTION_BUTTON_CLASSES}` : BASE_ACTION_BUTTON_CLASSES}
           >
             {action.label}
           </button>

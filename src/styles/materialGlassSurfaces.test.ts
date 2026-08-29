@@ -71,6 +71,17 @@ function ocorrenciasDaClasse(classe: string): string[] {
   return encontrados.sort();
 }
 
+function coocorremMarcadorEConstanteComFundo(
+  fonte: string,
+  marcador: string,
+  fundo: string,
+): boolean {
+  const valoresDeConstantes = [...fonte.matchAll(/const\s+[A-Z_]+\s*=\s*"([^"]*)"/g)]
+    .map((m: RegExpMatchArray) => m[1].split(/\s+/));
+  return fonte.includes(marcador)
+    && valoresDeConstantes.some((classes) => classes.includes(fundo));
+}
+
 const MARCADORES = [
   "material-surface",
   "material-surface-elevated",
@@ -288,6 +299,128 @@ describe("material glass: flat permanece byte-identico", () => {
   });
 });
 
+describe("material glass: acao primaria da Library", () => {
+  const MARCADOR_DE_ACAO = "material-surface-action";
+  const ESCOPO_GLASS = '[data-material="glass"]';
+  const SELETOR_DO_RESET_ANINHADO = `${ESCOPO_GLASS}[data-wallpaper="active"][data-wallpaper-translucent="true"]\n  :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)\n  .${MARCADOR_DE_ACAO}`;
+  const regras = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((m: RegExpMatchArray) => ({ seletor: m[1].trim(), corpo: m[2].trim() }));
+
+  function corpoDoBloco(seletor: string): string {
+    const regra = regras.find((candidata) => candidata.seletor === seletor);
+    if (!regra) throw new Error(`Bloco glass nao encontrado: ${seletor}`);
+    return regra.corpo;
+  }
+
+  it("o marcador de acao nao recebe declaracao fora do escopo glass", () => {
+    // Flat nao conhece o marcador: toda regra que o cita precisa carregar o
+    // escopo de material, para as classes Tailwind continuarem soberanas.
+    const seletoresDaAcao = regras
+      .map((regra) => regra.seletor)
+      .filter((seletor) => seletor.includes(`.${MARCADOR_DE_ACAO}`));
+
+    expect(seletoresDaAcao, "nenhuma regra para a acao foi encontrada").not.toEqual([]);
+    expect(
+      seletoresDaAcao.filter((seletor) => !seletor.includes(ESCOPO_GLASS)),
+      "regra da acao fora do escopo glass",
+    ).toEqual([]);
+  });
+
+  it("declara todos os tokens da acao nos dois blocos glass", () => {
+    const tokensEsperados = [
+      "--glass-action-tint",
+      "--glass-action-tint-hover",
+      "--glass-action-tint-active",
+      "--glass-action-blur",
+      "--glass-action-saturation",
+      "--glass-action-rim",
+      "--glass-action-rim-inner",
+      "--glass-action-shadow",
+      "--glass-action-shadow-hover",
+      "--glass-action-shadow-active",
+      "--glass-action-label",
+      "--glass-action-label-shadow",
+      "--glass-action-focus-ring",
+      "--glass-action-focus-ring-outer",
+    ];
+
+    for (const seletor of [ESCOPO_GLASS, `.dark${ESCOPO_GLASS}`]) {
+      const declarados = [...corpoDoBloco(seletor).matchAll(/(--glass-action-[\w-]+)\s*:/g)]
+        .map((m: RegExpMatchArray) => m[1]);
+      expect(declarados, `familia incompleta em ${seletor}`).toEqual(tokensEsperados);
+    }
+  });
+
+  it("a acao aninhada reutiliza o backdrop filtrado pelo ancestral", () => {
+    // Repete o seletor geral de superficies aninhadas, incluindo a barra
+    // docada, para impedir uma segunda amostragem do mesmo wallpaper.
+    const corpo = corpoDoBloco(SELETOR_DO_RESET_ANINHADO);
+    expect(corpo).toContain("-webkit-backdrop-filter: none;");
+    expect(corpo).toContain("backdrop-filter: none;");
+  });
+
+  it("a acao nao escapa do inventario fechado de marcadores", () => {
+    // Mantem o escopo dos dois botoes explicitamente pequeno; um terceiro
+    // consumidor precisa entrar aqui antes de poder receber o material.
+    expect(arquivosComMarcador(MARCADOR_DE_ACAO)).toEqual([
+      "src/components/EmptyState.tsx",
+      "src/features/library/LibraryView.tsx",
+    ]);
+  });
+
+  it("os dois botoes preservam todas as utilitarias flat originais", () => {
+    const libraryView = ler("src/features/library/LibraryView.tsx");
+    const emptyState = ler("src/components/EmptyState.tsx");
+    const classesDoTopbar = libraryView
+      .match(/className="([^"]*material-surface-action[^"]*)"/)?.[1]
+      .split(/\s+/) ?? [];
+    const classesDoEmptyState = emptyState
+      .match(/const\s+BASE_ACTION_BUTTON_CLASSES\s*=\s*"([^"]*)"/)?.[1]
+      .split(/\s+/) ?? [];
+
+    for (const classe of [
+      "inline-flex",
+      "shrink-0",
+      "items-center",
+      "gap-2",
+      "rounded-lg",
+      "border",
+      "border-transparent",
+      "bg-primary",
+      "px-4",
+      "py-2",
+      "font-bold",
+      "text-text-inverse",
+      "shadow-button",
+      "transition",
+      "hover:bg-primary-hover",
+    ]) {
+      expect(classesDoTopbar, `topbar perdeu a classe ${classe}`).toContain(classe);
+    }
+
+    for (const classe of [
+      "inline-flex",
+      "items-center",
+      "gap-2",
+      "rounded-lg",
+      "bg-primary",
+      "px-4",
+      "py-2.5",
+      "text-sm",
+      "font-bold",
+      "text-text-inverse",
+      "shadow-button",
+      "transition",
+      "hover:bg-primary-hover",
+      "disabled:cursor-not-allowed",
+      "disabled:opacity-60",
+      "disabled:hover:bg-primary",
+    ]) {
+      expect(classesDoEmptyState, `EmptyState perdeu a classe ${classe}`).toContain(classe);
+    }
+  });
+});
+
 describe("material glass: cada papel consome o token certo", () => {
   // Junta TODAS as regras glass de um papel, nao so a primeira: desde que o
   // card passou a separar repouso de selecionado, um papel pode ocupar mais
@@ -460,6 +593,8 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     ["src/components/NewCollectionModal.tsx", "material-surface-overlay", "bg-surface-panel", "modal de nova colecao"],
     ["src/components/ConfirmationDialog.tsx", "material-surface-overlay", "bg-surface-panel", "dialogo de confirmacao"],
     ["src/components/InfoDialog.tsx", "material-surface-overlay", "bg-surface-panel", "dialogo informativo"],
+    ["src/features/library/LibraryView.tsx", "material-surface-action", "bg-primary", "acao primaria do topo"],
+    ["src/components/EmptyState.tsx", "material-surface-action", "bg-primary", "acao primaria do estado vazio"],
   ];
 
   it.each(ALVOS)("%s: %s em %s (%s)", (arquivo, marcador, fundo, papel) => {
@@ -471,9 +606,16 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     // explicito; a utilitaria de fundo tem de estar na mesma vizinhanca.
     const JANELA = 700;
     const ocorrencias = [...fonte.matchAll(new RegExp(`${marcador}(?=[\\s"\`])`, "g"))];
-    const casou = ocorrencias.some((m) =>
-      fonte.slice(m.index ?? 0, (m.index ?? 0) + JANELA).includes(fundo),
-    );
+    // O EmptyState deduplica as utilitarias numa constante anterior ao botao;
+    // por isso este alvo nao usa a janela de 700 caracteres. A coocorrencia
+    // confirma separadamente o marcador e o fundo dentro de uma constante.
+    const usaBaseCompartilhada = arquivo === "src/components/EmptyState.tsx"
+      && marcador === "material-surface-action";
+    const casou = usaBaseCompartilhada
+      ? coocorremMarcadorEConstanteComFundo(fonte, marcador, fundo)
+      : ocorrencias.some((m) =>
+        fonte.slice(m.index ?? 0, (m.index ?? 0) + JANELA).includes(fundo),
+      );
     expect(casou, `${papel}: nenhum "${marcador}" perto de "${fundo}"`).toBe(true);
   });
 
