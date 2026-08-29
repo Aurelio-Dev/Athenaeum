@@ -429,6 +429,39 @@
   --glass-action-label-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
   --glass-action-focus-ring: rgb(255 255 255 / 0.85);
   --glass-action-focus-ring-outer: rgb(0 0 0 / 0.45);
+  /* Segmento selecionado de um controle segmentado. Mesma familia da acao
+     acima: luz neutra em vez do accent terracota. SUBSTRATO DIFERENTE, alpha
+     diferente: 0.58 aqui contra 0.24 em --glass-action-tint. A acao assenta
+     sobre o WALLPAPER, onde 0.24 de branco ja separa o botao do fundo; este
+     segmento assenta sobre o TRILHO, que ja e uma superficie clara — a 0.24
+     ele nao se destacaria do proprio trilho e a selecao sumiria.
+     O especular repete --glass-action-rim-inner de proposito: e a mesma
+     aresta de luz, no mesmo tema.
+     A tinta clara pede tinta ESCURA no icone; e o inverso da acao, cujo rotulo
+     e branco porque a tinta dela cobre o wallpaper. */
+  --glass-control-selected: rgb(255 255 255 / 0.58);
+  --glass-control-selected-inner: rgb(255 255 255 / 0.75);
+  --glass-control-selected-shadow: 0 1px 3px rgb(44 26 16 / 0.20);
+  --glass-control-icon: rgb(44 24 16 / 1);
+  --glass-control-icon-idle: rgb(122 101 88 / 1);
+  --glass-control-stroke: 2.5;
+  --glass-control-stroke-idle: 2;
+  /* Trilho de um grupo segmentado — hoje so as abas da colecao. Diferente do
+     trilho do toggle, que e um .material-liquid-control e por isso reaproveita
+     o backdrop do ancestral, este NAO declara filtro: as abas ficam direto
+     sobre o wallpaper, sem substrato filtrado, e um backdrop-filter proprio
+     aqui criaria mais uma camada de composicao por grupo. Fica so tinta
+     translucida, aresta e assento — mesmo acabamento, uma camada a menos.
+     Alpha ABAIXO do --glass-control-selected (0.38 contra 0.58): o trilho e o
+     substrato da aba ativa, entao precisa ficar mais apagado que ela, ou a
+     selecao nao se separa do fundo em que assenta.
+     Raio e padding sao TOKEN, nao utilitaria Tailwind: no flat o trilho nao
+     existe como superficie e nao pode ganhar caixa. */
+  --glass-track-surface: rgb(255 255 255 / 0.38);
+  --glass-track-rim: rgb(255 255 255 / 0.42);
+  --glass-track-shadow: 0 1px 3px rgb(44 26 16 / 0.16);
+  --glass-track-radius: 9999px;
+  --glass-track-padding: 3px;
 }
 
 /* Vence o bloco acima por especificidade (0,2,0 contra 0,1,0), nao por
@@ -480,6 +513,25 @@
   --glass-action-label-shadow: 0 1px 2px rgb(0 0 0 / 0.40);
   --glass-action-focus-ring: rgb(255 255 255 / 0.70);
   --glass-action-focus-ring-outer: rgb(0 0 0 / 0.55);
+  /* No escuro o trilho e escuro: a mesma luz precisa de MENOS alpha para ler
+     como selecionada, e o icone volta a ser claro. A sombra troca a terracota
+     por preto, como todo par claro/escuro dos tokens de ilha. */
+  --glass-control-selected: rgb(255 255 255 / 0.22);
+  --glass-control-selected-inner: rgb(255 255 255 / 0.50);
+  --glass-control-selected-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+  --glass-control-icon: rgb(240 232 223 / 1);
+  --glass-control-icon-idle: rgb(158 136 120 / 1);
+  --glass-control-stroke: 2.5;
+  --glass-control-stroke-idle: 2;
+  /* Mesma logica do claro, invertida: sobre fundo escuro a tinta do trilho cai
+     para 0.08 e segue abaixo do 0.22 da aba ativa. Raio e padding repetem por
+     simetria com a familia --glass-action-*, que tambem declara seus valores
+     nao-cromaticos nos dois blocos. */
+  --glass-track-surface: rgb(255 255 255 / 0.08);
+  --glass-track-rim: rgb(255 255 255 / 0.18);
+  --glass-track-shadow: 0 1px 3px rgb(0 0 0 / 0.40);
+  --glass-track-radius: 9999px;
+  --glass-track-padding: 3px;
 }
 
 /* Wallpaper — segunda camada do material glass.
@@ -760,6 +812,104 @@
     var(--glass-action-shadow-hover);
 }
 
+/* Controle segmentado: o selecionado deixa de ser terracota e passa a ser LUZ.
+   ---------------------------------------------------------------------------
+   ALVO. Marcador PROPRIO no segmento, com o estado no mesmo elemento — mesma
+   forma de `.material-surface-card[aria-pressed="true"]` mais abaixo.
+   A primeira versao ancorava o seletor no trilho e descia ate o <button>
+   filho; foi recusada pelo teste de isolamento, e com razao: a familia
+   `.material-liquid-*` so pode receber CSS sob `[data-wallpaper="active"]`,
+   porque liquid pressupoe um backdrop real. O preenchimento do segmento nao e
+   liquid — nao ha backdrop-filter aqui, so tinta e especular —, entao ele
+   pertence a familia `.material-surface-*`, que vale com ou sem wallpaper,
+   como a acao primaria. O trilho segue intocado.
+
+   SEM ANEL EXTERNO, de proposito. O segmento mede 32x32: um rim de 1px seria
+   ~12% da area do quadrado, contra ~7% no botao da acao primaria. Alem disso o
+   trilho ja tem o anel dele (.material-liquid-control), e dois aneis
+   concentricos a 2px de distancia leem como falha de alinhamento, nao como
+   profundidade. Fica so preenchimento + especular interno + sombra curta.
+
+   O MATERIAL GOVERNA O REPOUSO, O ESTADO GOVERNA O RESTO — mesma doutrina da
+   regra do card mais abaixo. A cor do INATIVO carrega `:not(:hover)` para NAO
+   CASAR sob o ponteiro: assim o `hover:text-text-primary` do Tailwind (0,2,0)
+   continua soberano no hover, em vez de ser atropelado por estes (0,3,0). O
+   ganho nao e de especificidade, e de alcance.
+
+   O TRACO nao usa `:not(:hover)`: 2 no inativo vale em repouso e sob o
+   ponteiro; so a selecao o leva a 2.5. */
+[data-material="glass"] .material-surface-segment[aria-pressed="true"] {
+  background-color: var(--glass-control-selected);
+  box-shadow:
+    inset 0 1px 0 var(--glass-control-selected-inner),
+    var(--glass-control-selected-shadow);
+  color: var(--glass-control-icon);
+}
+
+[data-material="glass"] .material-surface-segment:not([aria-pressed="true"]):not(:hover) {
+  color: var(--glass-control-icon-idle);
+}
+
+/* O segundo sinal de selecao. `strokeWidth` e atributo de apresentacao no
+   <svg> (nao nos paths), e atributo de apresentacao perde para qualquer regra
+   CSS — entao mirar o <svg> basta, e o valor computado desce por heranca para
+   os <rect>/<line> filhos, que nao declaram traco proprio. No flat nenhuma
+   destas regras existe e o atributo "2" do JSX segue sendo a unica origem.
+   Os tres <circle> do ListIcon tem stroke="none" e fill="currentColor": sao
+   pontos preenchidos e nao mudam de peso com o traco. */
+[data-material="glass"] .material-surface-segment[aria-pressed="true"] > svg {
+  stroke-width: var(--glass-control-stroke);
+}
+
+[data-material="glass"] .material-surface-segment:not([aria-pressed="true"]) > svg {
+  stroke-width: var(--glass-control-stroke-idle);
+}
+
+/* Trilho das abas Documentos/Cadernos/Quadros.
+   ---------------------------------------------------------------------------
+   SEM FILTRO PROPRIO, por decisao. O trilho do toggle e um
+   .material-liquid-control e reaproveita o backdrop composto pelo ancestral;
+   este nao tem ancestral filtrado — as abas ficam direto sobre o wallpaper —,
+   e declarar backdrop-filter aqui abriria mais uma camada de composicao so
+   para tres pilulas. Fica no mesmo acabamento do precedente: tinta, aresta e
+   assento. Consequencia deliberada: nenhum reset ou restauracao novo e
+   necessario, e o grupo :is(...) do reset aninhado segue intocado.
+
+   COM ANEL EXTERNO, ao contrario do segmento 32x32. Aqui o anel de 1px e ~7%
+   da area do trilho (mesma ordem do botao da acao primaria), e nao existe um
+   segundo anel concentrico para conflitar: o trilho E o unico contorno do
+   grupo.
+
+   SEM INDICADOR DESLIZANTE e sem animar posicao. A aba ativa troca
+   font-normal por font-bold, o que muda a LARGURA INTRINSECA dela e reflui as
+   tres — um indicador que precisasse coincidir com a caixa da ativa mudaria de
+   largura e de posicao na mesma transicao, atras de um texto que salta de peso
+   sem interpolar. O preenchimento pertence a propria aba.
+
+   RAIO E PADDING VEM DAQUI, nao de utilitaria: no flat o trilho nao e
+   superficie nenhuma e nao pode ganhar caixa. */
+[data-material="glass"] .material-surface-track {
+  background-color: var(--glass-track-surface);
+  border-radius: var(--glass-track-radius);
+  padding: var(--glass-track-padding);
+  box-shadow:
+    0 0 0 1px var(--glass-track-rim),
+    var(--glass-track-shadow);
+}
+
+/* A aba ativa reusa os tokens do controle segmentado: e o mesmo papel
+   semantico — "selecionado dentro de um grupo" — e ter dois vocabularios de
+   luz para o mesmo papel os faria divergir na primeira mudanca de valor.
+   A cor E obrigatoria aqui: o JSX pinta `text-text-inverse` (#FFFFFF), que
+   sobre uma tinta clara de 0.58 ficaria ilegivel. */
+[data-material="glass"] .material-surface-track > [aria-selected="true"] {
+  background-color: var(--glass-control-selected);
+  box-shadow:
+    inset 0 1px 0 var(--glass-control-selected-inner),
+    var(--glass-control-selected-shadow);
+  color: var(--glass-control-icon);
+}
+
 /* Liquid Glass so existe quando ha um backdrop real. O glass sem imagem fica
    exatamente nas regras historicas acima. A pintura em duas camadas cria uma
    aresta que muda de luz para sombra ao redor dos cantos, como vidro convexo,
@@ -984,6 +1134,29 @@
 [data-material="glass"][data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* FIX (chrome flutuante): a acao primaria recupera o filtro que o reset
+   aninhado de :894-908 tira dela sem contrapartida.
+   No docado a faixa superior e um painel de verdade — pinta tinta e compoe o
+   proprio backdrop —, entao a acao dentro dela reaproveita esse backdrop e o
+   reset esta certo. No flutuante a faixa volta a `display: contents` (regra
+   acima): nao pinta, nao filtra, nao gera caixa. O reset continua casando
+   assim mesmo, porque `display: contents` remove a GERACAO DE CAIXA, nao o
+   elemento da arvore de casamento de seletor — e o botao fica sem nenhum
+   filtro, nem proprio nem herdado. Esta regra devolve o filtro proprio da
+   acao, e so nesse caso.
+   Escopo repete wallpaper+translucent de proposito: e exatamente a conjuncao
+   em que o reset dispara, e da a (0,6,0) que vence os (0,5,0) de la sem
+   precisar repetir o literal do grupo :is(...) — cuja contagem esta travada
+   em liquidGlassLibrary.test.ts:161. */
+[data-material="glass"][data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar .material-surface-action {
+  -webkit-backdrop-filter:
+    blur(var(--glass-action-blur))
+    saturate(var(--glass-action-saturation));
+  backdrop-filter:
+    blur(var(--glass-action-blur))
+    saturate(var(--glass-action-saturation));
 }
 
 /* Contraste visual da interface. Os níveis preservam a paleta e ajustam

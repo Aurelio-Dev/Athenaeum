@@ -121,7 +121,7 @@ export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente"
             key={mode}
             type="button"
             onClick={() => onViewModeChange(mode)}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition ${
+            className={`material-surface-segment inline-flex h-8 w-8 items-center justify-center rounded-md transition ${
               viewMode === mode ? "bg-primary text-text-inverse" : "text-text-secondary hover:text-text-primary"
             }`}
             aria-label={label}

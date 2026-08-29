@@ -12,8 +12,12 @@ import {
 const css = readFileSync("src/styles/index.css", "utf8");
 const appShell = readFileSync("src/components/AppShell.tsx", "utf8");
 
+// Os comentarios citam seletores e classes de proposito e usam virgula em
+// prosa normal. Toda leitura estrutural do CSS parte da versao sem eles, como
+// nos demais testes de estilo do projeto.
+const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
 function regra(seletor: string): string {
-  const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const escapado = seletor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const achada = semComentarios.match(new RegExp(`${escapado}\\s*\\{([^}]*)\\}`));
   if (!achada) {
@@ -60,7 +64,7 @@ describe("wallpaper: isolamento do material", () => {
     expect(raizAtiva).toContain("background: transparent;");
     expect(appShell).toContain("wallpaper-backdrop-root");
 
-    const seletoresComBlur = [...css.matchAll(/([^{}]+)\{([^{}]*backdrop-filter:[^{}]*)\}/g)]
+    const seletoresComBlur = [...semComentarios.matchAll(/([^{}]+)\{([^{}]*backdrop-filter:[^{}]*)\}/g)]
       .filter((match: RegExpMatchArray) => match[2].includes("blur("))
       .map((match: RegExpMatchArray) => match[1]);
     expect(seletoresComBlur.length).toBeGreaterThan(0);

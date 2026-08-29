@@ -61,14 +61,33 @@ describe("Liquid Glass da Library: isolamento", () => {
 
   it("glass docado sem wallpaper preserva a impressao digital do baseline 869952d", () => {
     const normalizado = regrasGlassSemWallpaper(css);
-    expect(normalizado.split("\n")).toHaveLength(17);
+    expect(normalizado.split("\n")).toHaveLength(23);
     // Hash anterior: 14efc6b05c250a9c51f92df13bb1cb01b11fc6d31cfe41eb220e68f33f129063.
     // A família --glass-action-* passou a ser declarada nos blocos
     // [data-material="glass"] e .dark[data-material="glass"], que integram a
     // string normalizada. As regras consumidoras da ação permanecem fora deste
     // baseline pelo filtro de .material-surface-action acima.
+    //
+    // ATUALIZADO (indicador por luz do controle segmentado): 17 -> 21 regras,
+    // hash anterior d1ccac9dc01e7227c1c1676937b66b07429a7d272f9e966b7a47dcf4417fa8ea.
+    // Duas mudancas distintas, ambas deliberadas:
+    //  1. os sete tokens --glass-control-* entram nos dois blocos glass
+    //     compartilhados, exatamente como a familia --glass-action-* fez antes;
+    //  2. as QUATRO regras de .material-surface-segment entram na contagem.
+    // Diferente da acao primaria, o segmento NAO foi excluido por filtro: ele
+    // muda de verdade o glass docado sem wallpaper (terracota -> luz), e e
+    // esse tipo de mudanca que este baseline existe para registrar. Esconde-la
+    // atras de um filtro deixaria o baseline cego para a proxima. Se a
+    // contagem subir sem uma linha nova aqui, e regressao.
+    //
+    // ATUALIZADO (trilho de vidro das abas): 21 -> 23 regras, hash anterior
+    // f7dab5c16d4ceb8901a685cabcdc05390fc4d252860c2a59f4a02dc61b3ae759.
+    // Mesma natureza da entrada acima: os cinco tokens --glass-track-* entram
+    // nos dois blocos glass, e as DUAS regras de .material-surface-track (o
+    // trilho e a aba ativa) entram na contagem. O trilho nao declara filtro
+    // proprio, entao nada muda no grupo :is(...) do reset aninhado.
     expect(createHash("sha256").update(normalizado).digest("hex")).toBe(
-      "d1ccac9dc01e7227c1c1676937b66b07429a7d272f9e966b7a47dcf4417fa8ea",
+      "d0132e0aaa2ab2d4d648346ef69518f4ba386594c96d0ec9b133ca4b5be63ecb",
     );
   });
 

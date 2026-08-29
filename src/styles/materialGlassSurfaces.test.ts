@@ -359,6 +359,39 @@ describe("material glass: acao primaria da Library", () => {
     expect(corpo).toContain("backdrop-filter: none;");
   });
 
+  it("no chrome flutuante a acao recupera o filtro que o reset aninhado tirou", () => {
+    // O reset acima pressupoe que o ancestral JA compos um backdrop. No
+    // flutuante a faixa vira `display: contents` e nao compoe nada — mas
+    // continua casando como ancestral, porque `display: contents` tira a
+    // GERACAO DE CAIXA, nao o elemento da arvore de casamento de seletor.
+    // Sem esta restauracao o botao do topbar fica sem filtro nenhum.
+    const SELETOR_DA_RESTAURACAO = `${ESCOPO_GLASS}[data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar .${MARCADOR_DE_ACAO}`;
+    const corpo = corpoDoBloco(SELETOR_DA_RESTAURACAO);
+
+    expect(corpo).toContain("blur(var(--glass-action-blur))");
+    expect(corpo).toContain("saturate(var(--glass-action-saturation))");
+    expect(corpo).not.toContain("backdrop-filter: none");
+    // Quatro atributos + duas classes = (0,6,0), contra os (0,5,0) do reset.
+    // E o que a faz vencer sem repetir o literal do grupo :is(...), cuja
+    // contagem esta travada em liquidGlassLibrary.test.ts.
+    expect(SELETOR_DA_RESTAURACAO.match(/\[data-/g)).toHaveLength(4);
+
+    // ESPECIFICA A FLUTUANTE: no docado a faixa pinta de verdade e o reset
+    // esta correto — restaurar o filtro la criaria a segunda amostragem do
+    // wallpaper que o reset existe para impedir. A unica regra da acao com o
+    // blur fora do eixo de chrome tem de ser a declaracao base.
+    const comBlurDaAcao = regras.filter((regra) =>
+      regra.seletor.includes(`.${MARCADOR_DE_ACAO}`)
+      && regra.corpo.includes("blur(var(--glass-action-blur))"),
+    );
+    expect(
+      comBlurDaAcao
+        .filter((regra) => !regra.seletor.includes('[data-chrome="floating"]'))
+        .map((regra) => regra.seletor),
+      "restauracao de filtro da acao fora do chrome flutuante",
+    ).toEqual([`${ESCOPO_GLASS} .${MARCADOR_DE_ACAO}`]);
+  });
+
   it("a acao nao escapa do inventario fechado de marcadores", () => {
     // Mantem o escopo dos dois botoes explicitamente pequeno; um terceiro
     // consumidor precisa entrar aqui antes de poder receber o material.
@@ -570,15 +603,163 @@ describe("material glass: o MATERIAL governa o repouso, o ESTADO governa o resto
   });
 });
 
+describe("material glass: o segmento selecionado e LUZ, nao terracota", () => {
+  const MARCADOR = "material-surface-segment";
+  const ESCOPO_GLASS = '[data-material="glass"]';
+  const regras = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((m: RegExpMatchArray) => ({ seletor: m[1].trim(), corpo: m[2].trim() }));
+
+  function corpoDe(seletor: string): string {
+    const regra = regras.find((candidata) => candidata.seletor === seletor);
+    if (!regra) throw new Error(`Regra do segmento nao encontrada: ${seletor}`);
+    return regra.corpo;
+  }
+
+  it("declara os sete tokens de controle nos dois blocos glass", () => {
+    const esperados = [
+      "--glass-control-selected",
+      "--glass-control-selected-inner",
+      "--glass-control-selected-shadow",
+      "--glass-control-icon",
+      "--glass-control-icon-idle",
+      "--glass-control-stroke",
+      "--glass-control-stroke-idle",
+    ];
+
+    for (const seletor of [ESCOPO_GLASS, `.dark${ESCOPO_GLASS}`]) {
+      const declarados = [...corpoDe(seletor).matchAll(/(--glass-control-[\w-]+)\s*:/g)]
+        .map((m: RegExpMatchArray) => m[1]);
+      expect(declarados, `familia de controle incompleta em ${seletor}`).toEqual(esperados);
+    }
+  });
+
+  it("o selecionado tem preenchimento e especular, e NENHUM anel externo", () => {
+    // 32x32 com rim de 1px = ~12% da area so de borda, e o trilho ja tem o
+    // anel dele. Dois aneis concentricos a 2px leem como desalinhamento.
+    const corpo = corpoDe(`${ESCOPO_GLASS} .${MARCADOR}[aria-pressed="true"]`);
+
+    expect(corpo).toContain("background-color: var(--glass-control-selected);");
+    expect(corpo).toContain("inset 0 1px 0 var(--glass-control-selected-inner)");
+    expect(corpo).toContain("var(--glass-control-selected-shadow)");
+    expect(corpo).toContain("color: var(--glass-control-icon);");
+    // Um anel externo seria uma sombra sem `inset` com spread. As unicas
+    // sombras permitidas aqui sao o especular interno e a sombra de assento.
+    const sombras = (corpo.match(/box-shadow:([^;]*);/)?.[1] ?? "").split(",");
+    expect(
+      sombras.filter((s: string) => !s.includes("inset") && !s.includes("--glass-control-selected-shadow")),
+      "anel externo no segmento",
+    ).toEqual([]);
+    expect(corpo).not.toContain("--color-primary");
+  });
+
+  it("o inativo NAO alcanca o hover, para o Tailwind seguir soberano ali", () => {
+    // Mesma doutrina da regra do card: o ganho e de ALCANCE, nao de
+    // especificidade. Sem o :not(:hover) estes (0,4,0) atropelariam o
+    // `hover:text-text-primary` (0,2,0) e o hover do inativo morreria.
+    const seletorInativo = `${ESCOPO_GLASS} .${MARCADOR}:not([aria-pressed="true"]):not(:hover)`;
+    expect(corpoDe(seletorInativo)).toContain("color: var(--glass-control-icon-idle);");
+
+    const queCasamCorDoInativo = regras
+      .map((regra) => regra.seletor)
+      .filter((seletor) =>
+        seletor.includes(`.${MARCADOR}`)
+        && seletor.includes(':not([aria-pressed="true"])')
+        && !seletor.includes("svg"),
+      );
+    expect(
+      queCasamCorDoInativo.filter((seletor) => !seletor.includes(":not(:hover)")),
+      "regra de cor do inativo sem :not(:hover) atropela o hover do Tailwind",
+    ).toEqual([]);
+  });
+
+  it("o segundo sinal e o traco, mirado no <svg> e so sob glass", () => {
+    // strokeWidth e atributo de apresentacao NO <svg> (nao nos paths): o
+    // seletor precisa mirar o svg, e o valor desce por heranca. Se alguem
+    // mover o atributo para os paths, o alvo deixa de valer.
+    const jsx = ler("src/features/library/LibraryToolbar.tsx");
+    const svgs = [...jsx.matchAll(/<svg[^>]*>/g)].map((m: RegExpMatchArray) => m[0]);
+    expect(svgs.length).toBeGreaterThan(0);
+    expect(
+      svgs.filter((svg: string) => !svg.includes('strokeWidth="2"')),
+      "algum <svg> da toolbar deixou de declarar o traco base",
+    ).toEqual([]);
+    // O flat continua em 2: o atributo do JSX nao muda.
+    expect(jsx).not.toContain('strokeWidth="2.5"');
+
+    expect(corpoDe(`${ESCOPO_GLASS} .${MARCADOR}[aria-pressed="true"] > svg`))
+      .toBe("stroke-width: var(--glass-control-stroke);");
+    expect(corpoDe(`${ESCOPO_GLASS} .${MARCADOR}:not([aria-pressed="true"]) > svg`))
+      .toBe("stroke-width: var(--glass-control-stroke-idle);");
+  });
+
+  it("o marcador nao e da familia liquid e o trilho segue intocado", () => {
+    // O preenchimento nao usa backdrop-filter, entao nao pode carregar um
+    // marcador liquid: a familia .material-liquid-* so recebe CSS sob
+    // [data-wallpaper="active"], e o segmento precisa valer tambem no glass
+    // sem imagem, como a acao primaria.
+    const doSegmento = regras.filter((regra) => regra.seletor.includes(`.${MARCADOR}`));
+    expect(doSegmento.length).toBe(4);
+    expect(
+      doSegmento.filter((regra) => regra.corpo.includes("backdrop-filter")),
+      "o segmento nao pode declarar filtro proprio",
+    ).toEqual([]);
+    expect(
+      doSegmento.filter((regra) => regra.seletor.includes(".material-liquid-")),
+      "o segmento nao pode depender do trilho liquid",
+    ).toEqual([]);
+
+    // O trilho e o gatilho "Recente" sao irmaos e nao podem divergir de
+    // material nesta leva: os dois seguem com o mesmo par de marcadores.
+    const jsx = ler("src/features/library/LibraryToolbar.tsx");
+    expect(
+      [...jsx.matchAll(/material-liquid-control material-surface-elevated/g)].length,
+      "trilho e gatilho precisam manter o mesmo par de marcadores",
+    ).toBe(2);
+  });
+
+  it("o segmento preserva todas as utilitarias flat originais", () => {
+    const jsx = ler("src/features/library/LibraryToolbar.tsx");
+    const classes = jsx
+      .match(/className=\{`(material-surface-segment[^`]*)`/)?.[1]
+      .replace(/\$\{[^}]*\}/g, " ")
+      .split(/\s+/) ?? [];
+
+    for (const classe of [
+      "inline-flex",
+      "h-8",
+      "w-8",
+      "items-center",
+      "justify-center",
+      "rounded-md",
+      "transition",
+    ]) {
+      expect(classes, `o segmento perdeu a classe ${classe}`).toContain(classe);
+    }
+    // O ramo de estado do template literal segue sendo o do flat.
+    expect(jsx).toContain('viewMode === mode ? "bg-primary text-text-inverse" : "text-text-secondary hover:text-text-primary"');
+    expect(jsx).toContain("aria-pressed={viewMode === mode}");
+  });
+});
+
 describe("material glass: as superficies da Library carregam o marcador certo", () => {
   // Papel esperado de cada superficie, com a utilitaria de fundo que ela ja
   // tinha no flat — o par prova que o marcador foi para o elemento certo, e
   // nao para um filho qualquer que por acaso tem a mesma classe.
-  const ALVOS: ReadonlyArray<readonly [string, string, string, string]> = [
+  // O terceiro campo aceita null: significa SUPERFICIE SEM UTILITARIA DE FUNDO
+  // NO FLAT — a pintura inteira vem do CSS glass, entao nao existe par
+  // marcador+fundo para provar posicionamento. Nesse caso a assercao troca de
+  // forma (ver abaixo) em vez de aceitar o bg-* de um vizinho: o trilho das
+  // abas tem um `bg-primary` de botao ativo a poucas linhas do marcador, bem
+  // dentro da janela de 700 caracteres, e casar com ele seria falso positivo.
+  const ALVOS: ReadonlyArray<readonly [string, string, string | null, string]> = [
     ["src/components/Sidebar.tsx", "material-surface", "bg-sidebar", "sidebar (raiz)"],
     ["src/components/Sidebar.tsx", "material-surface-overlay", "bg-surface-panel", "dialogo de colecao"],
     ["src/features/library/LibraryToolbar.tsx", "material-surface-elevated", "bg-surface-panel", "controles da toolbar"],
     ["src/features/library/LibraryToolbar.tsx", "material-surface-overlay", "bg-surface-panel", "menu de ordenacao"],
+    // O segmento e o unico alvo cuja utilitaria de fundo so existe no estado
+    // selecionado: `bg-primary` esta no ramo ativo do template literal. E o
+    // fundo que ele tinha no flat, entao o par continua honesto.
+    ["src/features/library/LibraryToolbar.tsx", "material-surface-segment", "bg-primary", "segmento grade/lista"],
     ["src/features/library/LibraryView.tsx", "material-surface-elevated", "bg-surface-card", "container da lista"],
     // O card da grade aparece nas tres abas mutuamente exclusivas da Library;
     // Documentos, Cadernos e Quadros carregam o mesmo marcador por decisao.
@@ -595,10 +776,33 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     ["src/components/InfoDialog.tsx", "material-surface-overlay", "bg-surface-panel", "dialogo informativo"],
     ["src/features/library/LibraryView.tsx", "material-surface-action", "bg-primary", "acao primaria do topo"],
     ["src/components/EmptyState.tsx", "material-surface-action", "bg-primary", "acao primaria do estado vazio"],
+    ["src/features/library/CollectionTabs.tsx", "material-surface-track", null, "trilho das abas"],
   ];
+
+  // Classes de todo elemento cujo className contem o marcador. Serve para os
+  // dois ramos e nao conhece nome de arquivo nenhum.
+  function classesDosElementosMarcados(fonte: string, marcador: string): string[][] {
+    return [...fonte.matchAll(/className\s*=\s*\{?(?:"([^"]*)"|`([^`]*)`)\}?/g)]
+      .map((m: RegExpMatchArray) => (m[1] ?? m[2] ?? "").split(/\s+/))
+      .filter((classes: string[]) => classes.includes(marcador));
+  }
 
   it.each(ALVOS)("%s: %s em %s (%s)", (arquivo, marcador, fundo, papel) => {
     const fonte = ler(arquivo);
+
+    if (fundo === null) {
+      // Prova pelo NEGATIVO: o elemento marcado existe e nao carrega nenhuma
+      // utilitaria de fundo — nem `bg-x`, nem `hover:bg-x`. Se alguem
+      // acrescentar uma, a pintura passa a ter duas origens e o flat deixa de
+      // ser byte-identico; e este ramo que acusa.
+      const marcados = classesDosElementosMarcados(fonte, marcador);
+      expect(marcados.length, `${papel}: nenhum className com "${marcador}"`).toBeGreaterThan(0);
+      expect(
+        marcados.flat().filter((classe: string) => /^(?:[\w-]+:)*bg-/.test(classe)),
+        `${papel}: alvo de fundo null nao pode carregar utilitaria bg-*`,
+      ).toEqual([]);
+      return;
+    }
     // Casa por PROXIMIDADE, nao extraindo o atributo className: varios destes
     // sao template literals multilinha com interpolacao, que nenhum regex
     // simples de atributo pega inteiro. O marcador precisa terminar ali (\b
@@ -626,6 +830,162 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     expect(arquivosComMarcador("material-surface")).toEqual(
       [...new Set(ALVOS.map(([arquivo]) => arquivo))].sort(),
     );
+  });
+});
+
+describe("material glass: trilho das abas", () => {
+  const MARCADOR = "material-surface-track";
+  const ESCOPO_GLASS = '[data-material="glass"]';
+  const regras = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((m: RegExpMatchArray) => ({ seletor: m[1].trim(), corpo: m[2].trim() }));
+
+  function corpoDe(seletor: string): string {
+    const regra = regras.find((candidata) => candidata.seletor === seletor);
+    if (!regra) throw new Error(`Regra do trilho nao encontrada: ${seletor}`);
+    return regra.corpo;
+  }
+
+  it("declara os cinco tokens de trilho nos dois blocos glass", () => {
+    const esperados = [
+      "--glass-track-surface",
+      "--glass-track-rim",
+      "--glass-track-shadow",
+      "--glass-track-radius",
+      "--glass-track-padding",
+    ];
+
+    for (const seletor of [ESCOPO_GLASS, `.dark${ESCOPO_GLASS}`]) {
+      const declarados = [...corpoDe(seletor).matchAll(/(--glass-track-[\w-]+)\s*:/g)]
+        .map((m: RegExpMatchArray) => m[1]);
+      expect(declarados, `familia de trilho incompleta em ${seletor}`).toEqual(esperados);
+    }
+  });
+
+  it("NAO declara filtro proprio, seguindo o precedente do controle liquid", () => {
+    // As abas ficam direto sobre o wallpaper, sem ancestral filtrado. Um
+    // backdrop-filter aqui abriria mais uma camada de composicao por grupo — e
+    // obrigaria a mexer no grupo :is(...) do reset aninhado, que esta fechado.
+    const doTrilho = regras.filter((regra) => regra.seletor.includes(`.${MARCADOR}`));
+    expect(doTrilho.length).toBe(2);
+    expect(
+      doTrilho.filter((regra) => regra.corpo.includes("backdrop-filter")),
+      "o trilho das abas nao pode declarar filtro proprio",
+    ).toEqual([]);
+    // E, sem filtro, ele nao pertence a familia liquid nem depende dela.
+    expect(
+      doTrilho.filter((regra) => regra.seletor.includes(".material-liquid-")),
+      "o trilho nao pode depender de um ancestral liquid",
+    ).toEqual([]);
+  });
+
+  it("a caixa do trilho vem do CSS glass, nunca de utilitaria Tailwind", () => {
+    // No flat o trilho nao e superficie nenhuma: se raio ou padding virarem
+    // utilitaria, a caixa aparece tambem no flat e o material deixa de ser o
+    // unico responsavel pela pintura.
+    const corpo = corpoDe(`${ESCOPO_GLASS} .${MARCADOR}`);
+    expect(corpo).toContain("background-color: var(--glass-track-surface);");
+    expect(corpo).toContain("border-radius: var(--glass-track-radius);");
+    expect(corpo).toContain("padding: var(--glass-track-padding);");
+    expect(corpo).toContain("0 0 0 1px var(--glass-track-rim)");
+    expect(corpo).toContain("var(--glass-track-shadow)");
+
+    const jsx = ler("src/features/library/CollectionTabs.tsx");
+    const classesDoTrilho = jsx
+      .match(/className="([^"]*material-surface-track[^"]*)"/)?.[1]
+      .split(/\s+/) ?? [];
+    expect(classesDoTrilho.length).toBeGreaterThan(0);
+    for (const proibida of [/^(?:[\w-]+:)*bg-/, /^rounded/, /^p[xytrbl]?-/, /^border/]) {
+      expect(
+        classesDoTrilho.filter((classe: string) => proibida.test(classe)),
+        `o trilho recebeu utilitaria de caixa (${proibida})`,
+      ).toEqual([]);
+    }
+  });
+
+  it("a aba ativa reusa os tokens do controle e nao tem indicador deslizante", () => {
+    // Mesmo papel semantico do segmento grade/lista — "selecionado dentro de um
+    // grupo" —, entao o mesmo vocabulario de luz. Dois vocabularios para o
+    // mesmo papel divergem na primeira mudanca de valor.
+    const corpo = corpoDe(`${ESCOPO_GLASS} .${MARCADOR} > [aria-selected="true"]`);
+    expect(corpo).toContain("background-color: var(--glass-control-selected);");
+    expect(corpo).toContain("inset 0 1px 0 var(--glass-control-selected-inner)");
+    expect(corpo).toContain("color: var(--glass-control-icon);");
+    expect(corpo).not.toContain("--color-primary");
+
+    // Sem indicador deslizante: font-bold muda a largura intrinseca da aba e
+    // reflui as tres. Nada aqui pode animar posicao ou tamanho.
+    const doTrilho = regras.filter((regra) => regra.seletor.includes(`.${MARCADOR}`));
+    for (const regra of doTrilho) {
+      for (const proibida of ["transition", "transform", "animation", "position", "left", "width"]) {
+        expect(
+          regra.corpo.includes(`${proibida}:`),
+          `${proibida} no trilho reintroduz indicador deslizante`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("as abas preservam todas as utilitarias flat originais", () => {
+    const jsx = ler("src/features/library/CollectionTabs.tsx");
+
+    // O trilho mantem as utilitarias de layout que ja tinha no flat.
+    for (const classe of ["flex", "items-center", "gap-1"]) {
+      expect(jsx, `o trilho perdeu a classe ${classe}`).toContain(classe);
+    }
+    // E os dois ramos de estado do botao seguem intactos: peso de fonte e
+    // cores continuam vindo do TSX, porque o flat depende deles.
+    expect(jsx).toContain('"bg-primary font-bold text-text-inverse"');
+    expect(jsx).toContain('"font-normal text-text-secondary hover:bg-surface-muted hover:text-text-primary"');
+    expect(jsx).toContain("rounded-full px-4 py-2 text-[13px] leading-[19.5px] transition");
+    expect(jsx).toContain("aria-selected={active}");
+  });
+});
+
+describe("material glass: fechamento — os dois trilhos preservam todas as utilitarias flat", () => {
+  // Mesmo formato de "os dois botoes preservam todas as utilitarias flat
+  // originais" (acao primaria, acima): extrai as classes do className
+  // literal e confere cada uma contra uma lista explicita. Fecha uma lacuna
+  // especifica desta leva — o trilho do toggle (:118) nunca tinha guarda
+  // propria; so era contado (linha ~715) como par do gatilho "Recente", nunca
+  // verificado pelas SUAS proprias utilitarias flat.
+  it("o trilho das abas preserva todas as utilitarias flat originais", () => {
+    const collectionTabs = ler("src/features/library/CollectionTabs.tsx");
+    const classesDoTrilho = collectionTabs
+      .match(/className="([^"]*material-surface-track[^"]*)"/)?.[1]
+      .split(/\s+/) ?? [];
+
+    for (const classe of ["material-surface-track", "flex", "items-center", "gap-1"]) {
+      expect(classesDoTrilho, `trilho das abas perdeu a classe ${classe}`).toContain(classe);
+    }
+  });
+
+  it("o trilho do toggle preserva todas as utilitarias flat originais", () => {
+    const libraryToolbar = ler("src/features/library/LibraryToolbar.tsx");
+    // O gatilho "Recente" (:93) COMPARTILHA o mesmo par de marcadores e o
+    // mesmo prefixo de classes ("material-liquid-control material-surface-
+    // elevated flex items-center"); um match() sem ancora extra pega o
+    // primeiro dos dois, que e o gatilho, nao o trilho. "items-center
+    // rounded-lg" sem "gap-2" no meio so casa com o trilho (:118) — o
+    // gatilho tem gap-2 ali. Travado por teste: se o JSX reaproximar as duas
+    // classes a ponto de a ancora deixar de ser unica, este teste falha por
+    // capturar o consumidor errado antes mesmo de checar a lista.
+    const classesDoTrilho = libraryToolbar
+      .match(/className="(material-liquid-control material-surface-elevated flex items-center rounded-lg[^"]*)"/)?.[1]
+      .split(/\s+/) ?? [];
+
+    for (const classe of [
+      "material-liquid-control",
+      "material-surface-elevated",
+      "flex",
+      "items-center",
+      "rounded-lg",
+      "border",
+      "border-border-muted",
+      "bg-surface-panel",
+      "p-0.5",
+    ]) {
+      expect(classesDoTrilho, `trilho do toggle perdeu a classe ${classe}`).toContain(classe);
+    }
   });
 });
 

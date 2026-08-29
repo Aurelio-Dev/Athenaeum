@@ -17,7 +17,7 @@ type CollectionTabsProps = {
 
 export function CollectionTabs({ activeTab, onTabChange }: CollectionTabsProps) {
   return (
-    <div className="flex items-center gap-1" role="tablist" aria-label="Conteúdo da coleção">
+    <div className="material-surface-track flex items-center gap-1" role="tablist" aria-label="Conteúdo da coleção">
       {tabs.map(({ id, label }) => {
         const active = id === activeTab;
 
