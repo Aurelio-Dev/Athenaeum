@@ -1,5 +1,162 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 28/08/2026 — Eixo de material, eixo de chrome e a arte do
+> LiquidGlass:** esta entrada registra decisões que já estavam no código e
+> nos testes há semanas, mas nunca chegaram a este documento. Um
+> contribuidor externo lendo o repositório encontrava as regras nos guards
+> de teste antes de encontrá-las aqui — o que é o inverso do que deveria
+> acontecer.
+>
+> ### Sobre o eixo de material
+>
+> O eixo `data-material="flat" | "glass"` está documentado no changelog de
+> 16/08/2026, com a tabela completa de tokens `--glass-*` e a nota de
+> especificidade. A regra que sustenta tudo o que vem abaixo já está lá em
+> forma implícita e vale nomear: **`flat never changes`.**
+>
+> `flat` não tem bloco CSS — é a *ausência* dos tokens de glass. Por isso a
+> garantia é barata: nenhum valor de glass pode ser escrito fora de
+> `[data-material="glass"]`, e `materialGlassSurfaces.test.ts` verifica os
+> dois lados desse contrato. Se o usuário está em flat, nada feito no glass
+> pode tê-lo quebrado.
+>
+> **Consequência prática, e é o que guia esta entrada inteira:** sempre que
+> uma decisão puder ser resolvida "no flat também" ou "só no glass",
+> escolha só no glass.
+>
+> ### O glass abre mão do piso de contraste WCAG
+>
+> **Decisão de produto, tomada deliberadamente.** O LiquidGlass é um tema
+> que existe pela arte visual. Translucidez, gradiente sutil e borda quase
+> invisível são o ponto do material, não um efeito colateral. Amarrá-lo aos
+> mesmos pisos de contraste do flat significaria fazer um vidro que não
+> parece vidro.
+>
+> Portanto, **sob `[data-material="glass"]` há liberdade visual plena** —
+> gradiente, contorno, sombra, calha, raio, translucidez e também os tokens
+> de texto. O piso de 4.5:1 documentado no restante deste arquivo **não se
+> aplica ao material glass**.
+>
+> Isso é sustentável por uma razão específica: **o flat continua sendo um
+> material de primeira classe, completo e com todos os pisos intactos.**
+> Não é um modo degradado nem um fallback — é o material original do app,
+> congelado por teste. Quem precisa de legibilidade máxima tem uma opção
+> inteira, não uma versão reduzida. O glass é uma escolha estética
+> oferecida ao lado dela, não no lugar dela.
+>
+> Três consequências que fazem parte da decisão:
+>
+> 1. **Os testes de contraste do glass passam a ser informativos, não
+>    bloqueantes.** Continuam calculando as combinações e reportando os
+>    valores no output, mas não reprovam. O cálculo permanece no código
+>    para que a informação exista quando alguém quiser olhar — e para que
+>    reativar o piso, se um dia se decidir por isso, seja uma linha.
+> 2. **A linha "Material" em Ajustes traz aviso permanente na descrição**,
+>    informando que o tema Vidro prioriza estética sobre legibilidade e que
+>    o material Padrão segue os pisos de contraste. Fica na descrição, não
+>    em modal — quem lê antes de clicar recebe a informação, quem já
+>    escolheu não é interrompido.
+> 3. **Nada disso vale para o flat.** Os pisos documentados no restante
+>    deste arquivo continuam obrigatórios lá, e continuam testados.
+>
+> ### O que continua fechado mesmo com liberdade visual
+>
+> A liberdade é sobre aparência, não sobre estrutura. Três regras seguem
+> valendo dentro do glass:
+>
+> - **Nada de hex fora de token.** Arte nova entra como token novo, nunca
+>   como valor solto no JSX. (Dívida conhecida em sentido contrário:
+>   `border-[#E8DDD4]` hardcoded em `CanvasCard.tsx` e `NotebookCard.tsx`.)
+> - **Separação entre superfícies próximas se mede por ΔL\* (CIELAB)**, não
+>   por razão de contraste WCAG — que é inadequada para distinguir
+>   superfícies de tom quase idêntico.
+> - **Novos tokens derivam das cores de origem em HSL**, preservando matiz
+>   e saturação. Nunca via `color-mix` na direção de um foreground
+>   quase-acromático, que dessatura.
+>
+> ### Eixo de chrome: `data-chrome`
+>
+> Segundo eixo, irmão do material: `data-chrome="docked" | "floating"`.
+> Controla a **composição** do layout — painéis flush com reflow real
+> versus ilhas com calha própria — e não a pintura.
+>
+> Persistido em `app_settings` (chave `chrome_variant`) com **três
+> estados**, e essa é a parte que importa:
+>
+> | Valor persistido | Significado |
+> | ---------------- | ----------- |
+> | chave ausente    | automático — resolve a partir do material |
+> | `"docked"`       | escolha explícita do usuário |
+> | `"floating"`     | escolha explícita do usuário |
+>
+> `null` é um estado real, não um default disfarçado. A distinção existe
+> porque uma preferência explícita precisa voltar a valer quando o material
+> mudar — e porque `show_divider_lines` já demonstrou o custo de não
+> distinguir "nunca escolhido" de "escolhido".
+>
+> A resolução é uma função pura, `resolveChromeVariant(stored, material)`:
+>
+> - **`material === "flat"` → sempre `"docked"`**, ignorando o valor
+>   gravado. O valor não é apagado; volta a valer se o material virar glass
+>   de novo. Isso é o que mantém `flat never changes` literal mesmo com um
+>   eixo novo no root.
+> - `material === "glass"` → o valor gravado, ou `"floating"` quando
+>   ausente.
+>
+> **Primeira abertura do app resulta em flat + docked**, ou seja, o app
+> exatamente como era antes do LiquidGlass. O glass é opt-in consciente,
+> nunca o que alguém pega sem pedir.
+>
+> ### Relação com a regra docado vs. flutuante de 15/07
+>
+> A entrada de 15/07 diz que a Library é chrome **docado**, por ser
+> workspace com múltiplas regiões permanentes coexistindo. **Isso continua
+> valendo, e continua sendo o padrão.**
+>
+> O que mudou é que o material passou a ser um eixo capaz de alterar a
+> composição. Sob `[data-material="glass"]`, a Library pode ser exibida em
+> ilhas — com o wallpaper aparecendo nas calhas, que é o que dá sentido ao
+> vidro. A pergunta de 15/07 ("existe um objeto central único?") segue
+> sendo a forma de decidir o **padrão** de uma tela nova. O eixo de chrome
+> é uma variação sobre esse padrão, disponível apenas no glass, não uma
+> revogação dele.
+>
+> No flat, a Library é docada. Sempre.
+>
+> ### Marcador `material-island`: geometria, nunca pintura
+>
+> As superfícies da Library carregam marcadores de classe que os seletores
+> de glass consomem. Existem **duas categorias, e elas não se misturam**:
+>
+> - **Marcadores de pintura** — `material-surface`, `-elevated`, `-card`,
+>   `-overlay`. Definem fundo, cor de borda e sombra sob glass. Nunca tocam
+>   margem, raio ou posição.
+> - **Marcador de geometria** — `material-island`. Define calha e raio das
+>   ilhas. **Nunca recebe `background`, `border-color` ou `box-shadow`**,
+>   e isso é verificado por guard próprio em `materialGlassSurfaces.test.ts`.
+>
+> Ambas as categorias têm inventário fechado no mesmo arquivo de teste:
+> `ALVOS` para pintura, `ILHAS_DA_LIBRARY` para geometria. Adicionar um
+> marcador a um componente **exige** entrada no inventário no mesmo commit
+> — foi assim que a suíte ficou vermelha sem ninguém notar quando
+> `NotebookCard` e `CanvasCard` ganharam `material-surface-card`.
+>
+> **A área central da Library não é superfície pintada.** Ela carrega
+> apenas `material-island` e mostra o fundo — wallpaper ou cor de app —
+> diretamente, com os cards flutuando por cima. As superfícies com fundo
+> próprio são duas: sidebar e painel Detalhes.
+>
+> ### Tamanho mínimo de janela
+>
+> `tauri.conf.json` define `minWidth: 1280` e `minHeight: 720` na janela
+> principal. 1280 é o breakpoint `xl` do Tailwind, abaixo do qual a Library
+> esconde a área central quando há documento selecionado — comportamento
+> que nunca fez sentido e que agora é inalcançável por construção.
+>
+> Consequência registrada como dívida: o ramo `hidden xl:flex` da área
+> central virou código morto e continua no repositório à espera de uma
+> limpeza própria.
+
 > **Changelog 25/08/2026 — Gramática óptica do Liquid Glass refinada na
 > Library. Flat e glass sem wallpaper permanecem idênticos aos baselines
 > `c01c1e9` e `869952d`.**
