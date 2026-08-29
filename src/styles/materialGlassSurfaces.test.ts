@@ -845,13 +845,17 @@ describe("material glass: trilho das abas", () => {
     return regra.corpo;
   }
 
-  it("declara os cinco tokens de trilho nos dois blocos glass", () => {
+  it("declara os nove tokens de trilho nos dois blocos glass", () => {
     const esperados = [
       "--glass-track-surface",
+      "--glass-track-hover",
+      "--glass-track-selected",
       "--glass-track-rim",
       "--glass-track-shadow",
       "--glass-track-radius",
       "--glass-track-padding",
+      "--glass-track-label",
+      "--glass-track-label-idle",
     ];
 
     for (const seletor of [ESCOPO_GLASS, `.dark${ESCOPO_GLASS}`]) {
@@ -866,7 +870,7 @@ describe("material glass: trilho das abas", () => {
     // backdrop-filter aqui abriria mais uma camada de composicao por grupo — e
     // obrigaria a mexer no grupo :is(...) do reset aninhado, que esta fechado.
     const doTrilho = regras.filter((regra) => regra.seletor.includes(`.${MARCADOR}`));
-    expect(doTrilho.length).toBe(2);
+    expect(doTrilho.length).toBe(4);
     expect(
       doTrilho.filter((regra) => regra.corpo.includes("backdrop-filter")),
       "o trilho das abas nao pode declarar filtro proprio",
@@ -902,27 +906,270 @@ describe("material glass: trilho das abas", () => {
     }
   });
 
-  it("a aba ativa reusa os tokens do controle e nao tem indicador deslizante", () => {
-    // Mesmo papel semantico do segmento grade/lista — "selecionado dentro de um
-    // grupo" —, entao o mesmo vocabulario de luz. Dois vocabularios para o
-    // mesmo papel divergem na primeira mudanca de valor.
+  it("FIX: o trilho tem largura de conteudo, nao a largura do container", () => {
+    // O TSX ja tinha `flex` no className antes desta leva. display:flex e
+    // block-level: sem largura propria, o bloco ocupa 100% do container.
+    // No flat isso era invisivel (sem fundo nem borda); ao ganhar pintura
+    // virou uma barra vazia com as tres abas encostadas a esquerda.
+    const corpo = corpoDe(`${ESCOPO_GLASS} .${MARCADOR}`);
+    expect(corpo).toContain("width: fit-content;");
+  });
+
+  it("a aba ativa reusa SOMBRA/ESPECULAR do controle, mas TINTA e ROTULO sao proprios", () => {
+    // SOMBRA e ESPECULAR continuam do controle: mesmo papel semantico, e dois
+    // vocabularios para as mesmas duas propriedades divergiriam na primeira
+    // mudanca de valor. A TINTA divergiu porque o SUBSTRATO diverge — o
+    // segmento do toggle vive dentro de uma .material-surface-elevated (opaca
+    // ou scrim-based) e um branco em alpha baixo basta la; a aba assenta no
+    // trilho, direto sobre o wallpaper.
     const corpo = corpoDe(`${ESCOPO_GLASS} .${MARCADOR} > [aria-selected="true"]`);
-    expect(corpo).toContain("background-color: var(--glass-control-selected);");
+    expect(corpo).toContain("background-color: var(--glass-track-selected);");
+    expect(corpo).not.toContain("var(--glass-control-selected)");
     expect(corpo).toContain("inset 0 1px 0 var(--glass-control-selected-inner)");
-    expect(corpo).toContain("color: var(--glass-control-icon);");
+    // FIX: a cor NAO reusa --glass-control-icon. Esse token foi calibrado
+    // para o substrato do toggle (escuro no tema escuro); a pilula da aba e
+    // sempre tinta branca nos dois temas, entao reusar o icone deixava o
+    // rotulo do tema escuro claro sobre pilula clara — lavado.
+    expect(corpo).toContain("color: var(--glass-track-label);");
+    expect(corpo).not.toContain("--glass-control-icon");
     expect(corpo).not.toContain("--color-primary");
 
     // Sem indicador deslizante: font-bold muda a largura intrinseca da aba e
-    // reflui as tres. Nada aqui pode animar posicao ou tamanho.
+    // reflui as tres. Nada aqui pode ANIMAR posicao ou tamanho — o que proibe
+    // transition/transform/animation em toda regra do trilho, e position/left
+    // especificamente na aba selecionada (so ali um indicador teria motivo
+    // para se posicionar). `width` fica de fora da lista geral de proposito:
+    // o container tem `width: fit-content` estatico (FIX de largura, sem
+    // transition e sem depender do estado de nenhuma aba) — a ausencia de
+    // transition/animation no mesmo corpo, provada no loop acima, e o que
+    // garante que essa largura nao anima nada.
     const doTrilho = regras.filter((regra) => regra.seletor.includes(`.${MARCADOR}`));
     for (const regra of doTrilho) {
-      for (const proibida of ["transition", "transform", "animation", "position", "left", "width"]) {
+      for (const proibida of ["transition", "transform", "animation"]) {
         expect(
           regra.corpo.includes(`${proibida}:`),
           `${proibida} no trilho reintroduz indicador deslizante`,
         ).toBe(false);
       }
     }
+
+    for (const proibida of ["position", "left", "width"]) {
+      expect(
+        corpo.includes(`${proibida}:`),
+        `${proibida} na aba selecionada reintroduz indicador deslizante`,
+      ).toBe(false);
+    }
+  });
+
+  it("FIX: o rotulo inativo tem cor propria, sem atropelar o hover do Tailwind", () => {
+    // `text-text-secondary` do JSX e (0,1,0); esta regra e (0,3,0) e venceria
+    // mesmo sob hover se nao fosse o :not(:hover) — o ganho tem de ser de
+    // ALCANCE, nao de especificidade, para o `hover:text-text-primary`
+    // (0,2,0) do Tailwind continuar soberano no hover. Mesmo padrao do
+    // segmento grade/lista do toggle (Bloco 2).
+    const seletor = `${ESCOPO_GLASS} .${MARCADOR} > :not([aria-selected="true"]):not(:hover)`;
+    expect(corpoDe(seletor)).toContain("color: var(--glass-track-label-idle);");
+
+    // O alvo e a COR: uma regra que pinte `color` na aba inativa e alcance o
+    // hover atropela o Tailwind. Regras que pintam OUTRA propriedade no hover
+    // (o fundo, por exemplo) sao legitimas e nao entram aqui — por isso o
+    // filtro le o corpo, nao so o seletor. `(^|;)\s*color:` e deliberado:
+    // "color:" cru tambem casaria dentro de `background-color:`.
+    const queCasamCorDoInativo = regras
+      .filter((regra) =>
+        regra.seletor.includes(`.${MARCADOR}`)
+        && regra.seletor.includes(':not([aria-selected="true"])')
+        && /(^|;)\s*color:/.test(regra.corpo),
+      )
+      .map((regra) => regra.seletor);
+    expect(
+      queCasamCorDoInativo.filter((s) => !s.includes(":not(:hover)")),
+      "regra de cor do rotulo inativo sem :not(:hover) atropela o hover do Tailwind",
+    ).toEqual([]);
+  });
+
+  it("FIX: o hover da aba inativa vence o Tailwind e nao alcanca a aba ativa", () => {
+    // `hover:bg-surface-muted` do JSX e (0,2,0) e pintaria um retangulo OPACO
+    // de --muted sobre o trilho translucido. Esta regra e (0,4,0) — atributo
+    // + classe + atributo no :not + pseudo-classe :hover — e vence sem
+    // !important, que materialGlassSurfaces proibe em regra de material.
+    const seletor = `${ESCOPO_GLASS} .${MARCADOR} > :not([aria-selected="true"]):hover`;
+    const corpo = corpoDe(seletor);
+    expect(corpo).toContain("background-color: var(--glass-track-hover);");
+    expect(corpo).not.toContain("!important");
+
+    // O :not([aria-selected="true"]) protege a SELECAO, nao o Tailwind: sem
+    // ele o seletor alcancaria a aba ativa sob o ponteiro e trocaria
+    // --glass-control-selected pela tinta de hover, apagando a selecao
+    // exatamente quando o usuario aponta para ela.
+    const queAlcancamHover = regras
+      .filter((regra) =>
+        regra.seletor.includes(`.${MARCADOR}`)
+        && regra.seletor.includes(":hover")
+        && !regra.seletor.includes(":not(:hover)"),
+      )
+      .map((regra) => regra.seletor);
+    expect(
+      queAlcancamHover.filter((s) => !s.includes(':not([aria-selected="true"])')),
+      "regra de hover do trilho alcanca a aba ativa e apaga a selecao",
+    ).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------
+  // COMPOSICAO ALPHA REAL
+  // ---------------------------------------------------------------------
+  // A familia do trilho segue a forma do sistema: cor solida de tema com o
+  // scrim no canal alpha e um piso proprio. Comparar alphas crus nao diz mais
+  // nada — o que importa e a cor COMPOSTA sobre o wallpaper. Estes helpers
+  // reconstroem essa composicao a partir do CSS, para o teste medir o que o
+  // usuario ve, e nao o que o token declara.
+  const PISO_ESPERADO = 0.85;
+
+  // `rgb(R G B / max(var(--glass-wallpaper-scrim-alpha, 1), P))`
+  function tintaDe(bloco: string, token: string): { rgb: number[]; piso: number } {
+    const achado = corpoDe(bloco).match(
+      new RegExp(`${token}:\\s*rgb\\((\\d+) (\\d+) (\\d+) / max\\(var\\(--glass-wallpaper-scrim-alpha, 1\\), ([\\d.]+)\\)\\)`),
+    );
+    if (!achado) throw new Error(`${token} ausente ou fora da forma do sistema em ${bloco}`);
+    return { rgb: [Number(achado[1]), Number(achado[2]), Number(achado[3])], piso: Number(achado[4]) };
+  }
+
+  // `rgb(R G B / 1)` — rotulos sao opacos.
+  function corDe(bloco: string, token: string): number[] {
+    const achado = corpoDe(bloco).match(new RegExp(`${token}:\\s*rgb\\((\\d+) (\\d+) (\\d+) / 1\\)`));
+    if (!achado) throw new Error(`${token} ausente ou nao-opaco em ${bloco}`);
+    return [Number(achado[1]), Number(achado[2]), Number(achado[3])];
+  }
+
+  function compor(tinta: number[], alpha: number, base: number[]): number[] {
+    return tinta.map((canal, i) => alpha * canal + (1 - alpha) * base[i]);
+  }
+
+  function hex(canais: number[]): string {
+    return "#" + canais.map((v) => Math.round(v).toString(16).toUpperCase().padStart(2, "0")).join("");
+  }
+
+  // Os quatro cenarios por tema. Sem wallpaper o JS nao declara o scrim e o
+  // fallback `1` vale; com wallpaper o pior caso e o proprio piso, porque
+  // max() nunca deixa o alpha cair abaixo dele.
+  const WALLPAPERS: ReadonlyArray<readonly [string, number[] | null]> = [
+    ["sem wallpaper", null],
+    ["wallpaper escuro", [30, 25, 22]],
+    ["wallpaper medio", [128, 120, 112]],
+    ["wallpaper claro", [235, 230, 225]],
+  ];
+
+  // Empilha o grupo: o trilho compoe sobre o wallpaper; hover e pilula
+  // compoem sobre o trilho ja composto.
+  function estados(bloco: string, wallpaper: number[] | null) {
+    const trilho = tintaDe(bloco, "--glass-track-surface");
+    const hover = tintaDe(bloco, "--glass-track-hover");
+    const pilula = tintaDe(bloco, "--glass-track-selected");
+    const alpha = (t: { piso: number }) => (wallpaper === null ? 1 : t.piso);
+    const fundoTrilho = wallpaper ?? [0, 0, 0];
+    const cTrilho = wallpaper === null ? trilho.rgb : compor(trilho.rgb, alpha(trilho), fundoTrilho);
+    return {
+      trilho: cTrilho,
+      hover: wallpaper === null ? hover.rgb : compor(hover.rgb, alpha(hover), cTrilho),
+      pilula: wallpaper === null ? pilula.rgb : compor(pilula.rgb, alpha(pilula), cTrilho),
+    };
+  }
+
+  const BLOCOS: ReadonlyArray<readonly [string, string]> = [
+    ["claro", ESCOPO_GLASS],
+    ["escuro", `.dark${ESCOPO_GLASS}`],
+  ];
+
+  it("a familia do trilho usa a forma do sistema com piso proprio de 0.85", () => {
+    // A FORMA e o que esta travado: cor solida de tema, scrim no alpha,
+    // fallback para o caso sem wallpaper. O piso e proprio desta superficie
+    // porque ela e a unica de vidro que hospeda texto pequeno DIRETAMENTE
+    // sobre a imagem — as demais tem painel opaco ou scrim-based no meio.
+    for (const [tema, bloco] of BLOCOS) {
+      for (const token of ["--glass-track-surface", "--glass-track-hover", "--glass-track-selected"]) {
+        const { piso } = tintaDe(bloco, token);
+        expect(piso, `${tema}: ${token} com piso diferente do da familia`).toBe(PISO_ESPERADO);
+      }
+    }
+  });
+
+  it("PISO DE CONTRASTE: rotulo ativo e inativo passam 4.5:1 nos oito cenarios", () => {
+    // ESTE TESTE EXISTE POR CAUSA DE UMA REGRESSAO REAL.
+    //
+    // A familia do trilho nasceu com alpha de BRANCO PURO (0.38 claro / 0.08
+    // escuro). No escuro a cobertura combinada ficava em ~28%, o backdrop
+    // dominava, e a pilula da aba ativa saia ESCURA sobre wallpaper escuro —
+    // 2.18:1 com o rotulo. O defeito so aparecia em parte dos wallpapers, que
+    // e exatamente o tipo de coisa que teste manual nao pega.
+    //
+    // Mede a cor COMPOSTA, nao o token declarado: e a composicao que o
+    // usuario le. AA_TEXTO = 4.5 e o mesmo piso que o projeto adota em
+    // mutedForegroundContrast.test.ts, onde esta registrado que o material
+    // glass passa AA por conta propria — premissa que esta familia quebrou.
+    const AA_TEXTO = 4.5;
+    const reprovados: string[] = [];
+
+    for (const [tema, bloco] of BLOCOS) {
+      const ativo = corDe(bloco, "--glass-track-label");
+      const inativo = corDe(bloco, "--glass-track-label-idle");
+
+      for (const [cenario, wallpaper] of WALLPAPERS) {
+        const { trilho, hover, pilula } = estados(bloco, wallpaper);
+        const medidas: ReadonlyArray<readonly [string, number[], number[]]> = [
+          ["rotulo inativo sobre o trilho", inativo, trilho],
+          ["rotulo inativo sobre o hover", inativo, hover],
+          ["rotulo ativo sobre a pilula", ativo, pilula],
+        ];
+
+        for (const [papel, texto, fundo] of medidas) {
+          const razao = contraste(hex(texto), hex(fundo));
+          if (razao < AA_TEXTO) {
+            reprovados.push(`${tema} / ${cenario} / ${papel}: ${razao.toFixed(2)}:1 sobre ${hex(fundo)}`);
+          }
+        }
+      }
+    }
+
+    expect(reprovados, "contraste abaixo de AA em algum cenario de wallpaper").toEqual([]);
+  });
+
+  it("a ordem trilho < hover < pilula se mantem nos oito cenarios", () => {
+    // O hover COMPOE sobre o trilho, entao `hover > trilho` exige que a tinta
+    // do hover supere o COMPOSTO do trilho — que sobe junto com a imagem. Foi
+    // por isso que o piso de 0.6 invertia a ordem sobre wallpaper claro: o
+    // trilho composto ficava mais claro que a propria tinta de hover, e
+    // apontar uma aba inativa a escurecia em vez de clarea-la.
+    const invertidos: string[] = [];
+
+    for (const [tema, bloco] of BLOCOS) {
+      for (const [cenario, wallpaper] of WALLPAPERS) {
+        const { trilho, hover, pilula } = estados(bloco, wallpaper);
+        // Compara por contraste contra preto: monotonico na luminancia, e
+        // reusa o helper de contraste do projeto em vez de duplicar a formula.
+        const claridade = (c: number[]) => contraste(hex(c), "#000000");
+        if (!(claridade(trilho) < claridade(hover) && claridade(hover) < claridade(pilula))) {
+          invertidos.push(
+            `${tema} / ${cenario}: trilho ${hex(trilho)} hover ${hex(hover)} pilula ${hex(pilula)}`,
+          );
+        }
+      }
+    }
+
+    expect(invertidos, "ordem de leitura do grupo invertida").toEqual([]);
+  });
+
+  it("--glass-track-label e ESCURO nos dois temas — a pilula ativa e sempre tinta branca", () => {
+    // Ao contrario de --glass-control-icon (que se inverte com o tema porque
+    // o substrato do TOGGLE se inverte), o substrato da aba nao muda: e
+    // sempre --glass-control-selected, rgb(255 255 255 / *) nos dois blocos.
+    // O mesmo literal nos dois temas e o ponto — como --glass-action-label
+    // (#FFFFFF) ja faz para o caso inverso. Se algum dia divergirem, e para
+    // um substrato realmente diferente, nao para "seguir o tema".
+    const claro = corpoDe(ESCOPO_GLASS).match(/--glass-track-label:\s*([^;]+);/)?.[1];
+    const escuro = corpoDe(`.dark${ESCOPO_GLASS}`).match(/--glass-track-label:\s*([^;]+);/)?.[1];
+    expect(claro).toBeDefined();
+    expect(claro).toBe(escuro);
+    expect(claro).toBe("rgb(44 24 16 / 1)");
   });
 
   it("as abas preservam todas as utilitarias flat originais", () => {

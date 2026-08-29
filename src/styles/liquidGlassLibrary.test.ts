@@ -61,7 +61,7 @@ describe("Liquid Glass da Library: isolamento", () => {
 
   it("glass docado sem wallpaper preserva a impressao digital do baseline 869952d", () => {
     const normalizado = regrasGlassSemWallpaper(css);
-    expect(normalizado.split("\n")).toHaveLength(23);
+    expect(normalizado.split("\n")).toHaveLength(25);
     // Hash anterior: 14efc6b05c250a9c51f92df13bb1cb01b11fc6d31cfe41eb220e68f33f129063.
     // A família --glass-action-* passou a ser declarada nos blocos
     // [data-material="glass"] e .dark[data-material="glass"], que integram a
@@ -86,8 +86,55 @@ describe("Liquid Glass da Library: isolamento", () => {
     // nos dois blocos glass, e as DUAS regras de .material-surface-track (o
     // trilho e a aba ativa) entram na contagem. O trilho nao declara filtro
     // proprio, entao nada muda no grupo :is(...) do reset aninhado.
+    //
+    // ATUALIZADO (fix: largura do trilho): 23 regras mantidas, hash anterior
+    // d0132e0aaa2ab2d4d648346ef69518f4ba386594c96d0ec9b133ca4b5be63ecb. Sem
+    // regra nova — `width: fit-content` entrou como propriedade a mais na
+    // regra ja existente de `.material-surface-track`. O trilho e um `flex`
+    // (display block-level) sem largura propria: no flat isso e invisivel,
+    // mas com pintura ele esticava para 100% do container, com as tres abas
+    // encostadas a esquerda e uma barra vazia a direita.
+    //
+    // ATUALIZADO (fix: rotulo da aba ativa lavado no escuro): 23 -> 24
+    // regras, hash anterior:
+    // 1df54267de549ba82272fdc5a68b783a7ad9c3c4ca4591f53be12f8d65dca7c3.
+    // Duas mudancas:
+    //  1. dois tokens --glass-track-label / --glass-track-label-idle entram
+    //     nos dois blocos glass compartilhados;
+    //  2. uma regra NOVA para o rotulo inativo entra na contagem (a regra da
+    //     aba ativa ja existia — so trocou `color: var(--glass-control-icon)`
+    //     por `color: var(--glass-track-label)`, sem mudar a CONTAGEM de
+    //     regras, so o hash).
+    // --glass-control-icon foi calibrado para o substrato do TOGGLE, escuro
+    // no tema escuro; a pilula da aba e sempre tinta branca nos dois temas, e
+    // reusar o icone deixava o rotulo do escuro claro sobre pilula clara.
+    //
+    // ATUALIZADO (fix: hover das abas inativas): 24 -> 25 regras, hash
+    // anterior:
+    // 0c9532c7c8a465c33ca116967e812dba10fb3d86833444190f2a6edb2af809b5.
+    // Um token --glass-track-hover nos dois blocos glass e UMA regra nova
+    // para o hover da aba inativa. O JSX pinta `hover:bg-surface-muted`
+    // (opaco, cor de --muted), que sob glass viraria um retangulo chapado
+    // sobre o trilho translucido; a utilitaria permanece no className porque
+    // e o que o flat usa, e o CSS glass a sobrescreve por especificidade
+    // (0,4,0 contra 0,2,0), sem !important.
+    //
+    // ATUALIZADO (base de composicao da familia do trilho): 25 regras
+    // mantidas, hash anterior:
+    // 59c2cd7b66f9d20bf1845ad6cf6b608dab7d8e8c3ac28bd90828cab832262bce.
+    // Nenhuma regra nova — a familia --glass-track-* trocou de FORMA. Era
+    // alpha de branco puro (0.38 claro / 0.08 escuro), fora da composicao
+    // optica do sistema; passou a ser cor solida de tema com o scrim no canal
+    // alpha, como --glass-optical-tint, mais um token novo
+    // (--glass-track-selected) e o piso proprio de 0.85.
+    // O piso e MAIS ALTO que o 0.6 compartilhado porque o trilho e a unica
+    // superficie de vidro que hospeda texto pequeno diretamente sobre o
+    // wallpaper. Sem ele, o rotulo caia a 2.18:1 no tema escuro conforme a
+    // imagem, e a ordem trilho < hover < ativa chegava a inverter. Medido: o
+    // pior dos oito cenarios foi de 4.19 para 8.52 — travado por teste em
+    // materialGlassSurfaces.test.ts.
     expect(createHash("sha256").update(normalizado).digest("hex")).toBe(
-      "d0132e0aaa2ab2d4d648346ef69518f4ba386594c96d0ec9b133ca4b5be63ecb",
+      "7ee72f1b7d79775d1136cbae5c31312d63c5b177946186c3ddd7dc05e0815750",
     );
   });
 

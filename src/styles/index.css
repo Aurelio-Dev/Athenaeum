@@ -457,11 +457,37 @@
      selecao nao se separa do fundo em que assenta.
      Raio e padding sao TOKEN, nao utilitaria Tailwind: no flat o trilho nao
      existe como superficie e nao pode ganhar caixa. */
-  --glass-track-surface: rgb(255 255 255 / 0.38);
+  /* PISO PROPRIO DE 0.85, acima do 0.6 compartilhado. O trilho e a UNICA
+     superficie de vidro que hospeda texto pequeno DIRETAMENTE sobre o
+     wallpaper: as demais (card, overlay, painel) tem um painel opaco ou
+     scrim-based entre o texto e a imagem, e o controle segmentado vive dentro
+     de uma .material-surface-elevated, que ja e gradiente opaco. Sem esse
+     piso mais alto o composto do trilho varre de L=0.33 a L=0.88 conforme a
+     imagem, e NENHUMA cor de rotulo passa 4.5:1 nas duas pontas.
+     A FORMA e a do sistema (--glass-optical-tint): cor solida de tema com o
+     scrim no canal alpha. O `max()` so ancora o piso; o fallback `1` cobre o
+     caso sem wallpaper, em que o scrim nao e declarado pelo JS e nao ha o que
+     atravessar. Medido: com 0.85 o pior contraste dos oito cenarios vai de
+     4.19 (reprovando) para 8.52. */
+  --glass-track-surface: rgb(238 230 220 / max(var(--glass-wallpaper-scrim-alpha, 1), 0.85));
+  --glass-track-hover: rgb(246 241 234 / max(var(--glass-wallpaper-scrim-alpha, 1), 0.85));
+  --glass-track-selected: rgb(253 250 247 / max(var(--glass-wallpaper-scrim-alpha, 1), 0.85));
   --glass-track-rim: rgb(255 255 255 / 0.42);
   --glass-track-shadow: 0 1px 3px rgb(44 26 16 / 0.16);
   --glass-track-radius: 9999px;
   --glass-track-padding: 3px;
+  /* Rotulo da aba ativa. A pilula agora e tinta CLARA de tema em alpha alto
+     nos DOIS temas, entao o substrato dela e consistentemente claro e o
+     literal unico se justifica por construcao — nao mais por premissa. */
+  --glass-track-label: rgb(44 24 16 / 1);
+  /* A aba inativa DEIXA DE SER MUTED sob glass, por impossibilidade
+     matematica, nao por escolha de estilo. O rotulo inativo assenta no
+     trilho, cujo composto varia com a imagem; no melhor substrato
+     alcancavel a scrim 0.6 com tinta BRANCA PURA, #7A6558 (--muted-foreground
+     do claro) da 2.18:1 — nenhuma tinta o salva. O texto primario do tema
+     passa com folga nos mesmos extremos (7.26:1 no claro), entao este token
+     carrega o literal de --color-text-primary. */
+  --glass-track-label-idle: rgb(26 20 16 / 1);
 }
 
 /* Vence o bloco acima por especificidade (0,2,0 contra 0,1,0), nao por
@@ -527,11 +553,26 @@
      para 0.08 e segue abaixo do 0.22 da aba ativa. Raio e padding repetem por
      simetria com a familia --glass-action-*, que tambem declara seus valores
      nao-cromaticos nos dois blocos. */
-  --glass-track-surface: rgb(255 255 255 / 0.08);
+  /* Mesmo piso de 0.85 e mesma forma do claro. O escuro e onde o piso antigo
+     doia mais: a 0.6 sobre uma imagem clara o trilho subia para L=0.18 e o
+     rotulo inativo caia para 4.19:1, alem de o hover ficar MAIS ESCURO que o
+     trilho e inverter a ordem de leitura do grupo. */
+  --glass-track-surface: rgb(34 29 26 / max(var(--glass-wallpaper-scrim-alpha, 1), 0.85));
+  --glass-track-hover: rgb(70 63 58 / max(var(--glass-wallpaper-scrim-alpha, 1), 0.85));
+  /* A pilula ativa e CLARA tambem no escuro — mesma familia de tinta do
+     claro. E o que torna o substrato da selecao independente do tema e
+     valida o literal unico de --glass-track-label. */
+  --glass-track-selected: rgb(246 241 235 / max(var(--glass-wallpaper-scrim-alpha, 1), 0.85));
   --glass-track-rim: rgb(255 255 255 / 0.18);
   --glass-track-shadow: 0 1px 3px rgb(0 0 0 / 0.40);
   --glass-track-radius: 9999px;
   --glass-track-padding: 3px;
+  --glass-track-label: rgb(44 24 16 / 1);
+  /* Mesma impossibilidade do claro, na outra ponta: no melhor substrato
+     alcancavel a scrim 0.6 com tinta PRETA PURA, #9E8878 (--muted-foreground
+     do escuro) da 1.98:1. O texto primario do escuro da 5.49:1 nos mesmos
+     extremos, entao este token carrega o literal de --color-text-primary. */
+  --glass-track-label-idle: rgb(240 232 223 / 1);
 }
 
 /* Wallpaper — segunda camada do material glass.
@@ -887,27 +928,78 @@
    sem interpolar. O preenchimento pertence a propria aba.
 
    RAIO E PADDING VEM DAQUI, nao de utilitaria: no flat o trilho nao e
-   superficie nenhuma e nao pode ganhar caixa. */
+   superficie nenhuma e nao pode ganhar caixa.
+
+   WIDTH: FIT-CONTENT, por FIX. O TSX ja tinha `flex` no className antes
+   desta leva — display:flex e block-level, um bloco sem largura propria
+   ocupa 100% do container. No flat isso era invisivel: sem fundo nem
+   borda, um trilho invisivel esticado nao se notava. Ao ganhar pintura ele
+   virou uma barra vazia com as tres abas encostadas a esquerda. O TSX nao
+   muda — trocar por `inline-flex` la alteraria o flat, ainda que sem efeito
+   visivel nele; `fit-content` aqui resolve so onde a pintura existe. */
 [data-material="glass"] .material-surface-track {
   background-color: var(--glass-track-surface);
   border-radius: var(--glass-track-radius);
   padding: var(--glass-track-padding);
+  width: fit-content;
   box-shadow:
     0 0 0 1px var(--glass-track-rim),
     var(--glass-track-shadow);
 }
 
-/* A aba ativa reusa os tokens do controle segmentado: e o mesmo papel
-   semantico — "selecionado dentro de um grupo" — e ter dois vocabularios de
-   luz para o mesmo papel os faria divergir na primeira mudanca de valor.
+/* A aba ativa reusa do controle segmentado apenas SOMBRA e ESPECULAR: e o
+   mesmo papel semantico ("selecionado dentro de um grupo") e ter dois
+   vocabularios para essas duas propriedades os faria divergir na primeira
+   mudanca de valor.
+   A TINTA divergiu (--glass-track-selected) porque o SUBSTRATO diverge: o
+   segmento do toggle vive dentro de uma .material-surface-elevated, que ja e
+   gradiente opaco ou scrim-based, entao um branco em alpha baixo basta la. A
+   aba assenta no trilho, direto sobre o wallpaper — a mesma tinta produzia
+   uma pilula ESCURA no tema escuro (2.18:1 com o rotulo) e so ficava clara
+   quando a imagem por baixo era clara.
+   A COR do rotulo tambem e propria (--glass-track-label), pelo mesmo motivo:
+   --glass-control-icon segue o substrato do TOGGLE, que inverte com o tema.
+   O da aba nao inverte — --glass-track-selected e tinta CLARA nos dois
+   blocos —, entao o rotulo e escuro nos dois. Medido: 15.02:1 no escuro sem
+   wallpaper, 11.13:1 no pior cenario com imagem.
    A cor E obrigatoria aqui: o JSX pinta `text-text-inverse` (#FFFFFF), que
-   sobre uma tinta clara de 0.58 ficaria ilegivel. */
+   sobre a pilula clara ficaria ilegivel. */
 [data-material="glass"] .material-surface-track > [aria-selected="true"] {
-  background-color: var(--glass-control-selected);
+  background-color: var(--glass-track-selected);
   box-shadow:
     inset 0 1px 0 var(--glass-control-selected-inner),
     var(--glass-control-selected-shadow);
-  color: var(--glass-control-icon);
+  color: var(--glass-track-label);
+}
+
+/* Rotulo das abas INATIVAS. `text-text-secondary` do JSX e (0,1,0); esta
+   regra e (0,3,0) e venceria mesmo sob hover se nao fosse o :not(:hover) —
+   o ganho tem de ser de ALCANCE, nao de especificidade, para o
+   `hover:text-text-primary` (0,2,0) do Tailwind continuar soberano no hover.
+   Mesmo padrao usado no segmento grade/lista do toggle. */
+[data-material="glass"] .material-surface-track > :not([aria-selected="true"]):not(:hover) {
+  color: var(--glass-track-label-idle);
+}
+
+/* FIX do hover da aba inativa. O JSX pinta `hover:bg-surface-muted` — opaco,
+   cor de --muted — que sob glass vira um retangulo chapado sobre o trilho
+   translucido. A utilitaria PERMANECE no className: e o que o flat usa.
+   ESPECIFICIDADE: `hover:bg-surface-muted` e (0,2,0); esta regra e (0,4,0)
+   (atributo + classe + atributo no :not + pseudo-classe :hover), entao vence
+   sem !important — que o teste de material proibe.
+   O :not([aria-selected="true"]) NAO e por causa do Tailwind (a utilitaria de
+   hover so existe no ramo inativo do template literal): e porque SEM ele este
+   seletor tambem alcancaria a aba ATIVA sob o ponteiro e repintaria a pilula
+   de --glass-track-selected para a tinta de hover, apagando a selecao
+   justamente quando o usuario aponta para ela.
+   A COR DO ROTULO no hover nao entra aqui de proposito: a regra do rotulo
+   inativo acima tem :not(:hover) e sai de cena, devolvendo o campo ao
+   `hover:text-text-primary` do Tailwind. Isso agora e uma NAO-MUDANCA de cor:
+   --glass-track-label-idle carrega o literal de --color-text-primary, entao
+   repouso e hover pintam o mesmo rotulo e o sinal do hover fica inteiramente
+   no fundo. Medido: 16.23:1 no claro e 8.52:1 no escuro, sem wallpaper. */
+[data-material="glass"] .material-surface-track > :not([aria-selected="true"]):hover {
+  background-color: var(--glass-track-hover);
 }
 
 /* Liquid Glass so existe quando ha um backdrop real. O glass sem imagem fica
