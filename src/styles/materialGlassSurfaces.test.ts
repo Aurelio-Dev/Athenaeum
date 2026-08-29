@@ -21,12 +21,84 @@ function ler(caminho: string): string {
   return readFileSync(new URL(`../../${caminho}`, import.meta.url), "utf8");
 }
 
+function arquivosComMarcador(marcador: string): string[] {
+  const raiz = new URL("../../src/", import.meta.url);
+  const encontrados = new Set<string>();
+
+  function varrer(dir: URL, prefixo: string) {
+    for (const entrada of readdirSync(dir, { withFileTypes: true }) as Array<{
+      name: string;
+      isDirectory: () => boolean;
+    }>) {
+      const caminho = `${prefixo}${entrada.name}`;
+      if (entrada.isDirectory()) {
+        varrer(new URL(`${entrada.name}/`, dir), `${caminho}/`);
+      } else if (/\.tsx?$/.test(entrada.name) && !/\.test\.tsx?$/.test(entrada.name)) {
+        if (readFileSync(new URL(entrada.name, dir), "utf8").includes(marcador)) {
+          encontrados.add(caminho);
+        }
+      }
+    }
+  }
+
+  varrer(raiz, "src/");
+  return [...encontrados].sort();
+}
+
+function ocorrenciasDaClasse(classe: string): string[] {
+  const raiz = new URL("../../src/", import.meta.url);
+  const encontrados: string[] = [];
+  const padrao = new RegExp(`${classe}(?=[\\s"\`])`, "g");
+
+  function varrer(dir: URL, prefixo: string) {
+    for (const entrada of readdirSync(dir, { withFileTypes: true }) as Array<{
+      name: string;
+      isDirectory: () => boolean;
+    }>) {
+      const caminho = `${prefixo}${entrada.name}`;
+      if (entrada.isDirectory()) {
+        varrer(new URL(`${entrada.name}/`, dir), `${caminho}/`);
+      } else if (/\.tsx?$/.test(entrada.name) && !/\.test\.tsx?$/.test(entrada.name)) {
+        const fonte = readFileSync(new URL(entrada.name, dir), "utf8");
+        for (const _ocorrencia of fonte.matchAll(padrao)) {
+          encontrados.push(caminho);
+        }
+      }
+    }
+  }
+
+  varrer(raiz, "src/");
+  return encontrados.sort();
+}
+
 const MARCADORES = [
   "material-surface",
   "material-surface-elevated",
   "material-surface-card",
   "material-surface-overlay",
 ] as const;
+
+const MARCADOR_DE_ILHA = "material-island";
+
+describe("material island: marcador exclusivamente geometrico", () => {
+  it("nao recebe propriedades de pintura", () => {
+    // A Leva 2B pode usar este gancho para margem, padding, gap e raio. Fundo,
+    // cor de borda e sombra continuam pertencendo aos marcadores de superficie.
+    const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const regrasDaIlha = [...semComentarios.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((m: RegExpMatchArray) => m[1].includes(`.${MARCADOR_DE_ILHA}`));
+    const propriedadesProibidas = new Set(["background", "border-color", "box-shadow"]);
+    const violacoes = regrasDaIlha.flatMap((regra: RegExpMatchArray) => {
+      const seletor = regra[1].trim();
+      const propriedades = [...regra[2].matchAll(/(?:^|;)\s*([\w-]+)\s*:/g)]
+        .map((m: RegExpMatchArray) => m[1])
+        .filter((propriedade: string) => propriedadesProibidas.has(propriedade));
+      return propriedades.map((propriedade: string) => `${seletor}: ${propriedade}`);
+    });
+
+    expect(violacoes, "material-island recebeu propriedade de pintura").toEqual([]);
+  });
+});
 
 describe("material glass: flat permanece byte-identico", () => {
   it("nenhuma classe .material-surface* tem regra fora de [data-material=\"glass\"]", () => {
@@ -246,27 +318,49 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     // Um marcador solto em outro componente pinta de vidro algo que nao foi
     // analisado — e o modo mais provavel de esta leva vazar escopo. Varre a
     // arvore inteira e compara com o inventario declarado acima.
-    const raiz = new URL("../../src/", import.meta.url);
-    const encontrados = new Set<string>();
+    expect(arquivosComMarcador("material-surface")).toEqual(
+      [...new Set(ALVOS.map(([arquivo]) => arquivo))].sort(),
+    );
+  });
+});
 
-    function varrer(dir: URL, prefixo: string) {
-      for (const entrada of readdirSync(dir, { withFileTypes: true }) as Array<{
-        name: string;
-        isDirectory: () => boolean;
-      }>) {
-        const caminho = `${prefixo}${entrada.name}`;
-        if (entrada.isDirectory()) {
-          varrer(new URL(`${entrada.name}/`, dir), `${caminho}/`);
-        } else if (/\.tsx?$/.test(entrada.name) && !/\.test\.tsx?$/.test(entrada.name)) {
-          if (readFileSync(new URL(entrada.name, dir), "utf8").includes("material-surface")) {
-            encontrados.add(caminho);
-          }
-        }
-      }
-    }
-    varrer(raiz, "src/");
+describe("material island: inventario fechado da Library", () => {
+  // Ilhas sao ganchos de GEOMETRIA, nao superficies de material. A ancora e um
+  // conjunto de classes preexistentes no mesmo className; comparar como conjunto
+  // preserva a prova mesmo se a ordem das utilitarias mudar.
+  const ILHAS_DA_LIBRARY: ReadonlyArray<readonly [string, string, readonly string[]]> = [
+    ["src/components/Sidebar.tsx", "sidebar", ["material-surface", "bg-sidebar"]],
+    [
+      "src/features/library/LibraryView.tsx",
+      "area central",
+      ["min-h-0", "min-w-0", "flex-1", "flex-col"],
+    ],
+    [
+      "src/features/library/DocumentDetailsPanel.tsx",
+      "painel Detalhes",
+      ["material-surface-elevated", "bg-surface-panel"],
+    ],
+  ];
 
-    expect([...encontrados].sort()).toEqual([...new Set(ALVOS.map(([arquivo]) => arquivo))].sort());
+  it.each(ILHAS_DA_LIBRARY)("%s: material-island na raiz (%s)", (arquivo, papel, ancoras) => {
+    const atributosDeClasse = [...ler(arquivo).matchAll(/className\s*=\s*\{?(?:"([^"]*)"|`([^`]*)`)\}?/g)]
+      .map((m: RegExpMatchArray) => (m[1] ?? m[2] ?? "").split(/\s+/));
+    const casou = atributosDeClasse.some((classes) =>
+      classes.includes(MARCADOR_DE_ILHA) && ancoras.every((ancora) => classes.includes(ancora)),
+    );
+
+    expect(
+      casou,
+      `${papel}: nenhum "${MARCADOR_DE_ILHA}" no className com ${ancoras.join(" + ")}`,
+    ).toBe(true);
+  });
+
+  it("nenhuma quarta ilha escapou para fora do inventario", () => {
+    // A lista preserva duplicatas: uma segunda ilha dentro de um arquivo ja
+    // inventariado tambem e uma quarta ocorrencia e precisa reprovar.
+    expect(ocorrenciasDaClasse(MARCADOR_DE_ILHA)).toEqual(
+      ILHAS_DA_LIBRARY.map(([arquivo]) => arquivo).sort(),
+    );
   });
 });
 

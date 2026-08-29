@@ -713,7 +713,7 @@ export function LibraryView() {
     >
       <div className="flex h-full min-h-0 flex-1 flex-col xl:flex-row">
         <div
-          className={`min-h-0 min-w-0 flex-1 flex-col ${selectedDocument ? "hidden xl:flex" : "flex"}`}
+          className={`material-island min-h-0 min-w-0 flex-1 flex-col ${selectedDocument ? "hidden xl:flex" : "flex"}`}
           onContextMenu={openLibraryAreaContextMenu}
         >
           <div className="material-liquid-bar contents">

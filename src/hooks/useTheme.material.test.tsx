@@ -86,11 +86,23 @@ Object.defineProperty(window, "localStorage", {
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 let latestSetMaterial: ((material: TestMaterial) => void) | null = null;
+let latestSetChrome: ((chrome: TestChrome | null) => void) | null = null;
 
 function MaterialConsumer() {
   const { material, setMaterial } = useTheme();
   latestSetMaterial = setMaterial;
   return <output data-testid="material">{material}</output>;
+}
+
+function ChromeConsumer() {
+  const { chrome, storedChrome, setChrome } = useTheme();
+  latestSetChrome = setChrome;
+  return (
+    <>
+      <output data-testid="chrome">{chrome}</output>
+      <output data-testid="stored-chrome">{storedChrome ?? "automatico"}</output>
+    </>
+  );
 }
 
 async function renderProvider(children: ReactNode = <span>conteudo</span>) {
@@ -187,6 +199,7 @@ beforeEach(() => {
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
   memoryStorage.clear();
   latestSetMaterial = null;
+  latestSetChrome = null;
   document.documentElement.classList.remove("dark");
   delete document.documentElement.dataset.material;
   delete document.documentElement.dataset.chrome;
@@ -391,5 +404,40 @@ describe("eixo de chrome no ThemeProvider", () => {
     expect(databaseMocks.setMaterialVariant).toHaveBeenCalledWith("glass", "preloaded");
     expect(databaseMocks.setChromeVariant).not.toHaveBeenCalled();
     expect(databaseMocks.clearChromeVariant).not.toHaveBeenCalled();
+  });
+
+  it("persiste a escolha explicita e limpa a chave ao voltar para automatico", async () => {
+    memoryStorage.set(materialStorageKey, "glass");
+    databaseMocks.getMaterialVariant.mockResolvedValue("glass");
+
+    await renderProvider(<ChromeConsumer />);
+
+    act(() => latestSetChrome?.("docked"));
+
+    expect(databaseMocks.setChromeVariant).toHaveBeenCalledWith("docked", "preloaded");
+    expect(document.documentElement.dataset.chrome).toBe("docked");
+    expect(container?.querySelector('[data-testid="stored-chrome"]')?.textContent).toBe("docked");
+
+    act(() => latestSetChrome?.(null));
+
+    expect(databaseMocks.clearChromeVariant).toHaveBeenCalledWith("preloaded");
+    expect(document.documentElement.dataset.chrome).toBe("floating");
+    expect(container?.querySelector('[data-testid="stored-chrome"]')?.textContent).toBe("automatico");
+    expect(memoryStorage.has(chromeStorageKey)).toBe(false);
+  });
+
+  it("nao deixa a leitura de montagem sobrescrever um setChrome mais recente", async () => {
+    memoryStorage.set(materialStorageKey, "glass");
+    databaseMocks.getMaterialVariant.mockResolvedValue("glass");
+    const chromeRead = deferChromeRead();
+
+    await renderProvider(<ChromeConsumer />);
+    act(() => latestSetChrome?.("docked"));
+
+    await chromeRead.resolve(null);
+
+    expect(document.documentElement.dataset.chrome).toBe("docked");
+    expect(container?.querySelector('[data-testid="stored-chrome"]')?.textContent).toBe("docked");
+    expect(memoryStorage.get(chromeStorageKey)).toBe("docked");
   });
 });

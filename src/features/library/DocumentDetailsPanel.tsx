@@ -490,7 +490,7 @@ export function DocumentDetailsPanel({
   }
 
   return (
-    <aside className="material-surface-elevated min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0">
+    <aside className="material-island material-surface-elevated min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0">
       <header className="flex items-center px-6 py-4">
         <span className={sectionLabelClassName}>Detalhes</span>
         <button type="button" aria-label="Fechar detalhes" className="ml-auto rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={onClose}>

@@ -198,7 +198,7 @@ export function Sidebar({
 
   return (
     <aside
-      className="material-surface flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar font-sans text-sidebar-text"
+      className="material-island material-surface flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar font-sans text-sidebar-text"
       onContextMenu={onEmptyAreaContextMenu}
     >
       <div className="flex items-center gap-2 px-5 pb-2 pt-5">

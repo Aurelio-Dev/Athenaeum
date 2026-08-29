@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
+  clearChromeVariant,
   getChromeVariant,
   getMaterialVariant,
   isChromeVariant,
@@ -8,6 +9,7 @@ import {
   isMaterialVariantChangedPayload,
   MATERIAL_VARIANT_CHANGED_EVENT,
   resolveChromeVariant,
+  setChromeVariant,
   setMaterialVariant,
   type ChromeVariant,
   type DatabaseHandleSource,
@@ -70,6 +72,9 @@ type ThemeContextValue = {
   toggleTheme: () => void;
   material: MaterialVariant;
   setMaterial: (material: MaterialVariant) => void;
+  chrome: ChromeVariant;
+  storedChrome: ChromeVariant | null;
+  setChrome: (chrome: ChromeVariant | null) => void;
 };
 
 type ThemeProviderProps = {
@@ -89,10 +94,14 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
   // sai com o material em cache, entao nao ha janela pintada em 'flat'.
   const [material, setMaterialState] = useState<MaterialVariant>(readCachedMaterial);
   const [storedChrome, setStoredChrome] = useState<ChromeVariant | null>(readCachedChrome);
+  const chrome = resolveChromeVariant(storedChrome, material);
   // Um valor vindo do evento (ou do proprio setMaterial local) e mais recente
   // que a leitura de montagem em voo. Sem esta marca, uma troca feita em outra
   // janela durante o bootstrap seria sobrescrita pelo valor antigo do SQLite.
   const hasFresherMaterialRef = useRef(false);
+  // Uma escolha local de chrome precisa vencer a leitura iniciada na montagem:
+  // o SQLite pode responder com o valor anterior da preferencia.
+  const hasFresherChromeRef = useRef(false);
 
   // Aplica a classe .dark no <html> (que liga as variaveis CSS do tema escuro,
   // ver styles/index.css) e persiste a escolha. Roda no mount para restaurar a
@@ -111,18 +120,23 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
   useEffect(() => {
     const root = window.document.documentElement;
     root.dataset.material = material;
-    root.dataset.chrome = resolveChromeVariant(storedChrome, material);
+    root.dataset.chrome = chrome;
     window.localStorage.setItem(materialStorageKey, material);
     if (storedChrome === null) {
       window.localStorage.removeItem(chromeStorageKey);
     } else {
       window.localStorage.setItem(chromeStorageKey, storedChrome);
     }
-  }, [material, storedChrome]);
+  }, [chrome, material, storedChrome]);
 
   const applyMaterial = useCallback((nextMaterial: MaterialVariant) => {
     hasFresherMaterialRef.current = true;
     setMaterialState(nextMaterial);
+  }, []);
+
+  const applyChrome = useCallback((nextStoredChrome: ChromeVariant | null) => {
+    hasFresherChromeRef.current = true;
+    setStoredChrome(nextStoredChrome);
   }, []);
 
   // RECONCILIACAO na montagem: toda janela precisa das preferencias persistidas
@@ -148,11 +162,7 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
         setMaterialState(materialResult.value);
       }
 
-        // TODO(leva 2): quando o controle de Ajustes puder escrever neste eixo,
-      // este setState precisa da mesma protecao que hasFresherMaterialRef da ao
-      // material — hoje nada mais escreve em storedChrome, entao a corrida nao
-      // existe ainda.
-      if (chromeResult.status === "fulfilled") {
+      if (chromeResult.status === "fulfilled" && !hasFresherChromeRef.current) {
         setStoredChrome(chromeResult.value);
       }
     })();
@@ -203,6 +213,20 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
     [applyMaterial, databaseSource],
   );
 
+  const setChrome = useCallback(
+    (nextStoredChrome: ChromeVariant | null) => {
+      applyChrome(nextStoredChrome);
+
+      const persist = nextStoredChrome === null
+        ? clearChromeVariant(databaseSource)
+        : setChromeVariant(nextStoredChrome, databaseSource);
+      void persist.catch((error: unknown) => {
+        console.error("Nao foi possivel salvar a preferencia de chrome.", error);
+      });
+    },
+    [applyChrome, databaseSource],
+  );
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,
@@ -210,8 +234,11 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
       toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark")),
       material,
       setMaterial,
+      chrome,
+      storedChrome,
+      setChrome,
     }),
-    [material, setMaterial, theme],
+    [chrome, material, setChrome, setMaterial, storedChrome, theme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
