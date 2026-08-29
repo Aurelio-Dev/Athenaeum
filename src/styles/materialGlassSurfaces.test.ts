@@ -297,6 +297,7 @@ describe("material glass: as superficies da Library carregam o marcador certo", 
     ["src/features/library/RenameLibraryItemModal.tsx", "material-surface-overlay", "bg-surface-panel", "modal de renomear"],
     ["src/components/NewCollectionModal.tsx", "material-surface-overlay", "bg-surface-panel", "modal de nova colecao"],
     ["src/components/ConfirmationDialog.tsx", "material-surface-overlay", "bg-surface-panel", "dialogo de confirmacao"],
+    ["src/components/InfoDialog.tsx", "material-surface-overlay", "bg-surface-panel", "dialogo informativo"],
   ];
 
   it.each(ALVOS)("%s: %s em %s (%s)", (arquivo, marcador, fundo, papel) => {

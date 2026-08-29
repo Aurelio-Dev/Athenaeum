@@ -2490,6 +2490,20 @@ export async function clearChromeVariant(source: DatabaseHandleSource = "loaded"
   await deleteSetting(CHROME_VARIANT_SETTING_KEY, source);
 }
 
+const GLASS_NOTICE_SEEN_SETTING_KEY = "glass_notice_seen";
+
+// Ao contrario de chrome_variant, ausencia nao e uma preferencia distinta: ela
+// quer dizer simplesmente que o aviso ainda nao foi visto. O booleano preserva
+// essa semantica sem repetir a perda de estado entre ausencia e default que
+// show_divider_lines sofreu; no chrome, null continua sendo um estado real.
+export async function getGlassNoticeSeen(source: DatabaseHandleSource = "loaded"): Promise<boolean> {
+  return (await getSetting(GLASS_NOTICE_SEEN_SETTING_KEY, source)) === "true";
+}
+
+export async function setGlassNoticeSeen(source: DatabaseHandleSource = "loaded"): Promise<void> {
+  await setSetting(GLASS_NOTICE_SEEN_SETTING_KEY, "true", source);
+}
+
 // Papel de parede do app. Como o material, vive em app_settings e nao em
 // localStorage: e uma preferencia global, compartilhada pelas janelas nativas,
 // e precisa sobreviver a uma troca feita com a janela fechada.

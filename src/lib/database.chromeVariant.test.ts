@@ -31,9 +31,11 @@ import {
   clearChromeVariant,
   deleteSetting,
   getChromeVariant,
+  getGlassNoticeSeen,
   getSetting,
   resolveChromeVariant,
   setChromeVariant,
+  setGlassNoticeSeen,
   setSetting,
   type ChromeVariant,
   type MaterialVariant,
@@ -138,6 +140,24 @@ describe("preferencia de chrome em app_settings", () => {
       "DELETE FROM app_settings WHERE key = $1",
       ["chrome_variant"],
     );
+  });
+});
+
+describe("aviso de material Vidro em app_settings", () => {
+  it("ausencia e valor invalido significam que o aviso ainda nao foi visto", async () => {
+    await expect(getGlassNoticeSeen("preloaded")).resolves.toBe(false);
+
+    databaseState.settings.set("glass_notice_seen", "true");
+    await expect(getGlassNoticeSeen("preloaded")).resolves.toBe(true);
+
+    databaseState.settings.set("glass_notice_seen", "sim");
+    await expect(getGlassNoticeSeen("preloaded")).resolves.toBe(false);
+  });
+
+  it('setGlassNoticeSeen grava o booleano como a string "true"', async () => {
+    await setGlassNoticeSeen("preloaded");
+
+    expect(databaseState.settings.get("glass_notice_seen")).toBe("true");
   });
 });
 

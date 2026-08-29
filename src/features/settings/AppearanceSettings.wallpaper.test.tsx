@@ -16,6 +16,9 @@ const databaseMocks = vi.hoisted(() => ({
   clearWallpaperFile: vi.fn(),
   getWallpaperOpacity: vi.fn(),
   setWallpaperOpacity: vi.fn(),
+  getGlassNoticeSeen: vi.fn(),
+  setGlassNoticeSeen: vi.fn(),
+  deleteSetting: vi.fn(),
 }));
 
 const presentationMocks = vi.hoisted(() => ({
@@ -36,6 +39,9 @@ vi.mock("../../lib/database", () => ({
   clearWallpaperFile: databaseMocks.clearWallpaperFile,
   getWallpaperOpacity: databaseMocks.getWallpaperOpacity,
   setWallpaperOpacity: databaseMocks.setWallpaperOpacity,
+  getGlassNoticeSeen: databaseMocks.getGlassNoticeSeen,
+  setGlassNoticeSeen: databaseMocks.setGlassNoticeSeen,
+  deleteSetting: databaseMocks.deleteSetting,
 }));
 
 vi.mock("../../hooks/useWallpaperBackdrop", () => ({
@@ -134,6 +140,9 @@ beforeEach(() => {
   databaseMocks.clearWallpaperFile.mockReset().mockResolvedValue(undefined);
   databaseMocks.getWallpaperOpacity.mockReset().mockResolvedValue(50);
   databaseMocks.setWallpaperOpacity.mockReset().mockResolvedValue(undefined);
+  databaseMocks.getGlassNoticeSeen.mockReset().mockResolvedValue(false);
+  databaseMocks.setGlassNoticeSeen.mockReset().mockResolvedValue(undefined);
+  databaseMocks.deleteSetting.mockReset().mockResolvedValue(undefined);
   presentationMocks.applyWallpaperPresentation.mockReset();
 
   container = document.createElement("div");

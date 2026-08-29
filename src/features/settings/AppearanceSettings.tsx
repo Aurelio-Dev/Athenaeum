@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { InfoDialog } from "../../components/InfoDialog";
 import { useDividerLines } from "../../hooks/useDividerLines";
 import {
   uiContrastOptions,
@@ -12,6 +14,9 @@ import {
   DEFAULT_WALLPAPER_OPACITY,
   MAX_WALLPAPER_OPACITY,
   MIN_WALLPAPER_OPACITY,
+  deleteSetting,
+  getGlassNoticeSeen,
+  setGlassNoticeSeen,
   type ChromeVariant,
   type MaterialVariant,
 } from "../../lib/database";
@@ -295,11 +300,80 @@ export function AppearanceSettings() {
   const { showDividerLines, setShowDividerLines } = useDividerLines();
   const { uiContrast, setUiContrast, uiFontScale, setUiFontScale } = useAppearancePreferences();
   const wallpaper = useWallpaperSettings();
+  const [hasSeenGlassNotice, setHasSeenGlassNotice] = useState<boolean | null>(null);
+  const [isGlassNoticeOpen, setIsGlassNoticeOpen] = useState(false);
+  const shouldShowGlassNoticeAfterLoadRef = useRef(false);
+  const glassNoticeReadVersionRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const readVersion = ++glassNoticeReadVersionRef.current;
+
+    void (async () => {
+      let seen = false;
+      try {
+        seen = await getGlassNoticeSeen();
+      } catch {
+        // Sem leitura confiavel, tratamos como primeira abertura para nao
+        // esconder permanentemente um aviso que o usuario ainda nao viu.
+      }
+
+      if (cancelled || readVersion !== glassNoticeReadVersionRef.current) {
+        return;
+      }
+
+      setHasSeenGlassNotice(seen);
+      if (!seen && shouldShowGlassNoticeAfterLoadRef.current) {
+        shouldShowGlassNoticeAfterLoadRef.current = false;
+        setIsGlassNoticeOpen(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleMaterialChange(nextMaterial: MaterialVariant) {
+    if (nextMaterial === material) {
+      return;
+    }
+
+    setMaterial(nextMaterial);
+
+    if (nextMaterial !== "glass") {
+      shouldShowGlassNoticeAfterLoadRef.current = false;
+      return;
+    }
+
+    if (hasSeenGlassNotice === true) {
+      return;
+    }
+
+    if (hasSeenGlassNotice === false) {
+      setIsGlassNoticeOpen(true);
+      return;
+    }
+
+    shouldShowGlassNoticeAfterLoadRef.current = true;
+  }
+
+  function dismissGlassNotice() {
+    shouldShowGlassNoticeAfterLoadRef.current = false;
+    setIsGlassNoticeOpen(false);
+    setHasSeenGlassNotice(true);
+    void setGlassNoticeSeen();
+  }
 
   function restoreDefaults() {
     setTheme("light");
     setMaterial("flat");
     setChrome(null);
+    glassNoticeReadVersionRef.current += 1;
+    shouldShowGlassNoticeAfterLoadRef.current = false;
+    setHasSeenGlassNotice(false);
+    setIsGlassNoticeOpen(false);
+    void deleteSetting("glass_notice_seen");
     setShowDividerLines(true);
     setUiContrast(100);
     setUiFontScale(100);
@@ -333,7 +407,7 @@ export function AppearanceSettings() {
           label="Material"
           description="Escolha o acabamento das superfícies. Funciona nos temas claro e escuro. O material Vidro prioriza a estética sobre a legibilidade e não segue os pisos de contraste do material Padrão."
         >
-          <MaterialControl material={material} onChange={setMaterial} />
+          <MaterialControl material={material} onChange={handleMaterialChange} />
         </SettingRow>
 
         <SettingRow
@@ -398,6 +472,14 @@ export function AppearanceSettings() {
       >
         Restaurar padrões
       </button>
+
+      {isGlassNoticeOpen ? (
+        <InfoDialog
+          title="Sobre o material Vidro"
+          message="O material Vidro prioriza a estética sobre a legibilidade e não segue os pisos de contraste do material Padrão. Se preferir contraste máximo, o material Padrão continua disponível a qualquer momento."
+          onDismiss={dismissGlassNotice}
+        />
+      ) : null}
     </section>
   );
 }

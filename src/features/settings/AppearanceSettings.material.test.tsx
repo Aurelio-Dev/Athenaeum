@@ -19,6 +19,19 @@ const hookMocks = vi.hoisted(() => ({
   storedChrome: { current: null as TestChrome | null },
 }));
 
+const databaseMocks = vi.hoisted(() => ({
+  getGlassNoticeSeen: vi.fn(),
+  setGlassNoticeSeen: vi.fn(),
+  deleteSetting: vi.fn(),
+}));
+
+vi.mock("../../lib/database", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/database")>()),
+  getGlassNoticeSeen: databaseMocks.getGlassNoticeSeen,
+  setGlassNoticeSeen: databaseMocks.setGlassNoticeSeen,
+  deleteSetting: databaseMocks.deleteSetting,
+}));
+
 vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({
     theme: "light",
@@ -104,6 +117,26 @@ function layoutButton(label: string) {
   return element;
 }
 
+function glassNoticeDialog() {
+  return container?.querySelector<HTMLElement>('[aria-labelledby="info-dialog-title"]') ?? null;
+}
+
+function glassNoticeButton() {
+  const element = Array.from(glassNoticeDialog()?.querySelectorAll("button") ?? []).find(
+    (candidate) => candidate.textContent === "Entendi",
+  );
+  if (!element) {
+    throw new Error("Botao do aviso sobre Vidro nao encontrado.");
+  }
+  return element;
+}
+
+async function renderAfterGlassNoticeLoad() {
+  await act(async () => {
+    root?.render(<AppearanceSettings />);
+  });
+}
+
 beforeEach(() => {
   hookMocks.setTheme.mockReset();
   hookMocks.setMaterial.mockReset();
@@ -113,6 +146,9 @@ beforeEach(() => {
   hookMocks.setUiFontScale.mockReset();
   hookMocks.material.current = "flat";
   hookMocks.storedChrome.current = null;
+  databaseMocks.getGlassNoticeSeen.mockReset().mockResolvedValue(false);
+  databaseMocks.setGlassNoticeSeen.mockReset().mockResolvedValue(undefined);
+  databaseMocks.deleteSetting.mockReset().mockResolvedValue(undefined);
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -180,6 +216,75 @@ describe("controle de material em Aparencia", () => {
 
     expect(hookMocks.setMaterial).toHaveBeenCalledWith("flat");
     expect(hookMocks.setChrome).toHaveBeenCalledWith(null);
+    expect(databaseMocks.deleteSetting).toHaveBeenCalledWith("glass_notice_seen");
+  });
+});
+
+describe("aviso na primeira selecao do material Vidro", () => {
+  it("abre o aviso e troca o material quando a chave esta ausente", async () => {
+    await renderAfterGlassNoticeLoad();
+
+    act(() => materialButton("Vidro").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(hookMocks.setMaterial).toHaveBeenCalledWith("glass");
+    expect(glassNoticeDialog()).not.toBeNull();
+    expect(glassNoticeDialog()?.textContent).toContain("Sobre o material Vidro");
+  });
+
+  it("grava a chave ao fechar o aviso", async () => {
+    await renderAfterGlassNoticeLoad();
+    act(() => materialButton("Vidro").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    act(() => glassNoticeButton().dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(databaseMocks.setGlassNoticeSeen).toHaveBeenCalledOnce();
+    expect(glassNoticeDialog()).toBeNull();
+  });
+
+  it("nao reaparece ao trocar para Padrao e voltar para Vidro", async () => {
+    await renderAfterGlassNoticeLoad();
+    act(() => materialButton("Vidro").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    act(() => glassNoticeButton().dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    hookMocks.material.current = "glass";
+    render();
+    act(() => materialButton("Padrão").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    hookMocks.material.current = "flat";
+    render();
+    act(() => materialButton("Vidro").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(glassNoticeDialog()).toBeNull();
+  });
+
+  it("nao abre o aviso quando a chave ja foi gravada", async () => {
+    databaseMocks.getGlassNoticeSeen.mockResolvedValue(true);
+    await renderAfterGlassNoticeLoad();
+
+    act(() => materialButton("Vidro").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(hookMocks.setMaterial).toHaveBeenCalledWith("glass");
+    expect(glassNoticeDialog()).toBeNull();
+  });
+
+  it("nunca abre o aviso ao selecionar o material Padrao", async () => {
+    hookMocks.material.current = "glass";
+    await renderAfterGlassNoticeLoad();
+
+    act(() => materialButton("Padrão").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(hookMocks.setMaterial).toHaveBeenCalledWith("flat");
+    expect(glassNoticeDialog()).toBeNull();
+  });
+
+  it("nao faz nada ao clicar em Vidro quando Vidro ja esta selecionado", async () => {
+    hookMocks.material.current = "glass";
+    await renderAfterGlassNoticeLoad();
+
+    act(() => materialButton("Vidro").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(hookMocks.setMaterial).not.toHaveBeenCalled();
+    expect(glassNoticeDialog()).toBeNull();
   });
 });
 
