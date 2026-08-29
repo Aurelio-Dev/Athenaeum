@@ -102,6 +102,7 @@ describe("material island: marcador exclusivamente geometrico", () => {
 
 describe("material glass: Library no chrome flutuante", () => {
   const ESCOPO_ILHAS = '[data-material="glass"][data-chrome="floating"]';
+  const ESCOPO_ILHAS_ESCURAS = `.dark${ESCOPO_ILHAS}`;
   const regras = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .map((m: RegExpMatchArray) => ({ seletor: m[1].trim(), corpo: m[2].trim() }));
 
@@ -136,17 +137,25 @@ describe("material glass: Library no chrome flutuante", () => {
 
   it("declara e consome os cinco tokens fechados das ilhas", () => {
     const blocoGlass = regraDaLeva((regra) => regra.seletor === ESCOPO_ILHAS).corpo;
+    const blocoGlassEscuro = regraDaLeva((regra) => regra.seletor === ESCOPO_ILHAS_ESCURAS).corpo;
     const tokens = {
       "--glass-island-gutter": "24px",
       "--glass-island-window-inset": "24px",
       "--glass-island-radius": "16px",
-      "--glass-island-outline": "rgba(255, 255, 255, 0.08)",
-      "--glass-island-shadow": "var(--glass-shadow-elevated)",
+      "--glass-island-outline": "rgb(44 26 16 / 0.14)",
+      "--glass-island-shadow": "0 4px 16px -8px rgb(44 26 16 / 0.24)",
+    };
+    const variantesEscuras = {
+      "--glass-island-outline": "rgba(255, 255, 255, 0.14)",
+      "--glass-island-shadow": "0 4px 16px -8px rgb(0 0 0 / 0.55)",
     };
 
     const tokensDeclarados = [...blocoGlass.matchAll(/(--glass-island-[\w-]+)\s*:/g)]
       .map((m: RegExpMatchArray) => m[1]);
     expect(tokensDeclarados).toEqual(Object.keys(tokens));
+    const tokensEscurosDeclarados = [...blocoGlassEscuro.matchAll(/(--glass-island-[\w-]+)\s*:/g)]
+      .map((m: RegExpMatchArray) => m[1]);
+    expect(tokensEscurosDeclarados).toEqual(Object.keys(variantesEscuras));
 
     for (const [token, valor] of Object.entries(tokens)) {
       expect(blocoGlass, `${token} ausente ou alterado`).toContain(`${token}: ${valor};`);
@@ -157,6 +166,10 @@ describe("material glass: Library no chrome flutuante", () => {
           partesDoSeletor(regra.seletor).every((parte) => parte.includes(ESCOPO_ILHAS)),
         ),
       ).toBe(true);
+    }
+
+    for (const [token, valor] of Object.entries(variantesEscuras)) {
+      expect(blocoGlassEscuro, `${token} escuro ausente ou alterado`).toContain(`${token}: ${valor};`);
     }
   });
 

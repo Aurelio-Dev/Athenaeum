@@ -826,14 +826,20 @@
    O gap do workspace separa as três regiões sem introduzir margens individuais
    que poderiam escapar dessa área reservada. */
 [data-material="glass"][data-chrome="floating"] {
-  /* Estes valores só existem no chrome flutuante. A sombra herda a variante
-     por --glass-shadow-elevated, enquanto a geometria permanece igual nos
-     dois temas glass. */
+  /* Estes valores só existem no chrome flutuante. A sombra curta assenta as
+     ilhas sobre o wallpaper sem invadir a margem externa reservada. */
   --glass-island-gutter: 24px;
   --glass-island-window-inset: 24px;
   --glass-island-radius: 16px;
-  --glass-island-outline: rgba(255, 255, 255, 0.08);
-  --glass-island-shadow: var(--glass-shadow-elevated);
+  --glass-island-outline: rgb(44 26 16 / 0.14);
+  --glass-island-shadow: 0 4px 16px -8px rgb(44 26 16 / 0.24);
+}
+
+/* O claro usa aresta e sombra terracota; no escuro, a borda de luz e a sombra
+   preta preservam o mesmo idioma dos tokens glass equivalentes. */
+.dark[data-material="glass"][data-chrome="floating"] {
+  --glass-island-outline: rgba(255, 255, 255, 0.14);
+  --glass-island-shadow: 0 4px 16px -8px rgb(0 0 0 / 0.55);
 }
 
 [data-material="glass"][data-chrome="floating"] .wallpaper-backdrop-root {
