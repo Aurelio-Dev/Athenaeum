@@ -49,6 +49,8 @@ vi.mock("../../hooks/useTheme", () => ({
     toggleTheme: vi.fn(),
     material: "glass",
     setMaterial: vi.fn(),
+    storedChrome: null,
+    setChrome: vi.fn(),
   }),
 }));
 

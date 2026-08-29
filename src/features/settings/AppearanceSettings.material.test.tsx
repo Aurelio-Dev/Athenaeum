@@ -6,14 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppearanceSettings } from "./AppearanceSettings";
 
 type TestMaterial = "flat" | "glass";
+type TestChrome = "docked" | "floating";
 
 const hookMocks = vi.hoisted(() => ({
   setTheme: vi.fn(),
   setMaterial: vi.fn(),
+  setChrome: vi.fn(),
   setShowDividerLines: vi.fn(),
   setUiContrast: vi.fn(),
   setUiFontScale: vi.fn(),
   material: { current: "flat" as TestMaterial },
+  storedChrome: { current: null as TestChrome | null },
 }));
 
 vi.mock("../../hooks/useTheme", () => ({
@@ -23,6 +26,8 @@ vi.mock("../../hooks/useTheme", () => ({
     toggleTheme: vi.fn(),
     material: hookMocks.material.current,
     setMaterial: hookMocks.setMaterial,
+    storedChrome: hookMocks.storedChrome.current,
+    setChrome: hookMocks.setChrome,
   }),
 }));
 
@@ -84,13 +89,30 @@ function materialButton(label: string) {
   return element;
 }
 
+function layoutButton(label: string) {
+  const group = container?.querySelector<HTMLDivElement>('div[aria-label="Layout da interface"]');
+  if (!group) {
+    throw new Error("Grupo de layout nao encontrado.");
+  }
+
+  const element = Array.from(group.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent === label,
+  );
+  if (!element) {
+    throw new Error(`Opcao de layout nao encontrada: ${label}`);
+  }
+  return element;
+}
+
 beforeEach(() => {
   hookMocks.setTheme.mockReset();
   hookMocks.setMaterial.mockReset();
+  hookMocks.setChrome.mockReset();
   hookMocks.setShowDividerLines.mockReset();
   hookMocks.setUiContrast.mockReset();
   hookMocks.setUiFontScale.mockReset();
   hookMocks.material.current = "flat";
+  hookMocks.storedChrome.current = null;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -157,5 +179,46 @@ describe("controle de material em Aparencia", () => {
     act(() => restoreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
     expect(hookMocks.setMaterial).toHaveBeenCalledWith("flat");
+    expect(hookMocks.setChrome).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("controle de layout em Aparencia", () => {
+  it("persiste automatico, docado e ilhas pelos tres botoes", () => {
+    hookMocks.material.current = "glass";
+    render();
+
+    act(() => layoutButton("Automático").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    act(() => layoutButton("Docado").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    act(() => layoutButton("Ilhas").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(hookMocks.setChrome.mock.calls).toEqual([[null], ["docked"], ["floating"]]);
+  });
+
+  it("marca a preferencia crua, inclusive automatico quando ela e nula", () => {
+    render();
+    expect(layoutButton("Automático").getAttribute("aria-pressed")).toBe("true");
+    expect(layoutButton("Docado").getAttribute("aria-pressed")).toBe("false");
+    expect(layoutButton("Ilhas").getAttribute("aria-pressed")).toBe("false");
+
+    hookMocks.storedChrome.current = "docked";
+    render();
+    expect(layoutButton("Automático").getAttribute("aria-pressed")).toBe("false");
+    expect(layoutButton("Docado").getAttribute("aria-pressed")).toBe("true");
+
+    hookMocks.storedChrome.current = "floating";
+    render();
+    expect(layoutButton("Docado").getAttribute("aria-pressed")).toBe("false");
+    expect(layoutButton("Ilhas").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("desabilita as tres opcoes quando o material e flat", () => {
+    render();
+
+    expect(["Automático", "Docado", "Ilhas"].map((label) => layoutButton(label).disabled)).toEqual([
+      true,
+      true,
+      true,
+    ]);
   });
 });

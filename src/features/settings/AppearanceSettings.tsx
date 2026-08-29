@@ -12,6 +12,7 @@ import {
   DEFAULT_WALLPAPER_OPACITY,
   MAX_WALLPAPER_OPACITY,
   MIN_WALLPAPER_OPACITY,
+  type ChromeVariant,
   type MaterialVariant,
 } from "../../lib/database";
 
@@ -138,6 +139,51 @@ function MaterialControl({
   );
 }
 
+const layoutOptions: ReadonlyArray<{ value: ChromeVariant | null; label: string }> = [
+  { value: null, label: "Automático" },
+  { value: "docked", label: "Docado" },
+  { value: "floating", label: "Ilhas" },
+];
+
+function LayoutControl({
+  storedChrome,
+  disabled,
+  onChange,
+}: {
+  storedChrome: ChromeVariant | null;
+  disabled: boolean;
+  onChange: (chrome: ChromeVariant | null) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Layout da interface"
+      className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-panel p-1"
+    >
+      {layoutOptions.map((option) => {
+        const isSelected = option.value === storedChrome;
+
+        return (
+          <button
+            key={option.value ?? "automatico"}
+            type="button"
+            aria-pressed={isSelected}
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={`h-7 rounded-md px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              isSelected
+                ? "bg-primary text-text-inverse"
+                : "text-text-secondary hover:text-primary"
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const secondaryButtonClassName =
   "h-8 rounded-lg border border-border-subtle bg-surface-panel px-3 text-xs font-semibold text-text-secondary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -245,7 +291,7 @@ function WallpaperOpacityControl({
 }
 
 export function AppearanceSettings() {
-  const { theme, setTheme, material, setMaterial } = useTheme();
+  const { theme, setTheme, material, setMaterial, storedChrome, setChrome } = useTheme();
   const { showDividerLines, setShowDividerLines } = useDividerLines();
   const { uiContrast, setUiContrast, uiFontScale, setUiFontScale } = useAppearancePreferences();
   const wallpaper = useWallpaperSettings();
@@ -253,6 +299,7 @@ export function AppearanceSettings() {
   function restoreDefaults() {
     setTheme("light");
     setMaterial("flat");
+    setChrome(null);
     setShowDividerLines(true);
     setUiContrast(100);
     setUiFontScale(100);
@@ -282,8 +329,24 @@ export function AppearanceSettings() {
           </select>
         </SettingRow>
 
-        <SettingRow label="Material" description="Escolha o acabamento das superfícies. Funciona nos temas claro e escuro.">
+        <SettingRow
+          label="Material"
+          description="Escolha o acabamento das superfícies. Funciona nos temas claro e escuro. O material Vidro prioriza a estética sobre a legibilidade e não segue os pisos de contraste do material Padrão."
+        >
           <MaterialControl material={material} onChange={setMaterial} />
+        </SettingRow>
+
+        <SettingRow
+          label="Layout"
+          description={`Ilhas flutuantes deixam o papel de parede aparecer entre os painéis. Disponível apenas no material Vidro.${
+            material === "flat" ? " Selecione o material Vidro para alterar." : ""
+          }`}
+        >
+          <LayoutControl
+            storedChrome={storedChrome}
+            disabled={material === "flat"}
+            onChange={setChrome}
+          />
         </SettingRow>
 
         <SettingRow

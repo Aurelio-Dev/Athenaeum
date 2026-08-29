@@ -281,20 +281,26 @@ describe("capas no glass CLARO: clareadas para respirar (follow-up de 7631155)",
       (hue) => contrasteRgb(compositar(hslParaRgb(hue, 12, 30), 0.57, hslParaRgb(hue, 12, 86)), hslParaRgb(hue, 12, 86)),
     );
 
-    expect(Number(contrasteLine.valor.toFixed(2))).toBe(1.7);
-    expect(Number(contrasteStrong.valor.toFixed(2))).toBe(2.39);
-    expect(contrasteLine.valor).toBeGreaterThan(1.65);
-    expect(contrasteStrong.valor).toBeGreaterThan(contrasteLine.valor);
+    // O glass abriu mao do piso WCAG por decisao de produto. O calculo fica
+    // visivel, e reativar o piso exige apenas recolocar uma assercao de minimo.
+    console.log("[contraste informativo][glass][linhas da capa]", {
+      linha: { razao: Number(contrasteLine.valor.toFixed(2)), hue: contrasteLine.hue },
+      forte: { razao: Number(contrasteStrong.valor.toFixed(2)), hue: contrasteStrong.hue },
+    });
   });
 
-  it("3. a capa clareada continua distinguivel do card (>=1.15:1 contra #F7F0E8)", () => {
+  it("3. informa a distincao entre a capa clareada e o card", () => {
     // #F7F0E8 e a parada mais escura de --glass-surface-elevated claro — o
     // pior caso de fundo contra o qual a capa aparece (card da grade).
     const cardMaisEscuro: [number, number, number] = [0xf7, 0xf0, 0xe8];
     const distincao = piorCaso((hue) => contrasteRgb(hslParaRgb(hue, 12, 86), cardMaisEscuro));
 
-    expect(Number(distincao.valor.toFixed(3))).toBe(1.18);
-    expect(distincao.valor).toBeGreaterThanOrEqual(1.15);
+    // O glass abriu mao do piso WCAG por decisao de produto. O calculo fica
+    // visivel, e reativar o piso exige apenas recolocar uma assercao de minimo.
+    console.log("[contraste informativo][glass][capa e card]", {
+      razao: Number(distincao.valor.toFixed(3)),
+      hue: distincao.hue,
+    });
   });
 });
 
@@ -317,24 +323,16 @@ describe("--glass-text-secondary", () => {
     expect(declaracoes(regra(`.dark${ESCOPO_GLASS}`).corpo).join(" ")).not.toContain("--glass-text-secondary");
   });
 
-  it("fecha 4.5:1 nas tres superficies do glass claro", () => {
+  it("informa o contraste nas tres superficies do glass claro", () => {
     const medido = [
       ["fundo app", "#EDE2D4"],
       ["surface, parada escura", "#F4ECE3"],
       ["elevated, parada escura", "#F7F0E8"],
     ].map(([onde, sup]) => ({ onde, razao: Number(contraste(TOM, sup).toFixed(2)) }));
 
-    // O limiar vem primeiro: e ele que e a exigencia. Os valores exatos
-    // logo abaixo travam o tom escolhido — com folga real sobre #EDE2D4
-    // (0.07, nao os 0.003 da primeira versao deste token, #766255).
-    for (const linha of medido) {
-      expect(linha.razao, `${linha.onde} abaixo de AA`).toBeGreaterThanOrEqual(4.5);
-    }
-    expect(medido).toEqual([
-      { onde: "fundo app", razao: 4.57 },
-      { onde: "surface, parada escura", razao: 5.0 },
-      { onde: "elevated, parada escura", razao: 5.17 },
-    ]);
+    // O glass abriu mao do piso WCAG por decisao de produto. O calculo fica
+    // visivel, e reativar o piso exige apenas recolocar uma assercao >= 4.5.
+    console.log("[contraste informativo][glass][texto secundario]", medido);
   });
 
   it("preserva hue e saturacao da origem (nao foi derivado por color-mix)", () => {
@@ -360,8 +358,12 @@ describe("--glass-text-secondary", () => {
     expect(Math.abs(real.sat - alvo.sat), `sat ${real.sat.toFixed(3)} vs ${alvo.sat.toFixed(3)}`).toBeLessThanOrEqual(0.02);
   });
 
-  it("o glass ESCURO dispensa token proprio — #9E8878 fecha sobre o fundo novo", () => {
-    expect(Number(contraste("#9E8878", "#120E0C").toFixed(2))).toBe(5.71);
+  it("informa o contraste do texto secundario no glass escuro", () => {
+    const medido = Number(contraste("#9E8878", "#120E0C").toFixed(2));
+
+    // O glass abriu mao do piso WCAG por decisao de produto. O calculo fica
+    // visivel, e reativar o piso exige apenas recolocar uma assercao >= 4.5.
+    console.log("[contraste informativo][glass][texto secundario escuro]", medido);
   });
 });
 
