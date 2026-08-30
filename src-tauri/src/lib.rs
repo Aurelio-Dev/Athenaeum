@@ -1573,6 +1573,11 @@ struct NotebookAssetData {
 }
 
 #[tauri::command]
+// Comando Tauri recebe app handle, estado do banco e os campos do
+// asset como parametros separados. Reduzir a lista exigiria um
+// struct de entrada, o que muda o contrato IPC — fica para a
+// decomposicao modular de lib.rs.
+#[allow(clippy::too_many_arguments)]
 async fn save_notebook_asset<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     db_instances: tauri::State<'_, DbInstances>,
@@ -1745,6 +1750,10 @@ async fn load_notebook_assets<R: tauri::Runtime>(
         _ => return Err("Banco de dados nao carregado.".to_string()),
     };
 
+    // Tupla espelha as colunas do SELECT abaixo. Extrair um type alias
+    // aqui separaria a forma do tipo da query que a produz — fica para
+    // a decomposicao modular de lib.rs.
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(String, String, String, String, String, i64, Option<String>, Option<String>, String)> = sqlx::query_as(
     "SELECT id, notebook_id, page_id, mime_type, file_path, file_size, checksum, original_name, created_at \
      FROM notebook_assets WHERE page_id = ? ORDER BY created_at ASC, id ASC",
@@ -1814,6 +1823,10 @@ async fn fetch_notebook_file_attachment(
     pool: &sqlx::SqlitePool,
     attachment_id: &str,
 ) -> Result<NotebookFileAttachmentMetadata, String> {
+    // Tupla espelha as colunas do SELECT abaixo. Extrair um type alias
+    // aqui separaria a forma do tipo da query que a produz — fica para
+    // a decomposicao modular de lib.rs.
+    #[allow(clippy::type_complexity)]
     let row: Option<(String, i64, i64, String, Option<String>, String, i64, String)> = sqlx::query_as(
     "SELECT id, notebook_id, page_id, original_name, mime_type, file_path, file_size, created_at \
      FROM notebook_file_attachments WHERE id = ?",
@@ -1863,6 +1876,11 @@ async fn get_notebook_file_attachment_with_path<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+// Comando Tauri recebe app handle, estado do banco e os campos do
+// asset como parametros separados. Reduzir a lista exigiria um
+// struct de entrada, o que muda o contrato IPC — fica para a
+// decomposicao modular de lib.rs.
+#[allow(clippy::too_many_arguments)]
 async fn save_notebook_file_attachment<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     db_instances: tauri::State<'_, DbInstances>,
@@ -2104,6 +2122,10 @@ async fn load_notebook_file_attachments(
         _ => return Err("Banco de dados nao carregado.".to_string()),
     };
 
+    // Tupla espelha as colunas do SELECT abaixo. Extrair um type alias
+    // aqui separaria a forma do tipo da query que a produz — fica para
+    // a decomposicao modular de lib.rs.
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(String, i64, i64, String, Option<String>, String, i64, String)> = sqlx::query_as(
     "SELECT id, notebook_id, page_id, original_name, mime_type, file_path, file_size, created_at \
      FROM notebook_file_attachments WHERE page_id = ? ORDER BY created_at ASC, id ASC",
@@ -3244,12 +3266,10 @@ fn finalize_notebook_export_file(
 
     if destination.exists() {
         let preserved_backup =
-            preserve_existing_export_destination(destination, &file_name, backup_token).map_err(
-                |error| {
+            preserve_existing_export_destination(destination, &file_name, backup_token)
+                .inspect_err(|_| {
                     let _ = std::fs::remove_file(temp_path);
-                    error
-                },
-            )?;
+                })?;
 
         backup = Some(preserved_backup);
     }
@@ -3590,7 +3610,9 @@ async fn write_notebook_export<R: tauri::Runtime>(
         let mut cursor = 0usize;
 
         for sentinel in &sentinels {
-            writer.write_all(html[cursor..sentinel.start].as_bytes())?;
+            // Os offsets das sentinelas vem de `find` neste mesmo HTML, entao
+            // sao fronteiras UTF-8 validas e a fatia de bytes preserva o texto.
+            writer.write_all(&html.as_bytes()[cursor..sentinel.start])?;
             cursor = sentinel.end;
 
             // O contrato ja garantiu: nonce casa, o slot existe no manifest e nao ha
@@ -3632,7 +3654,7 @@ async fn write_notebook_export<R: tauri::Runtime>(
             }
         }
 
-        writer.write_all(html[cursor..].as_bytes())?;
+        writer.write_all(&html.as_bytes()[cursor..])?;
         writer.flush()?;
         Ok(())
     })();
