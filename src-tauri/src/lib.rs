@@ -2229,7 +2229,9 @@ fn detect_wallpaper_extension(header: &[u8]) -> Result<&'static str, String> {
         return Ok("jpg");
     }
 
-    if header.len() >= WALLPAPER_HEADER_BYTES && &header[0..4] == b"RIFF" && &header[8..12] == b"WEBP"
+    if header.len() >= WALLPAPER_HEADER_BYTES
+        && &header[0..4] == b"RIFF"
+        && &header[8..12] == b"WEBP"
     {
         return Ok("webp");
     }
@@ -4480,13 +4482,9 @@ mod tests {
         );
         assert!(read_pdf_file_from_path(&managed_dir, &sources, &source).is_err());
 
-        let import_reservation = PdfSourceReservation::new(
-            &managed_dir,
-            &sources,
-            &source,
-            PdfSourceUse::Import,
-        )
-        .expect("slot de importacao continua autorizado");
+        let import_reservation =
+            PdfSourceReservation::new(&managed_dir, &sources, &source, PdfSourceUse::Import)
+                .expect("slot de importacao continua autorizado");
         import_reservation.commit();
         assert!(PdfSourceReservation::new(
             &managed_dir,
@@ -4548,11 +4546,11 @@ mod tests {
         )
         .expect("classificar referencia legada");
 
-        assert_eq!(
-            outcome,
-            DocumentFileDeletionOutcome::UnmanagedFilePreserved
+        assert_eq!(outcome, DocumentFileDeletionOutcome::UnmanagedFilePreserved);
+        assert!(
+            legacy_file.exists(),
+            "o arquivo original nunca pode ser apagado"
         );
-        assert!(legacy_file.exists(), "o arquivo original nunca pode ser apagado");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -5204,10 +5202,8 @@ mod tests {
     // -----------------------------------------------------------------------
 
     fn wallpaper_test_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "athenaeum-wallpaper-{}-{name}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("athenaeum-wallpaper-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("criar diretorio de teste");
         dir
@@ -5324,8 +5320,8 @@ mod tests {
         let header = png_bytes();
         let mut endless = std::io::repeat(0x5A);
 
-        let error = write_wallpaper_temp(&temp_path, &header[..8], &mut endless)
-            .expect_err("deve recusar");
+        let error =
+            write_wallpaper_temp(&temp_path, &header[..8], &mut endless).expect_err("deve recusar");
 
         assert!(error.contains("16MB"), "mensagem: {error}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -5341,7 +5337,9 @@ mod tests {
         assert!(validate_wallpaper_file_name("../wallpaper-1.png").is_err());
         assert!(validate_wallpaper_file_name("..\\wallpaper-1.png").is_err());
         assert!(validate_wallpaper_file_name("sub/wallpaper-1.png").is_err());
-        assert!(validate_wallpaper_file_name("../../../../windows/system32/config/sam.png").is_err());
+        assert!(
+            validate_wallpaper_file_name("../../../../windows/system32/config/sam.png").is_err()
+        );
         assert!(validate_wallpaper_file_name("C:\\Windows\\win.png").is_err());
         assert!(validate_wallpaper_file_name("/etc/passwd.png").is_err());
         assert!(validate_wallpaper_file_name("\\\\servidor\\share\\x.png").is_err());
@@ -5448,12 +5446,16 @@ mod tests {
         let bytes = webp_bytes();
         std::fs::write(&source, &bytes).unwrap();
 
-        let (file_name, written) = import_wallpaper_file(&wallpaper_dir, &source).expect("importar");
+        let (file_name, written) =
+            import_wallpaper_file(&wallpaper_dir, &source).expect("importar");
 
         // O cabecalho lido para farejar o formato precisa voltar para o arquivo
         // final: se ele fosse consumido e nao regravado, o destino sairia com os
         // 12 primeiros bytes faltando.
-        assert_eq!(std::fs::read(wallpaper_dir.join(&file_name)).unwrap(), bytes);
+        assert_eq!(
+            std::fs::read(wallpaper_dir.join(&file_name)).unwrap(),
+            bytes
+        );
         assert_eq!(written, bytes.len() as u64);
         let _ = std::fs::remove_dir_all(&dir);
     }
