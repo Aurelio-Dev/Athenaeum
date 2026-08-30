@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+# Cancela runs antigos da mesma branch: só o último commit importa.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run test
+
+      # `npm run build` NAO roda aqui de proposito. O src/styles/index.css
+      # referencia os seis .ttf da Segoe UI por url(), e esses arquivos sao
+      # proprietarios da Microsoft e estao no .gitignore — o runner nao os
+      # tem, entao o vite falharia ao resolver os imports. Ver a secao
+      # "Fonts" do AGENTS.md. O typecheck acima ja cobre a primeira metade
+      # do script de build (`tsc --noEmit && vite build`).
+
+  rust:
+    name: Rust (fmt + clippy + tests)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      # O toolchain vem de src-tauri/rust-toolchain.toml (1.96.0), para que
+      # um clippy de versao futura nao quebre o build sem mudanca de codigo.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: cargo fmt --check
+
+      - run: cargo clippy --all-targets -- -D warnings
+
+      - run: cargo test
