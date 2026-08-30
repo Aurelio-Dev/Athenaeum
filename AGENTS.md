@@ -506,6 +506,51 @@ and is included with `include_str!`.
 
 Follow the external SQL-file pattern for future migrations.
 
+### Database handles and pool ownership
+
+`tauri-plugin-sql` keeps pools in a `HashMap<String, DbPool>` keyed by the
+database URL. Two paths reach that map, and they are not equivalent:
+
+- `Database.get(url)` (`databaseSource: "preloaded"`) only constructs the JS
+  object. Queries resolve against whatever entry is currently in the map. It
+  creates no pool.
+- `Database.load(url)` (`databaseSource: "loaded"`, the default) runs
+  `DbPool::connect` and `insert`s under the same key, replacing the existing
+  pool. The previous `DbPool` is dropped.
+
+**Invariant:** every native window (Reader, Annotations, Notebook) and every
+popout must pass `databaseSource="preloaded"` explicitly, through every hook
+and component that touches the database. Calling `Database.load` from a
+native window swaps the pool out from under the other windows.
+
+This is easy to break during refactoring because the parameter defaults to
+`"loaded"`: forgetting to forward the prop compiles and passes tests, and
+fails only at runtime with more than one window open.
+
+Secondary consequence: `databasePromise ??=` is module-level memoization. A
+reload of the main webview (HMR in dev) clears it and triggers another pool
+replacement. Rare in production, frequent in dev.
+
+### Where migrations actually run
+
+Migrations are applied by the plugin's **preload, during Rust bootstrap**,
+before any JavaScript executes. Both the preload path and the `load` command
+call `migrations.remove(&db)` — `remove`, not `get` — so whichever runs first
+consumes the list. Since preload runs in the plugin `setup`, the main
+window's `Database.load` finds an empty map and applies nothing.
+
+Testing implication: the migration chain cannot be exercised through the JS
+path. A v1→N chain test must build the sqlx `Migrator` from the same
+migration source and apply it directly in Rust, which runs under `cargo test`
+with no Tauri, no WebView2 and no display.
+
+The `PRAGMA foreign\_keys = ON` in `database.ts` is **redundant**:
+`sqlx-sqlite` 0.8.6 already includes `foreign\_keys = ON` in the
+`SqliteConnectOptions` default and executes its pragmas per connection on
+open. The standalone statement would reach only one pooled connection. It is
+kept as a statement of intent and as protection against a default change on
+upgrade — not as the mechanism that guarantees enforcement.
+
 ### Migration rules
 
 - Migrations are forward-only.
@@ -845,6 +890,32 @@ Relevant files:
 - `docs/design/athenaeum-design-tokens-cores.md` — canonical changelog and
   rationale for every token derivation.
 
+### Chrome axis (`data-chrome`)
+
+`data-chrome="docked"|"floating"` is a third axis on the root element,
+orthogonal to both `data-material` and the color theme. Persistence is
+tri-state.
+
+Which one a screen uses is a structural question, not a visual preference:
+a single dominant object with temporary controls over it takes floating
+chrome; a workspace of coexisting permanent regions takes docked. The full
+rule, with the Reader and Library cases worked through, is in the 15/07/2026
+changelog of `docs/design/athenaeum-design-tokens-cores.md`.
+
+### The `material-island` marker
+
+`material-island` marks **geometry**, not a surface. It never receives
+`background`, `border-color` or `box-shadow`; a guard test enforces this.
+
+`box-shadow` **replaces** rather than accumulates across CSS rules. When a
+rule overrides a surface's shadow, any `inset` layer must be explicitly
+recomposed inside that same rule, or it is silently dropped.
+
+Under island chrome, `material-liquid-bar` becomes `display: contents`. This
+has already caused blur loss on the `+ Adicionar` button by incorrectly
+triggering a nested-surface reset. Any new material marker requires an
+inventory entry in the same commit that introduces it.
+
 ### Isolation rule
 
 Any new value introduced for the glass material must live exclusively under
@@ -993,6 +1064,30 @@ available.
 6. Verify migration files were not unintentionally modified.
 7. Report limitations and remaining risks.
 8. Report the final Git status.
+
+### Commit messages
+
+Conventional commits in English (`feat:`/`fix:`/`refactor:`/`chore:`/`docs:`).
+
+Multi-line messages go through a file, never `-m`. On Windows PowerShell
+5.1, `-Encoding utf8NoBOM` does not exist (it is PowerShell 7+) and
+`-Encoding utf8` writes a BOM, which lands as invisible bytes before the
+`feat:` prefix in `git log`. Two commits in this repository already carry
+that BOM. Write the file through .NET instead:
+
+```powershell
+[System.IO.File]::WriteAllText(
+  (Join-Path $PWD "commit-msg.txt"),
+  $msg,
+  (New-Object System.Text.UTF8Encoding $false)
+)
+git commit -F commit-msg.txt
+```
+
+Stage explicitly by path. Never `git add .`.
+
+`AGENTS.md` never rides along in a feature commit — it moves only in
+dedicated `docs:` commits.
 
 ---
 
