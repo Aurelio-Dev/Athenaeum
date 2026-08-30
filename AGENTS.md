@@ -544,8 +544,8 @@ path. A v1→N chain test must build the sqlx `Migrator` from the same
 migration source and apply it directly in Rust, which runs under `cargo test`
 with no Tauri, no WebView2 and no display.
 
-The `PRAGMA foreign\_keys = ON` in `database.ts` is **redundant**:
-`sqlx-sqlite` 0.8.6 already includes `foreign\_keys = ON` in the
+The `PRAGMA foreign_keys = ON` in `database.ts` is **redundant**:
+`sqlx-sqlite` 0.8.6 already includes `foreign_keys = ON` in the
 `SqliteConnectOptions` default and executes its pragmas per connection on
 open. The standalone statement would reach only one pooled connection. It is
 kept as a statement of intent and as protection against a default change on
