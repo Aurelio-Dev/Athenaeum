@@ -27,7 +27,7 @@ function regra(seletor: string): string {
 }
 
 afterEach(() => {
-  applyWallpaperPresentation(null, 0);
+  applyWallpaperPresentation(null, 0, 100);
   document.documentElement.style.removeProperty("--glass-wallpaper-image-opacity");
 });
 
@@ -68,16 +68,18 @@ describe("wallpaper: isolamento do material", () => {
       .filter((match: RegExpMatchArray) => match[2].includes("blur("))
       .map((match: RegExpMatchArray) => match[1]);
     expect(seletoresComBlur.length).toBeGreaterThan(0);
-    // A ação primária é a exceção nominal: seu vidro vale em todo material
-    // glass, com ou sem wallpaper. Qualquer terceiro blur sem um destes dois
-    // escopos continua sendo uma regressão.
+    // Action vale em todo material glass; optical exige wallpaper translucido.
+    // Os dois papeis sao declarativos e nenhuma classe visual e excecao.
     expect(
       seletoresComBlur.every((seletor: string) =>
         seletor
           .split(",")
           .every((parte: string) =>
-            parte.includes('[data-material="glass"][data-wallpaper="active"]')
-            || parte.includes(".material-surface-action"),
+            parte.includes('[data-material="glass"]')
+            && (
+              parte.includes('[data-wallpaper="active"]')
+              || parte.includes('[data-glass-backdrop="action"]')
+            ),
           ),
       ),
     ).toBe(true);
@@ -110,7 +112,7 @@ describe("wallpaper: slider governa o alpha do scrim", () => {
   });
 
   it("aplica alpha numa variavel do scrim e nunca opacidade na imagem", () => {
-    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 50);
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 50, 100);
     const root = document.documentElement;
 
     expect(root.dataset.wallpaper).toBe("active");
@@ -125,12 +127,66 @@ describe("wallpaper: slider governa o alpha do scrim", () => {
   });
 
   it("no extremo opaco nao marca a janela para backdrop-filter", () => {
-    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 0);
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 0, 100);
     const root = document.documentElement;
 
     expect(root.dataset.wallpaper).toBe("active");
     expect(root.dataset.wallpaperTranslucent).toBeUndefined();
     expect(root.style.getPropertyValue("--glass-wallpaper-scrim-alpha")).toBe("1.000");
+  });
+});
+
+describe("wallpaper: brilho isolado na camada da imagem", () => {
+  const ESCOPO_AJUSTADO = '[data-material="glass"][data-wallpaper="active"][data-wallpaper-brightness-adjusted="true"]';
+
+  it("mantem o caminho historico sem filtro em 100%", () => {
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 50, 100);
+    const root = document.documentElement;
+
+    expect(root.dataset.wallpaperBrightnessAdjusted).toBeUndefined();
+    expect(root.style.getPropertyValue("--glass-wallpaper-brightness")).toBe("");
+    expect(regra('[data-material="glass"][data-wallpaper="active"] body')).toContain(
+      "background-image: var(--glass-wallpaper-image);",
+    );
+  });
+
+  it("mapeia 50% e 150% para os fatores CSS da imagem", () => {
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 50, 50);
+    expect(document.documentElement.dataset.wallpaperBrightnessAdjusted).toBe("true");
+    expect(
+      document.documentElement.style.getPropertyValue("--glass-wallpaper-brightness"),
+    ).toBe("0.500");
+
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 50, 150);
+    expect(
+      document.documentElement.style.getPropertyValue("--glass-wallpaper-brightness"),
+    ).toBe("1.500");
+  });
+
+  it("remove o estado de brilho junto com o papel de parede", () => {
+    applyWallpaperPresentation("asset://localhost/wallpaper/wallpaper-1.png", 50, 150);
+    applyWallpaperPresentation(null, 50, 150);
+
+    const root = document.documentElement;
+    expect(root.dataset.wallpaperBrightnessAdjusted).toBeUndefined();
+    expect(root.style.getPropertyValue("--glass-wallpaper-brightness")).toBe("");
+  });
+
+  it("aplica brightness somente no pseudo-elemento que pinta a imagem", () => {
+    const corpoAjustado = regra(`${ESCOPO_AJUSTADO} body`);
+    const camadaDaImagem = regra(`${ESCOPO_AJUSTADO} body::before`);
+
+    expect(corpoAjustado).toContain("background-image: none;");
+    expect(corpoAjustado).toContain("isolation: isolate;");
+    expect(camadaDaImagem).toContain("background-image: var(--glass-wallpaper-image);");
+    expect(camadaDaImagem).toContain(
+      "filter: brightness(var(--glass-wallpaper-brightness));",
+    );
+    expect(camadaDaImagem).toContain("pointer-events: none;");
+
+    const seletoresComBrilho = [...semComentarios.matchAll(/([^{}]+)\{([^{}]*filter:\s*brightness\([^{}]*)\}/g)]
+      .map((match: RegExpMatchArray) => match[1].trim());
+    expect(seletoresComBrilho).toEqual([`${ESCOPO_AJUSTADO} body::before`]);
   });
 });
 

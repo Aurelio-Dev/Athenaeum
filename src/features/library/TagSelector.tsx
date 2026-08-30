@@ -247,7 +247,7 @@ export function TagSelector({ availableTags, selectedTags, onAvailableTagsChange
             type="button"
             aria-label="Adicionar tag"
             title="Adicionar tag"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-muted bg-surface-panel text-primary transition hover:border-primary hover:bg-primary-soft"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-muted bg-surface-panel text-primary-text transition hover:border-primary hover:bg-primary-soft"
             onClick={startAddingTag}
           >
             <AddIcon />

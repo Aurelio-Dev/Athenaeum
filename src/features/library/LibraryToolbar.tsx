@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ChromeVariant } from "../../lib/database";
 import type { SortMode, ViewMode } from "../../types/library";
 
 type LibraryToolbarProps = {
@@ -6,6 +7,7 @@ type LibraryToolbarProps = {
   viewMode: ViewMode;
   recentSortLabel?: string;
   compact?: boolean;
+  chrome: ChromeVariant;
   onSortModeChange: (value: SortMode) => void;
   onViewModeChange: (value: ViewMode) => void;
 };
@@ -56,7 +58,7 @@ const viewModes: Array<{ mode: ViewMode; label: string }> = [
   { mode: "list", label: "Visualizar em lista" },
 ];
 
-export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente", compact = false, onSortModeChange, onViewModeChange }: LibraryToolbarProps) {
+export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente", compact = false, chrome, onSortModeChange, onViewModeChange }: LibraryToolbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -97,14 +99,17 @@ export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente"
         </button>
 
         {isOpen ? (
-          <div className="material-liquid-overlay material-surface-overlay absolute top-full left-0 z-10 mt-1 min-w-full rounded-lg border border-border-muted bg-surface-panel p-1 shadow-lg">
+          <div
+            data-glass-backdrop={chrome === "floating" ? "optical" : undefined}
+            className="material-liquid-overlay material-surface-overlay absolute top-full left-0 z-10 mt-1 min-w-full rounded-lg border border-border-muted bg-surface-panel p-1 shadow-lg"
+          >
             {sortModes.map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => selectSortMode(mode)}
                 className={`block w-full cursor-pointer rounded-md px-4 py-2 text-left text-sm hover:bg-surface-muted ${
-                  mode === sortMode ? "font-semibold text-primary" : "text-text-primary"
+                  mode === sortMode ? "font-semibold text-primary-text" : "text-text-primary"
                 }`}
               >
                 {mode === "recentes" ? recentSortLabel : sortModeLabels[mode]}
@@ -122,7 +127,7 @@ export function LibraryToolbar({ sortMode, viewMode, recentSortLabel = "Recente"
             type="button"
             onClick={() => onViewModeChange(mode)}
             className={`material-surface-segment inline-flex h-8 w-8 items-center justify-center rounded-md transition ${
-              viewMode === mode ? "bg-primary text-text-inverse" : "text-text-secondary hover:text-text-primary"
+              viewMode === mode ? "bg-primary text-primary-foreground" : "text-text-secondary hover:text-text-primary"
             }`}
             aria-label={label}
             title={label}

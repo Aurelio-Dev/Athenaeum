@@ -26,6 +26,7 @@ describe("LibraryToolbar", () => {
     await act(async () => {
       root.render(
         <LibraryToolbar
+          chrome="docked"
           sortMode="recentes"
           viewMode="grid"
           recentSortLabel="Aberto recentemente"
@@ -45,5 +46,31 @@ describe("LibraryToolbar", () => {
     act(() => recentOption?.click());
 
     expect(onSortModeChange).toHaveBeenCalledWith("recentes");
+  });
+
+  it("delega o backdrop ao dropdown somente quando a barra nao gera caixa", async () => {
+    const renderToolbar = (chrome: "docked" | "floating") => {
+      root.render(
+        <LibraryToolbar
+          chrome={chrome}
+          sortMode="recentes"
+          viewMode="grid"
+          onSortModeChange={vi.fn()}
+          onViewModeChange={vi.fn()}
+        />,
+      );
+    };
+
+    await act(async () => renderToolbar("docked"));
+    const trigger = container.querySelector<HTMLButtonElement>("button");
+    act(() => trigger?.click());
+    expect(container.querySelector(".material-liquid-overlay")?.getAttribute("data-glass-backdrop"))
+      .toBeNull();
+
+    act(() => trigger?.click());
+    await act(async () => renderToolbar("floating"));
+    act(() => trigger?.click());
+    expect(container.querySelector(".material-liquid-overlay")?.getAttribute("data-glass-backdrop"))
+      .toBe("optical");
   });
 });

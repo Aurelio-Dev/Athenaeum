@@ -21,6 +21,7 @@ import { ContextMenuDivider } from "../../components/ui/ContextMenuDivider";
 import { ContextMenuItem } from "../../components/ui/ContextMenuItem";
 import { HeartIcon } from "../../components/ui/SharedIcons";
 import { useContextMenu } from "../../hooks/useContextMenu";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import {
   createAnnotation,
   createBookmark,
@@ -622,6 +623,7 @@ export function ReaderContent({
   const pinchZoomResetTimerRef = useRef<number | null>(null);
   const readerContextMenuOpenedByKeyboardRef = useRef(false);
   const readerContextMenu = useContextMenu();
+  const { matchesShortcut } = useKeyboardShortcuts();
   const pageRefs = useRef<Array<HTMLElement | null>>([]);
   const activePageLockRef = useRef<{ page: number; expiresAt: number } | null>(null);
   const leftIslandRef = useRef<HTMLDivElement | null>(null);
@@ -2225,10 +2227,11 @@ export function ReaderContent({
     await onClose(readingLocation);
   }, [exitOwnedNativeFullscreen, flushNotes, flushReadingTime, getCurrentReadingLocation, onClose]);
 
-  // Ctrl+F abre a sidebar esquerda e foca o campo de busca do documento.
+  // Buscar no documento: abre a sidebar esquerda e foca o campo de busca.
+  // O acorde vem do registro de atalhos (reader.search).
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+      if (matchesShortcut("reader.search", event)) {
         event.preventDefault();
         if (isReadingMode) {
           changeReadingMode(false);
@@ -2244,7 +2247,7 @@ export function ReaderContent({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cancelReaderAutoAlignment, captureCurrentPageAnchor, changeReadingMode, isReadingMode]);
+  }, [cancelReaderAutoAlignment, captureCurrentPageAnchor, changeReadingMode, isReadingMode, matchesShortcut]);
 
   // Autosave da posicao de leitura DURANTE a leitura. Escrita imediata de 1
   // statement (reading_location_json/progress), agendada com debounce para nao
@@ -2607,10 +2610,7 @@ export function ReaderContent({
   useEffect(() => {
     function handleFullscreenShortcut(event: KeyboardEvent) {
       if (
-        event.key !== "F11" ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
+        !matchesShortcut("reader.fullscreen", event) ||
         event.defaultPrevented ||
         event.repeat
       ) {
@@ -2630,7 +2630,7 @@ export function ReaderContent({
 
     window.addEventListener("keydown", handleFullscreenShortcut);
     return () => window.removeEventListener("keydown", handleFullscreenShortcut);
-  }, [isActiveForShortcuts, toggleNativeFullscreen]);
+  }, [isActiveForShortcuts, matchesShortcut, toggleNativeFullscreen]);
 
   function handleReaderScroll() {
     // A toolbar e posicionada por coordenadas de viewport; ao rolar ela ficaria

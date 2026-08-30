@@ -116,7 +116,7 @@ export function CanvasPropertiesPanel({
                   onClick={() => onStrokeWidthChange(option.value)}
                   className={`h-8 rounded-lg border text-xs font-bold transition ${
                     active
-                      ? "border-[var(--accent)] bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
+                      ? "border-[var(--accent)] bg-[var(--color-accent-tint-bg)] text-[var(--color-primary-text)]"
                       : "border-[var(--color-border-subtle)] text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
                   }`}
                 >
@@ -146,7 +146,7 @@ export function CanvasPropertiesPanel({
                   onClick={() => onFillStyleChange(option.value)}
                   className={`flex h-9 items-center justify-center rounded-lg border transition ${
                     active
-                      ? "border-[var(--accent)] bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
+                      ? "border-[var(--accent)] bg-[var(--color-accent-tint-bg)] text-[var(--color-primary-text)]"
                       : "border-[var(--color-border-subtle)] text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)]"
                   }`}
                 >

@@ -66,7 +66,7 @@ export function ContextMenuItem({
       onClick={onSelect}
     >
       {checked !== undefined ? (
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary-text">
           {checked ? <CheckIcon /> : null}
         </span>
       ) : null}

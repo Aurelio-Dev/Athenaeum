@@ -280,7 +280,7 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
                   type="button"
                   onClick={() => setActiveSection(section.id)}
                   className={`flex h-9 items-center gap-2 rounded-lg px-3 text-left text-xs font-medium transition ${
-                    isActive ? "bg-primary-soft text-primary" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                    isActive ? "bg-primary-soft text-primary-text" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
                   }`}
                 >
                   <SettingsSectionIcon sectionId={section.id} />
@@ -298,7 +298,7 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
             {activeSection === "library" ? (
               <section className="flex max-w-[580px] flex-col gap-5">
                 <header>
-                  <h2 className="font-serif text-xl font-medium text-text-primary">Biblioteca</h2>
+                  <h2 className="app-title font-serif text-xl font-medium">Biblioteca</h2>
                   <p className="mt-1 text-xs leading-5 text-text-secondary">Informações sobre o armazenamento local da biblioteca.</p>
                 </header>
 
@@ -326,7 +326,7 @@ export function SettingsPanel({ panel, onClose }: SettingsPanelProps) {
 function EmptySettingsSection({ title }: { title: string }) {
   return (
     <section className="flex max-w-[580px] flex-col gap-4">
-      <h2 className="font-serif text-xl font-medium text-text-primary">{title}</h2>
+      <h2 className="app-title font-serif text-xl font-medium">{title}</h2>
       <span className="text-sm text-text-secondary">Sem ajustes por enquanto.</span>
     </section>
   );

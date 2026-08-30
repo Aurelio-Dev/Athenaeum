@@ -1,4 +1,5 @@
 import { type MouseEvent, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { NewCollectionModal } from "./NewCollectionModal";
 import { SidebarIcon as Icon } from "./sidebarIcons";
 import { useTheme } from "../hooks/useTheme";
@@ -198,6 +199,7 @@ export function Sidebar({
 
   return (
     <aside
+      data-glass-backdrop="optical"
       className="material-island material-surface flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-border-subtle bg-sidebar font-sans text-sidebar-text"
       onContextMenu={onEmptyAreaContextMenu}
     >
@@ -334,7 +336,7 @@ export function Sidebar({
           <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
       </div>
-      {collectionContextMenu ? (
+      {collectionContextMenu ? createPortal(
         <div
           className="fixed inset-0 z-[65]"
           role="presentation"
@@ -345,6 +347,7 @@ export function Sidebar({
           }}
         >
           <div
+            data-glass-backdrop="optical"
             className="material-liquid-overlay absolute w-52 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar-raised py-1 text-sm text-sidebar-text shadow-2xl"
             style={{ left: collectionContextMenu.x, top: collectionContextMenu.y }}
             role="menu"
@@ -352,7 +355,7 @@ export function Sidebar({
           >
             <button
               type="button"
-              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold hover:bg-sidebar-active hover:text-text-inverse"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold hover:bg-sidebar-active hover:text-primary-foreground"
               role="menuitem"
               onClick={openCreateCollectionDialog}
             >
@@ -361,7 +364,7 @@ export function Sidebar({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold hover:bg-sidebar-active hover:text-text-inverse"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left font-semibold hover:bg-sidebar-active hover:text-primary-foreground"
               role="menuitem"
               onClick={() => openEditCollectionDialog(collectionContextMenu.collection)}
             >
@@ -378,12 +381,14 @@ export function Sidebar({
               Excluir coleção
             </button>
           </div>
-        </div>
+        </div>,
+        window.document.body,
       ) : null}
 
-      {collectionDialog ? (
+      {collectionDialog ? createPortal(
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={closeCollectionDialog}>
           <section
+            data-glass-backdrop="optical"
             className="material-surface-overlay w-full max-w-md rounded-xl bg-surface-panel text-text-primary shadow-2xl"
             role="dialog"
             aria-modal="true"
@@ -424,7 +429,8 @@ export function Sidebar({
               </button>
             </footer>
           </section>
-        </div>
+        </div>,
+        window.document.body,
       ) : null}
       {editingCollection ? (
         <NewCollectionModal

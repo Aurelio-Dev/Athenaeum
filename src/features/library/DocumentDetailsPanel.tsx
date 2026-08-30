@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { IconButton } from "../../components/IconButton";
 import { TagBadge } from "../../components/TagBadge";
@@ -257,9 +258,10 @@ function EditDocumentModal({
     });
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={onClose}>
       <section
+        data-glass-backdrop="optical"
         className="material-surface-overlay flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"
@@ -328,12 +330,13 @@ function EditDocumentModal({
           <button type="button" className="rounded-lg px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-muted" onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button hover:bg-primary-hover" onClick={handleSave}>
+          <button type="button" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button hover:bg-primary-hover" onClick={handleSave}>
             Salvar alterações
           </button>
         </footer>
       </section>
-    </div>
+    </div>,
+    window.document.body,
   );
 }
 
@@ -490,7 +493,10 @@ export function DocumentDetailsPanel({
   }
 
   return (
-    <aside className="material-island material-surface-elevated min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0">
+    <aside
+      data-glass-backdrop="optical"
+      className="material-island material-surface-elevated min-h-0 w-full shrink-0 flex flex-col border-t border-border-subtle bg-surface-panel font-sans xl:w-[432px] xl:border-l xl:border-t-0"
+    >
       <header className="flex items-center px-6 py-4">
         <span className={sectionLabelClassName}>Detalhes</span>
         <button type="button" aria-label="Fechar detalhes" className="ml-auto rounded-md p-2 text-text-subtle hover:bg-surface-muted" onClick={onClose}>
@@ -630,7 +636,7 @@ export function DocumentDetailsPanel({
                 </span>
                 <span className={sectionLabelClassName}>Progresso de leitura</span>
               </span>
-              <span className="text-sm font-bold text-primary">
+              <span className="text-sm font-bold text-primary-text">
                 {document.status === "completed" ? "Concluído" : `${document.progress}%`}
               </span>
             </div>
@@ -644,7 +650,7 @@ export function DocumentDetailsPanel({
           <div className="mt-6 grid gap-2">
             <button
               type="button"
-              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover"
               onClick={() => onRestore?.(document.id)}
             >
               <RestoreIcon />
@@ -687,7 +693,7 @@ export function DocumentDetailsPanel({
             </div>
             <button
               type="button"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover"
               onClick={() => {
                 void invoke("open_reader_window", {
                   documentId: document.id,

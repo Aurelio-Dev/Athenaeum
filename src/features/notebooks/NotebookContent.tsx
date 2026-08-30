@@ -39,6 +39,7 @@ import {
   type NotebookReadingStatus,
 } from "../../lib/database";
 import { useContextMenu } from "../../hooks/useContextMenu";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { deriveCoverHue } from "../../lib/documentColor";
 import type { LibraryCollection, LibraryDocument, NotebookPage, SubjectTag } from "../../types/library";
 import { DocumentPickerModal } from "../library/DocumentPickerModal";
@@ -582,6 +583,7 @@ export function NotebookContent({
   const [loadError, setLoadError] = useState(false);
   const [contextPageId, setContextPageId] = useState<number | null>(null);
   const pageContextMenu = useContextMenu();
+  const { matchesShortcut } = useKeyboardShortcuts();
   const [draftTitle, setDraftTitle] = useState("");
   const [editorStats, setEditorStats] = useState<EditorStats>({ words: 0, characters: 0 });
   const [editorZoomPercent, setEditorZoomPercent] = useState(100);
@@ -905,12 +907,12 @@ export function NotebookContent({
     }, notebookAutosaveDelayMs);
   }, [flushSaves]);
 
-  // Ctrl+S / Cmd+S: grava na hora e cancela o autosave agendado. So responde
+  // Salvar agora: grava na hora e cancela o autosave agendado. So responde
   // quando este e o Caderno ativo para atalhos (ver isActiveForShortcuts),
-  // como o Esc.
+  // como o Esc. O acorde vem do registro (notebook.save), nao de um literal.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() !== "s" || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+      if (!matchesShortcut("notebook.save", event)) {
         return;
       }
 
@@ -931,7 +933,7 @@ export function NotebookContent({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isActiveForShortcuts, flushSaves]);
+  }, [isActiveForShortcuts, flushSaves, matchesShortcut]);
 
   // Um autosave agendado nao pode disparar depois do painel sair de cena: o
   // cleanup de unmount ja grava o que estiver sujo.
@@ -1875,7 +1877,7 @@ export function NotebookContent({
                 placeholder={`Página sem título ${activePage.position}`}
                 aria-label="Título da página"
                 style={{ fontSize: `${28 * editorZoomScale}px` }}
-                className={`min-w-0 border-0 bg-transparent pb-2 pr-5 font-serif text-[28px] font-medium leading-tight text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] ${
+                className={`app-title min-w-0 border-0 bg-transparent pb-2 pr-5 font-serif text-[28px] font-medium leading-tight outline-none placeholder:text-[var(--muted-foreground)] ${
                   isFocusMode ? "pt-7" : "pt-2"
                 }`}
               />
@@ -1917,7 +1919,7 @@ export function NotebookContent({
                   <div className="flex shrink-0 items-center gap-3">
                     <button
                       type="button"
-                      className="inline-flex items-center rounded-full px-3 py-1 font-semibold text-primary transition hover:bg-primary-soft"
+                      className="inline-flex items-center rounded-full px-3 py-1 font-semibold text-primary-text transition hover:bg-primary-soft"
                       onClick={exitFocusMode}
                     >
                       Sair do foco · Esc
@@ -2004,7 +2006,7 @@ export function NotebookContent({
                             role="menuitemradio"
                             aria-checked={infoDraftReadingStatus === option.value}
                             className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-semibold transition ${
-                              infoDraftReadingStatus === option.value ? "bg-primary-soft text-primary" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                              infoDraftReadingStatus === option.value ? "bg-primary-soft text-primary-text" : "text-text-secondary hover:bg-surface-muted hover:text-text-primary"
                             }`}
                             onClick={() => {
                               setInfoDraftReadingStatus(option.value);
@@ -2115,7 +2117,7 @@ export function NotebookContent({
                 <button
                   type="button"
                   onClick={() => setIsPickerOpen(true)}
-                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary"
+                  className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-3 py-2 text-xs font-semibold text-primary-text transition hover:border-primary"
                 >
                   <AttachIcon size={13} />
                   Vincular PDF
@@ -2275,7 +2277,7 @@ export function NotebookContent({
             <footer className="flex justify-end border-t border-border-subtle px-6 py-4">
               <button
                 type="button"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover"
                 onClick={() => setIsStatsDialogOpen(false)}
               >
                 Fechar
@@ -2503,7 +2505,7 @@ export function NotebookContent({
                     // destino" (quando ainda nao ha preparacao).
                     Boolean(preparedExport?.isAboveSizeThreshold && !hasConfirmedLargeExport)
                   }
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => (preparedExport ? void runNotebookExport() : void prepareNotebookExport())}
                 >
                   {preparedExport

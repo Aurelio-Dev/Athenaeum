@@ -9,6 +9,36 @@ import { isAnnotationMarkStyle, isHighlightColor } from "../types/annotation";
 import type { Annotation, AnnotationMarkStyle, HighlightColor, NormalizedRect } from "../types/annotation";
 import type { DocumentBookmark } from "../types/bookmark";
 import type { AnnotationsFilterScope, Canvas, DocumentStatus, LibraryCollection, LibraryDocument, LibraryRoute, Notebook, NotebookPage, ReadingLocation, SortMode, SubjectTag, Tone } from "../types/library";
+import {
+  normalizeShortcutOverrides,
+  serializeShortcutOverrides,
+  type ShortcutOverrides,
+} from "./keyboardShortcuts";
+import {
+  DEFAULT_ACCENT_DARK,
+  DEFAULT_ACCENT_LIGHT,
+  DEFAULT_APPEARANCE_CONTRAST,
+  DEFAULT_GLASS_BLUR,
+  isHexColor,
+  isNightLightPreferences,
+  isScheduleTime,
+  MAX_APPEARANCE_CONTRAST,
+  MAX_GLASS_BLUR,
+  MAX_NIGHT_LIGHT_STRENGTH,
+  MIN_APPEARANCE_CONTRAST,
+  MIN_GLASS_BLUR,
+  MIN_NIGHT_LIGHT_STRENGTH,
+  normalizeAppearanceContrast,
+  normalizeGlassBlur,
+  normalizeHexColor,
+  normalizeNightLightStrength,
+  normalizeNightLightPreferences,
+  serializeNightLightPreferences,
+  type AppearanceAccentTheme,
+  type AppearancePreferences,
+  type HexColor,
+  type NightLightPreferences,
+} from "./appearancePreferences";
 // Type-only (apagado em runtime): a fonte de verdade do manifest e o builder
 // da exportacao em features/notebooks; nao duplicamos o tipo aqui.
 import type { NotebookExportManifest } from "../features/notebooks/notebookExportHtml";
@@ -41,9 +71,17 @@ export const READER_WINDOW_LABEL = "reader-window";
 // Preferencia global (nao pertence a um documento): o material das superficies
 // do app. Emitido para TODAS as janelas nativas, nao so para o Reader.
 export const MATERIAL_VARIANT_CHANGED_EVENT = "app:material-variant-changed";
-// Wallpaper e opacidade tambem sao preferencias globais. O evento nao carrega
-// caminhos: cada janela relê o nome confiavel do SQLite e o resolve no Rust.
+// Wallpaper, visibilidade e brilho tambem sao preferencias globais. O evento
+// nao carrega caminhos: cada janela rele o nome confiavel do SQLite e o resolve
+// no Rust.
 export const WALLPAPER_SETTINGS_CHANGED_EVENT = "app:wallpaper-settings-changed";
+// Preferencias visuais globais (paleta, contrastes, vidro e luz noturna).
+// Cada evento leva uma mudanca canonica e discriminada para que as outras
+// janelas possam atualizar a apresentacao sem reler todo o snapshot.
+export const APPEARANCE_PREFERENCES_CHANGED_EVENT = "app:appearance-preferences-changed";
+// Remapeamento de atalhos. O payload leva o mapa inteiro de overrides porque
+// ele e pequeno e uma alteracao pode remover um conflito em outra linha.
+export const KEYBOARD_SHORTCUTS_CHANGED_EVENT = "app:keyboard-shortcuts-changed";
 
 // Eixo ortogonal ao tema claro/escuro: descreve como as superficies sao
 // pintadas, nao qual e a paleta. "flat" e o material historico do app.
@@ -61,6 +99,55 @@ export type MaterialVariantChangedPayload = {
 
 export type WallpaperSettingsChangedPayload = {
   origin: string;
+};
+
+export type AppearancePreferenceChange =
+  | { kind: "accent"; theme: AppearanceAccentTheme; value: HexColor }
+  | { kind: "interface-contrast"; value: number }
+  | { kind: "text-contrast"; value: number }
+  | { kind: "title-contrast"; value: number }
+  | { kind: "glass-blur"; value: number }
+  | { kind: "night-light-strength"; value: number }
+  | { kind: "night-light-settings"; value: NightLightSettings }
+  | { kind: "night-light"; value: NightLightPreferences };
+
+export type NightLightSettings = Pick<
+  NightLightPreferences,
+  "enabled" | "scheduleEnabled" | "startTime" | "endTime"
+>;
+
+export type AppearancePreferencesChangedPayload = AppearancePreferenceChange & {
+  origin: string;
+};
+
+export type KeyboardShortcutsChangedPayload = {
+  overrides: ShortcutOverrides;
+  origin: string;
+};
+
+export function isKeyboardShortcutsChangedPayload(
+  payload: unknown,
+): payload is KeyboardShortcutsChangedPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  return (
+    typeof candidate.origin === "string"
+    && typeof candidate.overrides === "object"
+    && candidate.overrides !== null
+  );
+}
+
+export type AppearancePreferencesLoadResult = {
+  preferences: AppearancePreferences;
+  // A ausencia e diferente de 100 durante a migracao do antigo localStorage.
+  // Depois que o provider gravar as novas chaves, ambos passam a true.
+  storedContrast: {
+    interface: boolean;
+    text: boolean;
+  };
 };
 
 export type ReaderInvalidationPayload = {
@@ -160,6 +247,68 @@ export function isMaterialVariantChangedPayload(payload: unknown): payload is Ma
 
   const candidate = payload as Record<string, unknown>;
   return isMaterialVariant(candidate.material) && typeof candidate.origin === "string";
+}
+
+export function isAppearancePreferencesChangedPayload(
+  payload: unknown,
+): payload is AppearancePreferencesChangedPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  if (typeof candidate.origin !== "string") {
+    return false;
+  }
+
+  switch (candidate.kind) {
+    case "accent":
+      return (
+        (candidate.theme === "light" || candidate.theme === "dark")
+        && isHexColor(candidate.value)
+        && candidate.value === candidate.value.toUpperCase()
+      );
+    case "interface-contrast":
+    case "text-contrast":
+    case "title-contrast":
+      return (
+        typeof candidate.value === "number"
+        && Number.isInteger(candidate.value)
+        && candidate.value >= MIN_APPEARANCE_CONTRAST
+        && candidate.value <= MAX_APPEARANCE_CONTRAST
+      );
+    case "glass-blur":
+      return (
+        typeof candidate.value === "number"
+        && Number.isInteger(candidate.value)
+        && candidate.value >= MIN_GLASS_BLUR
+        && candidate.value <= MAX_GLASS_BLUR
+      );
+    case "night-light-strength":
+      return (
+        typeof candidate.value === "number"
+        && Number.isInteger(candidate.value)
+        && candidate.value >= MIN_NIGHT_LIGHT_STRENGTH
+        && candidate.value <= MAX_NIGHT_LIGHT_STRENGTH
+      );
+    case "night-light-settings": {
+      if (typeof candidate.value !== "object" || candidate.value === null) {
+        return false;
+      }
+
+      const settings = candidate.value as Record<string, unknown>;
+      return (
+        typeof settings.enabled === "boolean"
+        && typeof settings.scheduleEnabled === "boolean"
+        && isScheduleTime(settings.startTime)
+        && isScheduleTime(settings.endTime)
+      );
+    }
+    case "night-light":
+      return isNightLightPreferences(candidate.value);
+    default:
+      return false;
+  }
 }
 
 export function isReaderJumpToPagePayload(payload: unknown): payload is ReaderJumpToPagePayload {
@@ -490,6 +639,19 @@ async function emitWallpaperSettingsChanged() {
     // O SQLite ja confirmou a escrita. A janela de origem aplica a mudanca
     // localmente; uma falha de evento nao pode transformar sucesso em erro.
     console.warn("Nao foi possivel sincronizar o papel de parede entre as janelas.", error);
+  }
+}
+
+async function emitAppearancePreferenceChanged(change: AppearancePreferenceChange) {
+  try {
+    await emit<AppearancePreferencesChangedPayload>(APPEARANCE_PREFERENCES_CHANGED_EVENT, {
+      ...change,
+      origin: getCurrentWebviewWindow().label,
+    });
+  } catch (error) {
+    // A escrita no SQLite ja terminou. A janela de origem aplica a mudanca
+    // localmente e nao deve repetir uma operacao confirmada por falha do evento.
+    console.warn("Nao foi possivel sincronizar as preferencias de aparencia entre as janelas.", error);
   }
 }
 
@@ -2504,6 +2666,287 @@ export async function setGlassNoticeSeen(source: DatabaseHandleSource = "loaded"
   await setSetting(GLASS_NOTICE_SEEN_SETTING_KEY, "true", source);
 }
 
+// Personalizacao visual global. As chaves novas reutilizam app_settings e nao
+// alteram o schema. Leitores aceitam tanto o handle carregado quanto o
+// preloaded porque Reader, Caderno e pop-outs montam em WebViews independentes.
+const APPEARANCE_ACCENT_LIGHT_SETTING_KEY = "appearance_accent_light";
+const APPEARANCE_ACCENT_DARK_SETTING_KEY = "appearance_accent_dark";
+const APPEARANCE_INTERFACE_CONTRAST_SETTING_KEY = "appearance_interface_contrast";
+const APPEARANCE_TEXT_CONTRAST_SETTING_KEY = "appearance_text_contrast";
+const APPEARANCE_TITLE_CONTRAST_SETTING_KEY = "appearance_title_contrast";
+const APPEARANCE_GLASS_BLUR_SETTING_KEY = "appearance_glass_blur";
+const APPEARANCE_NIGHT_LIGHT_SETTING_KEY = "appearance_night_light";
+// A forca fica em uma chave independente para que um arraste em uma janela
+// nao sobrescreva toggle/agenda alterados ao mesmo tempo em outra WebView. O
+// JSON versionado continua guardando a estrutura e serve de fallback para
+// perfis gravados antes da separacao.
+const APPEARANCE_NIGHT_LIGHT_STRENGTH_SETTING_KEY = "appearance_night_light_strength";
+
+function appearanceAccentSettingKey(theme: AppearanceAccentTheme): string {
+  return theme === "light"
+    ? APPEARANCE_ACCENT_LIGHT_SETTING_KEY
+    : APPEARANCE_ACCENT_DARK_SETTING_KEY;
+}
+
+function appearanceAccentDefault(theme: AppearanceAccentTheme): HexColor {
+  return theme === "light" ? DEFAULT_ACCENT_LIGHT : DEFAULT_ACCENT_DARK;
+}
+
+export async function getAppearanceAccent(
+  theme: AppearanceAccentTheme,
+  source: DatabaseHandleSource = "loaded",
+): Promise<HexColor> {
+  return normalizeHexColor(
+    await getSetting(appearanceAccentSettingKey(theme), source),
+    appearanceAccentDefault(theme),
+  );
+}
+
+export async function getAppearanceInterfaceContrast(
+  source: DatabaseHandleSource = "loaded",
+): Promise<number> {
+  return normalizeAppearanceContrast(
+    await getSetting(APPEARANCE_INTERFACE_CONTRAST_SETTING_KEY, source),
+  );
+}
+
+export async function getAppearanceTextContrast(
+  source: DatabaseHandleSource = "loaded",
+): Promise<number> {
+  return normalizeAppearanceContrast(
+    await getSetting(APPEARANCE_TEXT_CONTRAST_SETTING_KEY, source),
+  );
+}
+
+export async function getStoredAppearanceContrast(
+  axis: "interface" | "text",
+  source: DatabaseHandleSource = "loaded",
+): Promise<number | null> {
+  const key = axis === "interface"
+    ? APPEARANCE_INTERFACE_CONTRAST_SETTING_KEY
+    : APPEARANCE_TEXT_CONTRAST_SETTING_KEY;
+  const stored = await getSetting(key, source);
+  return stored === null ? null : normalizeAppearanceContrast(stored);
+}
+
+export async function getAppearanceTitleContrast(
+  source: DatabaseHandleSource = "loaded",
+): Promise<number> {
+  return normalizeAppearanceContrast(
+    await getSetting(APPEARANCE_TITLE_CONTRAST_SETTING_KEY, source),
+  );
+}
+
+export async function getAppearanceGlassBlur(
+  source: DatabaseHandleSource = "loaded",
+): Promise<number> {
+  return normalizeGlassBlur(await getSetting(APPEARANCE_GLASS_BLUR_SETTING_KEY, source));
+}
+
+export async function getNightLightPreferences(
+  source: DatabaseHandleSource = "loaded",
+): Promise<NightLightPreferences> {
+  const [preferencesRaw, strengthRaw] = await Promise.all([
+    getSetting(APPEARANCE_NIGHT_LIGHT_SETTING_KEY, source),
+    getSetting(APPEARANCE_NIGHT_LIGHT_STRENGTH_SETTING_KEY, source),
+  ]);
+  const preferences = normalizeNightLightPreferences(preferencesRaw);
+  return strengthRaw === null
+    ? preferences
+    : { ...preferences, strength: normalizeNightLightStrength(strengthRaw) };
+}
+
+export async function getAppearancePreferencesWithPresence(
+  source: DatabaseHandleSource = "loaded",
+): Promise<AppearancePreferencesLoadResult> {
+  const [
+    accentLight,
+    accentDark,
+    interfaceContrastRaw,
+    textContrastRaw,
+    titleContrastRaw,
+    glassBlurRaw,
+    nightLightRaw,
+    nightLightStrengthRaw,
+  ] = await Promise.all([
+    getSetting(APPEARANCE_ACCENT_LIGHT_SETTING_KEY, source),
+    getSetting(APPEARANCE_ACCENT_DARK_SETTING_KEY, source),
+    getSetting(APPEARANCE_INTERFACE_CONTRAST_SETTING_KEY, source),
+    getSetting(APPEARANCE_TEXT_CONTRAST_SETTING_KEY, source),
+    getSetting(APPEARANCE_TITLE_CONTRAST_SETTING_KEY, source),
+    getSetting(APPEARANCE_GLASS_BLUR_SETTING_KEY, source),
+    getSetting(APPEARANCE_NIGHT_LIGHT_SETTING_KEY, source),
+    getSetting(APPEARANCE_NIGHT_LIGHT_STRENGTH_SETTING_KEY, source),
+  ]);
+
+  const nightLight = normalizeNightLightPreferences(nightLightRaw);
+
+  return {
+    preferences: {
+      accentLight: normalizeHexColor(accentLight, DEFAULT_ACCENT_LIGHT),
+      accentDark: normalizeHexColor(accentDark, DEFAULT_ACCENT_DARK),
+      interfaceContrast: normalizeAppearanceContrast(interfaceContrastRaw),
+      textContrast: normalizeAppearanceContrast(textContrastRaw),
+      titleContrast: normalizeAppearanceContrast(titleContrastRaw),
+      glassBlur: normalizeGlassBlur(glassBlurRaw),
+      nightLight: nightLightStrengthRaw === null
+        ? nightLight
+        : { ...nightLight, strength: normalizeNightLightStrength(nightLightStrengthRaw) },
+    },
+    storedContrast: {
+      interface: interfaceContrastRaw !== null,
+      text: textContrastRaw !== null,
+    },
+  };
+}
+
+export async function getAppearancePreferences(
+  source: DatabaseHandleSource = "loaded",
+): Promise<AppearancePreferences> {
+  return (await getAppearancePreferencesWithPresence(source)).preferences;
+}
+
+export async function setAppearanceAccent(
+  theme: AppearanceAccentTheme,
+  color: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  if (theme !== "light" && theme !== "dark") {
+    throw new Error("Tema de destaque invalido.");
+  }
+
+  const value = normalizeHexColor(color, appearanceAccentDefault(theme));
+  await setSetting(appearanceAccentSettingKey(theme), value, source);
+  await emitAppearancePreferenceChanged({ kind: "accent", theme, value });
+}
+
+export async function setAppearanceInterfaceContrast(
+  contrast: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeAppearanceContrast(contrast);
+  await setSetting(APPEARANCE_INTERFACE_CONTRAST_SETTING_KEY, String(value), source);
+  await emitAppearancePreferenceChanged({ kind: "interface-contrast", value });
+}
+
+export async function setAppearanceTextContrast(
+  contrast: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeAppearanceContrast(contrast);
+  await setSetting(APPEARANCE_TEXT_CONTRAST_SETTING_KEY, String(value), source);
+  await emitAppearancePreferenceChanged({ kind: "text-contrast", value });
+}
+
+export async function setAppearanceTitleContrast(
+  contrast: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeAppearanceContrast(contrast);
+  await setSetting(APPEARANCE_TITLE_CONTRAST_SETTING_KEY, String(value), source);
+  await emitAppearancePreferenceChanged({ kind: "title-contrast", value });
+}
+
+export async function setAppearanceGlassBlur(
+  blur: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeGlassBlur(blur);
+  await setSetting(APPEARANCE_GLASS_BLUR_SETTING_KEY, String(value), source);
+  await emitAppearancePreferenceChanged({ kind: "glass-blur", value });
+}
+
+export async function setNightLightPreferences(
+  preferences: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeNightLightPreferences(preferences);
+  const database = await getDatabase(source);
+  // Uma unica instrucao mantem reset/snapshot completo atomico entre as duas
+  // chaves, sem exigir comando Rust nem transacao distribuida no frontend.
+  await database.execute(
+    `INSERT INTO app_settings (key, value) VALUES ($1, $2), ($3, $4)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+    [
+      APPEARANCE_NIGHT_LIGHT_SETTING_KEY,
+      serializeNightLightPreferences(value),
+      APPEARANCE_NIGHT_LIGHT_STRENGTH_SETTING_KEY,
+      String(value.strength),
+    ],
+  );
+  await emitAppearancePreferenceChanged({ kind: "night-light", value });
+}
+
+function nightLightSettings(value: NightLightPreferences): NightLightSettings {
+  return {
+    enabled: value.enabled,
+    scheduleEnabled: value.scheduleEnabled,
+    startTime: value.startTime,
+    endTime: value.endTime,
+  };
+}
+
+export async function setNightLightStrength(
+  strength: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeNightLightStrength(strength);
+  await setSetting(APPEARANCE_NIGHT_LIGHT_STRENGTH_SETTING_KEY, String(value), source);
+  await emitAppearancePreferenceChanged({ kind: "night-light-strength", value });
+}
+
+export async function setNightLightSettings(
+  preferences: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeNightLightPreferences(preferences);
+  await setSetting(
+    APPEARANCE_NIGHT_LIGHT_SETTING_KEY,
+    serializeNightLightPreferences(value),
+    source,
+  );
+  await emitAppearancePreferenceChanged({
+    kind: "night-light-settings",
+    value: nightLightSettings(value),
+  });
+}
+
+// Remapeamento de atalhos. JSON versionado em app_settings: nao ha schema novo
+// e o contrato normaliza fora ids desconhecidos, atalhos fixos e bindings
+// invalidos antes de qualquer uso.
+const KEYBOARD_SHORTCUT_OVERRIDES_SETTING_KEY = "keyboard_shortcut_overrides";
+
+export async function getShortcutOverrides(
+  source: DatabaseHandleSource = "loaded",
+): Promise<ShortcutOverrides> {
+  return normalizeShortcutOverrides(
+    await getSetting(KEYBOARD_SHORTCUT_OVERRIDES_SETTING_KEY, source),
+  );
+}
+
+export async function setShortcutOverrides(
+  overrides: unknown,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  const value = normalizeShortcutOverrides(overrides);
+  await setSetting(
+    KEYBOARD_SHORTCUT_OVERRIDES_SETTING_KEY,
+    serializeShortcutOverrides(value),
+    source,
+  );
+
+  try {
+    await emit<KeyboardShortcutsChangedPayload>(KEYBOARD_SHORTCUTS_CHANGED_EVENT, {
+      overrides: value,
+      origin: getCurrentWebviewWindow().label,
+    });
+  } catch (error) {
+    // A gravacao ja terminou; a janela de origem aplica localmente e nao
+    // desfaz uma operacao confirmada por falha do evento.
+    console.warn("Nao foi possivel sincronizar os atalhos entre as janelas.", error);
+  }
+}
+
 // Papel de parede do app. Como o material, vive em app_settings e nao em
 // localStorage: e uma preferencia global, compartilhada pelas janelas nativas,
 // e precisa sobreviver a uma troca feita com a janela fechada.
@@ -2516,9 +2959,11 @@ export async function setGlassNoticeSeen(source: DatabaseHandleSource = "loaded"
 //                        muda entre maquinas e entre o perfil .dev e o de
 //                        producao. Quem traduz nome -> caminho e o comando
 //                        resolve_wallpaper_path, no Rust.
-// - wallpaper_opacity -> inteiro de 0 a 100, o valor do slider.
+// - wallpaper_opacity    -> inteiro de 0 a 100, o valor do slider.
+// - wallpaper_brightness -> inteiro de 50 a 150; 100 preserva a imagem.
 const WALLPAPER_FILE_SETTING_KEY = "wallpaper_file";
 const WALLPAPER_OPACITY_SETTING_KEY = "wallpaper_opacity";
+const WALLPAPER_BRIGHTNESS_SETTING_KEY = "wallpaper_brightness";
 
 export const MIN_WALLPAPER_OPACITY = 0;
 export const MAX_WALLPAPER_OPACITY = 100;
@@ -2527,6 +2972,10 @@ export const MAX_WALLPAPER_OPACITY = 100;
 // usuario acha que a importacao falhou), mas ele fica ATRAS das superficies do
 // app e nao pode competir com o conteudo. O ajuste fino e do usuario.
 export const DEFAULT_WALLPAPER_OPACITY = 50;
+
+export const MIN_WALLPAPER_BRIGHTNESS = 50;
+export const MAX_WALLPAPER_BRIGHTNESS = 150;
+export const DEFAULT_WALLPAPER_BRIGHTNESS = 100;
 
 export async function getWallpaperFile(source: DatabaseHandleSource = "loaded"): Promise<string | null> {
   const value = await getSetting(WALLPAPER_FILE_SETTING_KEY, source);
@@ -2574,6 +3023,35 @@ export async function setWallpaperOpacity(
   await setSetting(
     WALLPAPER_OPACITY_SETTING_KEY,
     String(normalizeWallpaperOpacity(opacity)),
+    source,
+  );
+  await emitWallpaperSettingsChanged();
+}
+
+export function normalizeWallpaperBrightness(value: string | number | null): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_WALLPAPER_BRIGHTNESS;
+  }
+
+  return Math.min(
+    MAX_WALLPAPER_BRIGHTNESS,
+    Math.max(MIN_WALLPAPER_BRIGHTNESS, Math.round(parsed)),
+  );
+}
+
+export async function getWallpaperBrightness(source: DatabaseHandleSource = "loaded"): Promise<number> {
+  return normalizeWallpaperBrightness(await getSetting(WALLPAPER_BRIGHTNESS_SETTING_KEY, source));
+}
+
+export async function setWallpaperBrightness(
+  brightness: number,
+  source: DatabaseHandleSource = "loaded",
+): Promise<void> {
+  await setSetting(
+    WALLPAPER_BRIGHTNESS_SETTING_KEY,
+    String(normalizeWallpaperBrightness(brightness)),
     source,
   );
   await emitWallpaperSettingsChanged();

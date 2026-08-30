@@ -28,6 +28,7 @@ export function CanvasCard({ canvas, collections, onOpen, onRename, onToggleFavo
   return (
     <>
       <article
+        data-glass-backdrop="optical"
         role="button"
         tabIndex={0}
         onClick={() => onOpen(canvas)}

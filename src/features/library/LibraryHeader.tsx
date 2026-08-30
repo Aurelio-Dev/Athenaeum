@@ -29,14 +29,16 @@ export function LibraryHeader({ title, countText, description, tabs, onEdit }: L
     <div className="min-w-64 flex-1">
       <div className="flex items-center gap-3">
         {/* Titulo em Lora Bold (font-serif), 42 / line-height 46.2 / #2C1810 no
-            claro; no escuro mantem o text-primary (tom claro). O tracking
+            claro; no escuro mantem o tom primario de texto. O tracking
             -1.26px da spec original valia para Segoe UI — em serif apertava
             demais, entao foi removido de proposito.
             py-1.5: o leading 46.2 e mais apertado que a caixa de linha natural
             da fonte a 42px, entao com o overflow:hidden do `truncate` os glifos
             com ascendente/descendente seriam cortados verticalmente; pr-1 evita
-            recorte do ultimo glifo na borda direita. */}
-        <h1 className="truncate py-1.5 pr-1 font-serif text-[42px] font-bold leading-[46.2px] text-[#2C1810] dark:text-[#F0E8DF]">{title}</h1>
+            recorte do ultimo glifo na borda direita.
+            A COR vem de `.app-title-page`, que responde ao contraste dos
+            titulos; por isso nao ha utilitaria de cor aqui. */}
+        <h1 className="app-title-page truncate py-1.5 pr-1 font-serif text-[42px] font-bold leading-[46.2px]">{title}</h1>
         {onEdit ? (
           <button
             type="button"

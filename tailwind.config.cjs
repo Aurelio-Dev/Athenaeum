@@ -32,6 +32,7 @@ module.exports = {
         },
         primary: {
           DEFAULT: "var(--color-primary)",
+          foreground: "var(--color-primary-foreground)",
           hover: "var(--color-primary-hover)",
           soft: "var(--color-primary-soft)",
           text: "var(--color-primary-text)",
@@ -89,7 +90,7 @@ module.exports = {
       },
       boxShadow: {
         card: "0 2px 10px rgba(24, 24, 27, 0.05)",
-        button: "0 1px 2px rgba(79, 70, 229, 0.35)",
+        button: "var(--shadow-button-accent, 0 1px 2px rgba(79, 70, 229, 0.35))",
       },
     },
   },

@@ -54,7 +54,7 @@ export function AiComposer({ value, disabled, onChange, onSubmit }: AiComposerPr
           aria-label="Enviar pergunta"
           disabled={disabled || value.trim().length === 0}
           onClick={onSubmit}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <SendIcon />
         </button>

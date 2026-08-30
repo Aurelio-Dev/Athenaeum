@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import {
   clearWallpaperFile,
+  DEFAULT_WALLPAPER_BRIGHTNESS,
   DEFAULT_WALLPAPER_OPACITY,
+  getWallpaperBrightness,
   getWallpaperFile,
   getWallpaperOpacity,
+  setWallpaperBrightness,
   setWallpaperFile,
   setWallpaperOpacity,
 } from "../lib/database";
@@ -14,7 +17,7 @@ import { applyWallpaperPresentation } from "./useWallpaperBackdrop";
 //
 // A divisao de responsabilidades e a mesma do resto do app: o Rust e dono do
 // arquivo em disco (escolher, copiar, apagar, resolver caminho) e o TypeScript
-// e dono das duas chaves em app_settings. Este hook so costura as duas metades
+// e dono das preferencias em app_settings. Este hook so costura as duas metades
 // na ORDEM que mantem disco e banco coerentes:
 //
 // - importar: copia primeiro, grava a chave depois. Se a gravacao falhar, o
@@ -39,18 +42,20 @@ export type WallpaperSettings = {
   fileName: string | null;
   previewUrl: string | null;
   opacity: number;
+  brightness: number;
   isLoading: boolean;
   isImporting: boolean;
   error: string | null;
   chooseWallpaper: () => Promise<void>;
   removeWallpaper: () => Promise<void>;
   changeOpacity: (opacity: number) => void;
+  changeBrightness: (brightness: number) => void;
 };
 
 // O slider dispara um evento por pixel arrastado. O valor na tela acompanha o
 // ponteiro na hora, mas a gravacao espera o arrasto assentar — sem isto, um
 // arrasto de ponta a ponta viraria uma centena de escritas no SQLite.
-const OPACITY_PERSIST_DELAY_MS = 250;
+const WALLPAPER_SETTING_PERSIST_DELAY_MS = 250;
 
 function describeError(error: unknown): string {
   if (typeof error === "string") {
@@ -68,21 +73,29 @@ export function useWallpaperSettings(): WallpaperSettings {
   const [fileName, setFileName] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(DEFAULT_WALLPAPER_OPACITY);
+  const [brightness, setBrightness] = useState(DEFAULT_WALLPAPER_BRIGHTNESS);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const pendingOpacityRef = useRef<number | null>(null);
   const opacityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingBrightnessRef = useRef<number | null>(null);
+  const brightnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presentationRef = useRef({
+    opacity: DEFAULT_WALLPAPER_OPACITY,
+    brightness: DEFAULT_WALLPAPER_BRIGHTNESS,
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
       try {
-        const [storedFileName, storedOpacity] = await Promise.all([
+        const [storedFileName, storedOpacity, storedBrightness] = await Promise.all([
           getWallpaperFile(),
           getWallpaperOpacity(),
+          getWallpaperBrightness(),
         ]);
 
         if (cancelled) {
@@ -90,6 +103,11 @@ export function useWallpaperSettings(): WallpaperSettings {
         }
 
         setOpacity(storedOpacity);
+        setBrightness(storedBrightness);
+        presentationRef.current = {
+          opacity: storedOpacity,
+          brightness: storedBrightness,
+        };
 
         if (!storedFileName) {
           return;
@@ -114,7 +132,7 @@ export function useWallpaperSettings(): WallpaperSettings {
         setFileName(storedFileName);
         const assetUrl = convertFileSrc(resolvedPath);
         setPreviewUrl(assetUrl);
-        applyWallpaperPresentation(assetUrl, storedOpacity);
+        applyWallpaperPresentation(assetUrl, storedOpacity, storedBrightness);
       } catch (loadError: unknown) {
         if (!cancelled) {
           setError(describeError(loadError));
@@ -137,6 +155,12 @@ export function useWallpaperSettings(): WallpaperSettings {
     });
   }, []);
 
+  const persistBrightness = useCallback((value: number) => {
+    void setWallpaperBrightness(value).catch((persistError: unknown) => {
+      console.error("Nao foi possivel salvar o brilho do papel de parede.", persistError);
+    });
+  }, []);
+
   // Uma gravacao pendente nao pode morrer com o painel: quem fecha Ajustes logo
   // depois de mexer no slider precisa reencontrar o valor que deixou.
   useEffect(() => {
@@ -150,14 +174,33 @@ export function useWallpaperSettings(): WallpaperSettings {
         persistOpacity(pendingOpacityRef.current);
         pendingOpacityRef.current = null;
       }
+
+      if (brightnessTimerRef.current !== null) {
+        clearTimeout(brightnessTimerRef.current);
+        brightnessTimerRef.current = null;
+      }
+
+      if (pendingBrightnessRef.current !== null) {
+        persistBrightness(pendingBrightnessRef.current);
+        pendingBrightnessRef.current = null;
+      }
     };
-  }, [persistOpacity]);
+  }, [persistBrightness, persistOpacity]);
 
   const changeOpacity = useCallback(
     (nextOpacity: number) => {
+      const nextPresentation = {
+        ...presentationRef.current,
+        opacity: nextOpacity,
+      };
+      presentationRef.current = nextPresentation;
       setOpacity(nextOpacity);
       if (previewUrl) {
-        applyWallpaperPresentation(previewUrl, nextOpacity);
+        applyWallpaperPresentation(
+          previewUrl,
+          nextPresentation.opacity,
+          nextPresentation.brightness,
+        );
       }
       pendingOpacityRef.current = nextOpacity;
 
@@ -173,9 +216,43 @@ export function useWallpaperSettings(): WallpaperSettings {
         if (value !== null) {
           persistOpacity(value);
         }
-      }, OPACITY_PERSIST_DELAY_MS);
+      }, WALLPAPER_SETTING_PERSIST_DELAY_MS);
     },
     [persistOpacity, previewUrl],
+  );
+
+  const changeBrightness = useCallback(
+    (nextBrightness: number) => {
+      const nextPresentation = {
+        ...presentationRef.current,
+        brightness: nextBrightness,
+      };
+      presentationRef.current = nextPresentation;
+      setBrightness(nextBrightness);
+      if (previewUrl) {
+        applyWallpaperPresentation(
+          previewUrl,
+          nextPresentation.opacity,
+          nextPresentation.brightness,
+        );
+      }
+      pendingBrightnessRef.current = nextBrightness;
+
+      if (brightnessTimerRef.current !== null) {
+        clearTimeout(brightnessTimerRef.current);
+      }
+
+      brightnessTimerRef.current = setTimeout(() => {
+        brightnessTimerRef.current = null;
+        const value = pendingBrightnessRef.current;
+        pendingBrightnessRef.current = null;
+
+        if (value !== null) {
+          persistBrightness(value);
+        }
+      }, WALLPAPER_SETTING_PERSIST_DELAY_MS);
+    },
+    [persistBrightness, previewUrl],
   );
 
   const chooseWallpaper = useCallback(async () => {
@@ -202,13 +279,17 @@ export function useWallpaperSettings(): WallpaperSettings {
       setFileName(imported.file_name);
       const assetUrl = convertFileSrc(imported.file_path);
       setPreviewUrl(assetUrl);
-      applyWallpaperPresentation(assetUrl, opacity);
+      applyWallpaperPresentation(
+        assetUrl,
+        presentationRef.current.opacity,
+        presentationRef.current.brightness,
+      );
     } catch (importError: unknown) {
       setError(describeError(importError));
     } finally {
       setIsImporting(false);
     }
-  }, [opacity]);
+  }, []);
 
   const removeWallpaper = useCallback(async () => {
     setError(null);
@@ -219,21 +300,27 @@ export function useWallpaperSettings(): WallpaperSettings {
 
       setFileName(null);
       setPreviewUrl(null);
-      applyWallpaperPresentation(null, opacity);
+      applyWallpaperPresentation(
+        null,
+        presentationRef.current.opacity,
+        presentationRef.current.brightness,
+      );
     } catch (removeError: unknown) {
       setError(describeError(removeError));
     }
-  }, [opacity]);
+  }, []);
 
   return {
     fileName,
     previewUrl,
     opacity,
+    brightness,
     isLoading,
     isImporting,
     error,
     chooseWallpaper,
     removeWallpaper,
     changeOpacity,
+    changeBrightness,
   };
 }

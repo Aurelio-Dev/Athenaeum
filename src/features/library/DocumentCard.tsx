@@ -322,6 +322,7 @@ function DocumentGridCard({ activeRoute, collections, document, isSelected, mode
   return (
     <>
       <article
+        data-glass-backdrop="optical"
         className={`material-liquid-card material-surface-card group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-surface-card shadow-card transition hover:-translate-y-1 ${
           isSelected ? "border-primary ring-2 ring-primary-soft" : "border-border-subtle"
         }`}
@@ -385,7 +386,7 @@ function DocumentGridCard({ activeRoute, collections, document, isSelected, mode
 
         {/* Indicador de progresso circular: canto inferior direito. */}
         {isTrashMode ? null : (
-          <span className="absolute bottom-2 right-2 inline-flex h-6 w-6 items-center justify-center text-text-primary dark:text-primary">
+          <span className="absolute bottom-2 right-2 inline-flex h-6 w-6 items-center justify-center text-text-primary dark:text-primary-text">
             <CircularProgress value={document.progress} />
           </span>
         )}

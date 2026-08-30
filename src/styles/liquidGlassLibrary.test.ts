@@ -11,7 +11,6 @@ function ler(caminho: string): string {
 const css = ler("src/styles/index.css");
 const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
 const ESCOPO_ATIVO = '[data-material="glass"][data-wallpaper="active"]';
-const ESCOPO_TRANSLUCIDO = `${ESCOPO_ATIVO}[data-wallpaper-translucent="true"]`;
 const ESCOPO_FLUTUANTE = '[data-material="glass"][data-chrome="floating"]';
 
 function regrasGlassSemWallpaper(codigo: string): string {
@@ -26,7 +25,12 @@ function regrasGlassSemWallpaper(codigo: string): string {
       && !seletor.includes('[data-chrome="floating"]')
       // A acao primaria tem contrato proprio em materialGlassSurfaces.test;
       // ela nao faz parte da referencia historica dos paineis da Library.
-      && !seletor.includes('.material-surface-action'),
+      && !seletor.includes('.material-surface-action')
+      // O contrato declarativo de backdrop e ortogonal a pintura historica:
+      // em 100 seus fallbacks reproduzem 12px/16px sem mudar o baseline.
+      && !seletor.includes('[data-glass-backdrop')
+      && !seletor.includes('[data-glass-blur')
+      && !seletor.includes('[data-interface-contrast-adjusted'),
     )
     .map(([seletor, corpo]) =>
       `${seletor.replace(/\s+/g, " ")} { ${corpo.replace(/\s+/g, " ")} }`,
@@ -55,7 +59,8 @@ describe("Liquid Glass da Library: isolamento", () => {
 
     expect(regrasComToken.length).toBeGreaterThan(0);
     for (const regra of regrasComToken) {
-      expect(regra[1]).toContain(ESCOPO_ATIVO);
+      expect(regra[1]).toContain('[data-material="glass"]');
+      expect(regra[1]).toContain('[data-wallpaper="active"]');
     }
   });
 
@@ -198,34 +203,27 @@ describe("Liquid Glass da Library: isolamento", () => {
 
 describe("Liquid Glass da Library: composicao", () => {
   it("backdrop-filter exige alpha visivel e nunca alcanca controles", () => {
-    const seletoresComFiltro = [...semComentarios.matchAll(/([^{}]*)\{[^{}]*backdrop-filter:\s*[^;]*blur\(var\(--glass-optical-blur\)\)[^;]*saturate\(var\(--glass-optical-saturation\)\)[^{}]*\}/g)]
-      .map((match: RegExpMatchArray) => match[1]);
+    const seletoresComFiltro = [...semComentarios.matchAll(/([^{}]*)\{[^{}]*backdrop-filter:\s*[^;]*blur\(var\(--glass-effective-optical-blur,\s*var\(--glass-optical-blur\)\)\)[^;]*saturate\(var\(--glass-optical-saturation\)\)[^{}]*\}/g)]
+      .map((match: RegExpMatchArray) => match[1].replace(/\s+/g, " ").trim());
 
-    expect(seletoresComFiltro.length).toBeGreaterThan(0);
-    for (const seletor of seletoresComFiltro) {
-      for (const parte of seletor.split(",")) {
-        expect(parte).toContain(ESCOPO_TRANSLUCIDO);
-        expect(parte.replace(":not(.material-liquid-control)", "")).not.toContain(
-          ".material-liquid-control",
-        );
-        expect(parte).not.toContain("immersive");
-        expect(parte).not.toMatch(/\b(?:input|textarea|form)\b/);
-      }
-    }
+    expect(seletoresComFiltro).toEqual([
+      '[data-material="glass"]:where([data-wallpaper="active"][data-wallpaper-translucent="true"]) [data-glass-backdrop="optical"]',
+    ]);
+    expect(seletoresComFiltro[0]).not.toMatch(/material-liquid-control|immersive|\b(?:input|textarea|form)\b/);
   });
 
   it("qualquer superficie aninhada desliga o segundo filtro", () => {
-    const regrasSemFiltro = [...semComentarios.matchAll(/([^{}]*)\{[^{}]*(?<!-)backdrop-filter:\s*none[^{}]*\}/g)]
-      .map((match: RegExpMatchArray) => match[1])
-      .join("\n");
+    const regraAninhada = [...semComentarios.matchAll(/([^{}]*)\{([^{}]*(?<!-)backdrop-filter:\s*none[^{}]*)\}/g)]
+      .map((match: RegExpMatchArray) => ({
+        seletor: match[1].replace(/\s+/g, " ").trim(),
+        corpo: match[2],
+      }))
+      .find((regra) => regra.seletor === '[data-material="glass"] [data-glass-backdrop] [data-glass-backdrop]');
 
-    expect(regrasSemFiltro).toContain(ESCOPO_TRANSLUCIDO);
-    const grupo = ":is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)";
-    // Os dois primeiros usos sao o reset historico superficie-sobre-superficie;
-    // o terceiro e a acao dentro da mesma superficie, que tambem reaproveita o
-    // backdrop ja composto pelo ancestral.
-    expect(regrasSemFiltro.split(grupo)).toHaveLength(4);
-    expect(regrasSemFiltro).toContain(`${grupo}\n  .material-surface-action`);
+    expect(regraAninhada).toBeDefined();
+    expect(regraAninhada?.corpo).toContain("-webkit-backdrop-filter: none;");
+    expect(regraAninhada?.corpo).toContain("backdrop-filter: none;");
+    expect(semComentarios).not.toContain(":is(.material-surface, .material-surface-elevated");
   });
 });
 

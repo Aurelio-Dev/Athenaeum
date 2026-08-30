@@ -2,9 +2,9 @@
 // (mutedForegroundContrast.test.ts e borderTokenContrast.test.ts).
 //
 // Existe como modulo proprio, e nao duplicado nos dois arquivos, porque
-// resolver um token do index.css agora exige seguir `var()` e calcular
-// `color-mix()` — os niveis da escada `data-ui-contrast` sao declarados como
-// mistura, nao como hex. Duas copias dessa resolucao divergiriam.
+// resolver um token do index.css exige seguir `var()` e calcular
+// `color-mix()` — varios tokens sao declarados como mistura, nao como hex.
+// Duas copias dessa resolucao divergiriam.
 
 // @ts-expect-error - sem @types/node no projeto; resolvido em runtime pelo Node.
 import { readFileSync } from "node:fs";
@@ -68,8 +68,10 @@ const BLOCOS: Record<Tema, readonly string[]> = {
 
 /**
  * Resolve um token do index.css ate um hex, seguindo `var()` e calculando
- * `color-mix()`. `seletoresExtras` entra na frente da cascata do tema — e como
- * os niveis de `data-ui-contrast` sobrescrevem a base.
+ * `color-mix()`. `seletoresExtras` entra na frente da cascata do tema, para um
+ * bloco mais especifico que sobrescreva a base do tema. Desde 29/08/2026 os
+ * contrastes da Aparencia sao calculados em TypeScript e aplicados inline pelo
+ * provider, entao nenhum chamador precisa desse parametro hoje.
  */
 export function resolver(token: string, tema: Tema, seletoresExtras: readonly string[] = []): string {
   const cascata = [...seletoresExtras, ...BLOCOS[tema]];

@@ -408,12 +408,12 @@ export function DetailsTab({
           ) : linkedNotebook ? (
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
               <div className="flex min-w-0 items-center gap-2 rounded-md border border-border-subtle bg-[var(--background)] px-2.5 py-2">
-                <span className="shrink-0 text-primary"><BookOpenIcon size={14} /></span>
+                <span className="shrink-0 text-primary-text"><BookOpenIcon size={14} /></span>
                 <span className="truncate text-[11px] font-semibold text-[var(--foreground)]" title={linkedNotebook.title}>{linkedNotebook.title}</span>
               </div>
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary-text transition hover:border-primary"
                 onClick={() => onOpenNotebook(linkedNotebook.id, linkedNotebook.title)}
               >
                 Abrir no Caderno
@@ -460,7 +460,7 @@ export function DetailsTab({
                 <button
                   type="button"
                   disabled={selectedNotebookId === null || isLinking}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary-text transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
                   onClick={() => void handleLinkNotebook()}
                 >
                   <BookOpenIcon size={13} />
@@ -496,7 +496,7 @@ export function DetailsTab({
             <button
               type="button"
               disabled={isOpeningExternally}
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-[var(--card)] px-2.5 py-2 text-[11px] font-semibold text-primary-text transition hover:border-primary disabled:cursor-wait disabled:opacity-60"
               onClick={() => void handleOpenExternally()}
             >
               <span>{isOpeningExternally ? "Abrindo..." : "Abrir original"}</span>

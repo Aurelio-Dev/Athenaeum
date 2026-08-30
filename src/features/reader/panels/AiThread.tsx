@@ -44,7 +44,7 @@ export function AiThread({ messages, status, onSuggestion, onJumpToPage, onStop,
                 key={suggestion}
                 type="button"
                 onClick={() => onSuggestion(suggestion)}
-                className="rounded-full border border-border-subtle bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="rounded-full border border-border-subtle bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--foreground)] transition hover:border-primary hover:text-primary-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {suggestion}
               </button>
@@ -78,7 +78,7 @@ export function AiThread({ messages, status, onSuggestion, onJumpToPage, onStop,
                           onJumpToPage(message.citation.page);
                         }
                       }}
-                      className="mt-2 rounded-full border border-border-subtle bg-[var(--card)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="mt-2 rounded-full border border-border-subtle bg-[var(--card)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] transition hover:border-primary hover:text-primary-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       p. {message.citation.page}
                     </button>
@@ -96,7 +96,7 @@ export function AiThread({ messages, status, onSuggestion, onJumpToPage, onStop,
             <span className="h-2 w-2 animate-pulse rounded-full bg-primary" aria-hidden="true" />
             Gerando resposta simulada...
           </span>
-          <button type="button" onClick={onStop} className="text-xs font-bold text-primary hover:underline">
+          <button type="button" onClick={onStop} className="text-xs font-bold text-primary-text hover:underline">
             Parar
           </button>
         </div>

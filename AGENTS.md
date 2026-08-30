@@ -136,6 +136,35 @@ arrastável precisa de um contêiner próprio com `pointer-events-auto`
 — depois da regra acima, o restante do wrapper é
 `pointer-events-none` e não repassa mais eventos de mouse.
 
+## Atalhos de teclado
+
+`src/lib/keyboardShortcuts.ts` é o registro canônico. Todo atalho tem um `id`
+estável; os que podem ser remapeados pelo usuário têm `defaultBinding`.
+
+Regra: **um handler nunca compara a tecla de um atalho remapeável
+literalmente.** Ele pergunta ao registro:
+
+```ts
+const { matchesShortcut } = useKeyboardShortcuts();
+if (matchesShortcut("notebook.save", event)) { /* ... */ }
+```
+
+Comparar `event.key === "s"` para uma ação remapeável faz o atalho ignorar o
+que o usuário configurou em Ajustes. `src/lib/keyboardShortcuts.test.ts` trava
+isso por inventário fechado de literais por arquivo e falha tanto quando um
+atalho novo aparece sem linha no catálogo quanto quando um handler volta a
+comparar a tecla diretamente.
+
+Permanecem fixos, e por isso continuam literais nos handlers: `Esc`, `Tab`,
+`Enter`, setas e `/` — carregam semântica de diálogo, ARIA ou do editor — e as
+ações que aceitam mais de uma tecla para o mesmo efeito, que perderiam essa
+tolerância ao virar um acorde único.
+
+Ao adicionar um atalho, adicione também a linha correspondente no catálogo: a
+tela "Atalhos de teclado" em Ajustes lê dali, e o teste acima falha sem ela.
+
+---
+
 ## Fixed stack
 
 The technology stack is a closed project decision:

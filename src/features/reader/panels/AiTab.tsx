@@ -155,7 +155,7 @@ export function AiTab({
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--card)]">
       <div role="note" className="flex shrink-0 items-start gap-2 border-b border-border-subtle bg-primary-soft px-4 py-3 text-xs leading-5 text-[var(--foreground)]">
-        <span className="mt-0.5 shrink-0 text-primary" aria-hidden="true"><AiSparklesIcon size={16} /></span>
+        <span className="mt-0.5 shrink-0 text-primary-text" aria-hidden="true"><AiSparklesIcon size={16} /></span>
         <p>
           <strong>Prévia da interface.</strong> A integração com IA local ainda não está disponível; nenhuma inferência é executada nesta tela.
         </p>
@@ -176,7 +176,7 @@ export function AiTab({
                 title={option.title}
                 onClick={() => setScope(option.value)}
                 className={`rounded-full px-4 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-45 ${
-                  isActive ? "bg-primary text-white" : "bg-transparent text-text-secondary hover:text-text-primary"
+                  isActive ? "bg-primary text-primary-foreground" : "bg-transparent text-text-secondary hover:text-text-primary"
                 }`}
               >
                 {option.label}

@@ -362,14 +362,14 @@ export function ReaderAnnotationsDock({
     >
       <header className="reader-annotation-border flex min-w-0 flex-col justify-center border-r px-[18px] py-4">
         <div className="flex min-w-0 items-center justify-between gap-2">
-          <h2 className="min-w-0 truncate font-serif text-base font-bold text-[var(--foreground)]">Anotações</h2>
+          <h2 className="app-title min-w-0 truncate font-serif text-base font-bold">Anotações</h2>
           <button
             type="button"
             disabled={isOpeningPopout}
             aria-label={isPopoutOpen ? `Focar janela de Anotações aberta para ${documentTitle}` : `Abrir Anotações de ${documentTitle} em uma janela`}
             title={isPopoutOpen ? "Focar janela aberta" : "Abrir em janela"}
             data-reader-popout-document-id={documentId}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-[var(--background)] px-2 text-[10px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-[var(--background)] px-2 text-[10px] font-semibold text-[var(--foreground)] outline-none transition hover:border-primary hover:text-primary-text focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-wait disabled:opacity-60"
             onClick={() => void handleOpenPopout()}
           >
             <PopOutIcon />
@@ -381,7 +381,7 @@ export function ReaderAnnotationsDock({
           type="button"
           aria-label={filterScopeToggleLabel}
           title={filterScopeToggleLabel}
-          className="mt-2.5 inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary outline-none transition hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
+          className="mt-2.5 inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-text outline-none transition hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
           onClick={handleFilterScopeToggle}
         >
           <FilterIcon />
@@ -441,7 +441,7 @@ export function ReaderAnnotationsDock({
         <button
           type="submit"
           disabled={!canSubmit}
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-text-inverse shadow-button outline-none transition hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-button outline-none transition hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <PlusIcon />
           Adicionar

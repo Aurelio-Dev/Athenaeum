@@ -129,7 +129,9 @@
   --color-text-primary: var(--foreground);
   --color-text-secondary: var(--muted-foreground);
   --color-text-subtle: var(--muted-foreground);
-  --color-text-inverse: var(--primary-foreground);
+  /* Inverso pertence a status/tags e permanece branco. O foreground de uma
+     acao primaria e separado porque um destaque claro pode exigir preto. */
+  --color-text-inverse: #FFFFFF;
 
   --color-sidebar: var(--sidebar);
   /* Fundo de hover/ativo dos itens da sidebar. No tema claro usa um bege
@@ -178,12 +180,18 @@
   --color-border-strong: var(--border);
 
   --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: #814A26;
   --color-primary-soft: var(--muted);
-  --color-primary-text: var(--primary);
+  /* Variante cromatica para foreground: preserva H/S do terracota e passa AA
+     tambem sobre card, input, sidebar e o fundo suave de selecao. */
+  --color-primary-text: #814A26;
   --color-accent-tint-bg: #EFE2D8;
 
-  --diagram-accent: var(--color-primary);
+  /* Conteudo criado pelo usuario nao acompanha a personalizacao cromatica da
+     UI. Diagramas e Quadros continuam com a identidade terracota historica. */
+  --color-content-accent: #9C5A2E;
+  --diagram-accent: var(--color-content-accent);
   /* Tipografia dos diagramas: UI (sans) para nós de diagram/grade/flowchart,
      serif de leitura (Lora) para o Cycle Graph e sua descrição matemática,
      mono para a fonte editável e fallbacks textuais. */
@@ -309,6 +317,7 @@
   --primary-foreground: #FFFFFF;
   --accent: #9C5A2E;
   --accent-foreground: #FFFFFF;
+  --color-primary-text: #CE8757;
 
   --surface-header: #14161F;
   --surface-elevated: #1E2130;
@@ -631,6 +640,44 @@
   --glass-optical-saturation: 1.16;
 }
 
+/* O contraste calculado pelo provider tambem chega por nomes neutros. Estes
+   aliases so substituem as arestas do material glass quando o ajuste existe;
+   flat e o default aprovado continuam lendo seus tokens historicos. */
+[data-material="glass"][data-interface-contrast-adjusted="true"] {
+  --glass-border: var(--appearance-glass-border);
+  --glass-border-top: var(--appearance-glass-border-top);
+  --glass-border-top-elevated: var(--appearance-glass-border-top-elevated);
+}
+
+/* As preferencias de aparencia expoem nomes neutros porque o root tambem
+   existe no material flat. O mapeamento para o vocabulario LiquidGlass so
+   acontece sob glass e apenas fora do default 100: sem data-glass-blur, os
+   tokens historicos de 12px/16px e as tints integrais seguem como fallback.
+
+   A retencao reduz somente o alpha das tres tints. `opacity` no botao
+   apagaria tambem rotulo, foco, borda e sombra, portanto nao faz parte deste
+   contrato. Em off a mesma retencao continua valida, embora os filtros sejam
+   desligados pela regra de backdrop mais abaixo. */
+[data-material="glass"]:is([data-glass-blur="adjusted"], [data-glass-blur="off"]) {
+  --glass-effective-action-blur: var(--appearance-glass-action-blur);
+  --glass-effective-optical-blur: var(--appearance-glass-optical-blur);
+  --glass-effective-action-tint: color-mix(
+    in srgb,
+    var(--glass-action-tint) var(--appearance-glass-action-retention),
+    transparent
+  );
+  --glass-effective-action-tint-hover: color-mix(
+    in srgb,
+    var(--glass-action-tint-hover) var(--appearance-glass-action-retention),
+    transparent
+  );
+  --glass-effective-action-tint-active: color-mix(
+    in srgb,
+    var(--glass-action-tint-active) var(--appearance-glass-action-retention),
+    transparent
+  );
+}
+
 /* Texto secundario proprio do glass CLARO.
    Com o fundo em #EDE2D4, o #7A6558 do flat cai a 4.29:1 — abaixo de AA. O
    tom novo e derivado em HSL a partir do proprio #7A6558, escurecendo so a
@@ -806,23 +853,17 @@
    O marcador so recebe pintura sob glass; no flat permanece inteiramente
    inerte e as utilitarias existentes continuam sendo a unica origem visual. */
 [data-material="glass"] .material-surface-action {
-  background-color: var(--glass-action-tint);
+  background-color: var(--glass-effective-action-tint, var(--glass-action-tint));
   box-shadow:
     0 0 0 1px var(--glass-action-rim),
     inset 0 1px 0 var(--glass-action-rim-inner),
     var(--glass-action-shadow);
   color: var(--glass-action-label);
   text-shadow: var(--glass-action-label-shadow);
-  -webkit-backdrop-filter:
-    blur(var(--glass-action-blur))
-    saturate(var(--glass-action-saturation));
-  backdrop-filter:
-    blur(var(--glass-action-blur))
-    saturate(var(--glass-action-saturation));
 }
 
 [data-material="glass"] .material-surface-action:hover {
-  background-color: var(--glass-action-tint-hover);
+  background-color: var(--glass-effective-action-tint-hover, var(--glass-action-tint-hover));
   box-shadow:
     0 0 0 1px var(--glass-action-rim),
     inset 0 1px 0 var(--glass-action-rim-inner),
@@ -830,7 +871,7 @@
 }
 
 [data-material="glass"] .material-surface-action:active {
-  background-color: var(--glass-action-tint-active);
+  background-color: var(--glass-effective-action-tint-active, var(--glass-action-tint-active));
   box-shadow:
     0 0 0 1px var(--glass-action-rim),
     inset 0 1px 0 var(--glass-action-rim-inner),
@@ -1112,39 +1153,42 @@
   box-shadow: var(--glass-optical-inner-glow-elevated);
 }
 
-/* O filtro e removido no slider 0: a tinta esta em alpha 1 e nenhum pixel do
-   wallpaper atravessa. --glass-immersive-* continua fora desta lista. */
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface,
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-elevated:not(.material-liquid-control),
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-card,
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-surface-overlay,
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-card,
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-overlay,
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar {
+/* O proprietario do filtro e declarativo. Um componente novo opta por um dos
+   dois papeis sem entrar numa lista de classes mantida em paralelo ao JSX.
+   Optical continua exigindo wallpaper visivel; action pode flutuar direto
+   sobre o fundo. O :where reduz a especificidade do estado optico para o
+   reset generico de aninhamento abaixo ser sempre soberano. */
+[data-material="glass"]:where([data-wallpaper="active"][data-wallpaper-translucent="true"])
+  [data-glass-backdrop="optical"] {
   -webkit-backdrop-filter:
-    blur(var(--glass-optical-blur))
+    blur(var(--glass-effective-optical-blur, var(--glass-optical-blur)))
     saturate(var(--glass-optical-saturation));
   backdrop-filter:
-    blur(var(--glass-optical-blur))
+    blur(var(--glass-effective-optical-blur, var(--glass-optical-blur)))
     saturate(var(--glass-optical-saturation));
 }
 
-/* Qualquer superficie aninhada reutiliza o backdrop ja composto pelo
-   ancestral. O seletor e geral de proposito: um novo menu ou card aninhado
-   nao pode criar um segundo filtro por esquecimento. ContextMenu portaled no
-   body continua recebendo o filtro da regra acima. */
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"]
-  :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)
-  :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar) {
+[data-material="glass"] [data-glass-backdrop="action"] {
+  -webkit-backdrop-filter:
+    blur(var(--glass-effective-action-blur, var(--glass-action-blur)))
+    saturate(var(--glass-action-saturation));
+  backdrop-filter:
+    blur(var(--glass-effective-action-blur, var(--glass-action-blur)))
+    saturate(var(--glass-action-saturation));
+}
+
+/* Backdrops nao empilham: qualquer proprietario dentro de outro reutiliza a
+   composicao do ancestral, independentemente das classes visuais de ambos.
+   Isso tambem cobre combinacoes action/optical que ainda nao existem hoje. */
+[data-material="glass"] [data-glass-backdrop] [data-glass-backdrop] {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
-/* A acao dentro de uma superficie ja filtrada, inclusive a barra docada,
-   reutiliza o backdrop composto pelo ancestral. */
-[data-material="glass"][data-wallpaper="active"][data-wallpaper-translucent="true"]
-  :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)
-  .material-surface-action {
+/* Zero e desligado por estado explicito no html, nao por blur(0), que ainda
+   criaria contexto de composicao. A paridade WebKit evita divergencia no
+   WebView entre o prefixado e o padrao. */
+[data-material="glass"][data-glass-blur="off"] [data-glass-backdrop] {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -1217,53 +1261,32 @@
   display: contents;
   background: none;
   box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
-/* A regra acima perde em especificidade para o filtro do wallpaper
-   translúcido; esta repete o reset com data-chrome para vencê-lo nesse caso. */
-[data-material="glass"][data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+/* Contraste dos titulos de pagina e secao.
+   ------------------------------------------------------------
+   O eixo tem slider proprio, separado do contraste dos textos, e so age sobre
+   titulos. O provider publica a cor JA derivada para o tema ativo; no padrao
+   nenhuma propriedade e publicada e cada regra cai no fallback historico, sem
+   deixar override no DOM.
+
+   `.app-title` cai em --foreground: esses titulos sempre acompanharam o
+   contraste dos textos e continuam acompanhando quando o eixo dos titulos
+   esta neutro. O titulo de pagina tem base propria, mais quente, e nunca
+   seguiu aquele eixo — o fallback literal preserva esse comportamento.
+
+   A cor mora aqui, e nao numa utilitaria do Tailwind no JSX: as duas seriam
+   seletores de uma classe so e a vitoria dependeria da ordem do CSS gerado. */
+.app-title {
+  color: var(--appearance-title-text, var(--foreground));
 }
 
-/* FIX (chrome flutuante): a acao primaria recupera o filtro que o reset
-   aninhado de :894-908 tira dela sem contrapartida.
-   No docado a faixa superior e um painel de verdade — pinta tinta e compoe o
-   proprio backdrop —, entao a acao dentro dela reaproveita esse backdrop e o
-   reset esta certo. No flutuante a faixa volta a `display: contents` (regra
-   acima): nao pinta, nao filtra, nao gera caixa. O reset continua casando
-   assim mesmo, porque `display: contents` remove a GERACAO DE CAIXA, nao o
-   elemento da arvore de casamento de seletor — e o botao fica sem nenhum
-   filtro, nem proprio nem herdado. Esta regra devolve o filtro proprio da
-   acao, e so nesse caso.
-   Escopo repete wallpaper+translucent de proposito: e exatamente a conjuncao
-   em que o reset dispara, e da a (0,6,0) que vence os (0,5,0) de la sem
-   precisar repetir o literal do grupo :is(...) — cuja contagem esta travada
-   em liquidGlassLibrary.test.ts:161. */
-[data-material="glass"][data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar .material-surface-action {
-  -webkit-backdrop-filter:
-    blur(var(--glass-action-blur))
-    saturate(var(--glass-action-saturation));
-  backdrop-filter:
-    blur(var(--glass-action-blur))
-    saturate(var(--glass-action-saturation));
+.app-title-page {
+  color: var(--appearance-title-page-text, #2C1810);
 }
 
-/* Contraste visual da interface. Os níveis preservam a paleta e ajustam
-   somente tons secundários e bordas, sem filtros que alterariam imagens ou
-   criariam novos contextos de empilhamento para os painéis flutuantes. */
-html[data-ui-contrast="90"] {
-  --muted-foreground: color-mix(in srgb, var(--foreground) 46%, var(--background));
-  --border: color-mix(in srgb, var(--foreground) 12%, var(--background));
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 44%, var(--sidebar));
-}
-
-html[data-ui-contrast="110"] {
-  --muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--background));
-  --border: color-mix(in srgb, var(--foreground) 30%, var(--background));
-  --color-sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 70%, var(--sidebar));
+.dark .app-title-page {
+  color: var(--appearance-title-page-text, #F0E8DF);
 }
 
 * {
@@ -1295,6 +1318,29 @@ body {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
+}
+
+/* Brilho diferente de 100% exige uma camada propria: aplicar filter no body
+   alteraria tambem toda a interface. O caminho historico acima permanece
+   intacto no valor padrao; so o estado ajustado cria esta composicao fixa. */
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-brightness-adjusted="true"] body {
+  position: relative;
+  isolation: isolate;
+  background-image: none;
+}
+
+[data-material="glass"][data-wallpaper="active"][data-wallpaper-brightness-adjusted="true"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--glass-surface-app);
+  background-image: var(--glass-wallpaper-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: brightness(var(--glass-wallpaper-brightness));
 }
 
 [data-material="glass"][data-wallpaper="active"] .wallpaper-backdrop-root {
@@ -1784,6 +1830,7 @@ select {
 }
 
 @media print {
+  .night-light-layer,
   .notebook-editor .notebook-image-resize-handle {
     display: none;
   }

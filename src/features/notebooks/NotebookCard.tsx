@@ -48,6 +48,7 @@ export function NotebookCard({ notebook, collections, onOpen, onRename, onToggle
   return (
     <>
       <article
+        data-glass-backdrop="optical"
         role="button"
         tabIndex={0}
         onClick={() => onOpen(notebook)}

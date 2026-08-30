@@ -53,6 +53,7 @@ import {
   type CanvasTransformBox,
 } from "./canvasTransform";
 import { getFillPatternImage } from "./canvasFillPattern";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 
 const collapsedHeight = 42;
 const headerHeight = 40;
@@ -760,6 +761,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   // Formas do Quadro e ferramenta ativa. A ferramenta e controlada pela
   // CanvasToolbar (pilula inferior); "select"/"pan" nao sao persistidos.
   const [shapes, setShapes] = useState<CanvasShape[]>([]);
+  const { matchesShortcut } = useKeyboardShortcuts();
   const [tool, setTool] = useState<CanvasTool>("select");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [defaultStyle, setDefaultStyle] = useState<CanvasDefaultStyle>(() => ({ ...initialDefaultStyle }));
@@ -769,7 +771,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
   const [directionalHandleColors] = useState(() => ({
     fill: getCanvasCssColor("--card", "#FAF5EF"),
     controlFill: getCanvasCssColor("--color-accent-tint-bg", "#EFE2D8"),
-    stroke: getCanvasCssColor("--accent", "#9C5A2E"),
+    stroke: getCanvasCssColor("--color-content-accent", "#9C5A2E"),
   }));
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -1885,10 +1887,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
     }
   }, [applyStageTransform, isCollapsed]);
 
-  // Atalhos de teclado do Quadro, complementando a CanvasToolbar: Ctrl+Z/Y para
-  // historico, Esc sai do modo Mover, V = selecionar, R = retangulo, P = lapis,
-  // E = borracha, T = texto, I = imagem, F = frame, Delete/Backspace = remover
-  // a selecao. Sao gated pelo ponteiro para nao sequestrar outros paineis.
+  // Atalhos de teclado do Quadro, complementando a CanvasToolbar. Historico e
+  // ferramentas sao remapeaveis e resolvidos pelo registro (canvas.*); Esc,
+  // que sai do modo Mover, e Delete/Backspace, que removem a selecao, seguem
+  // fixos. Sao gated pelo ponteiro para nao sequestrar outros paineis.
   useEffect(() => {
     function handleToolKeys(event: KeyboardEvent) {
       // Esc sai do Mover mesmo com o ponteiro fora (e so um toggle de modo, seguro).
@@ -1899,10 +1901,10 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         return;
       }
 
-      const historyKey = event.key.toLowerCase();
-      if (event.ctrlKey && (historyKey === "z" || historyKey === "y")) {
-        // Durante a digitacao, Ctrl+Z/Ctrl+Y pertencem ao textarea nativo, nao
-        // ao historico do Quadro.
+      const desfazer = matchesShortcut("canvas.undo", event);
+      if (desfazer || matchesShortcut("canvas.redo", event)) {
+        // Durante a digitacao, desfazer/refazer pertencem ao textarea nativo,
+        // nao ao historico do Quadro.
         if (document.activeElement === textAreaRef.current || isEditableTarget(event.target)) {
           return;
         }
@@ -1911,10 +1913,9 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         }
 
         event.preventDefault();
-        const snapshot =
-          historyKey === "z"
-            ? historyRef.current.undo(shapesRef.current)
-            : historyRef.current.redo(shapesRef.current);
+        const snapshot = desfazer
+          ? historyRef.current.undo(shapesRef.current)
+          : historyRef.current.redo(shapesRef.current);
         if (snapshot) {
           applyHistorySnapshot(snapshot);
         }
@@ -1925,39 +1926,24 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
         return;
       }
 
-      if (event.key === "v" || event.key === "V") {
-        setTool("select");
-        return;
-      }
+      // O acorde de cada ferramenta vem do registro. Antes a comparacao era so
+      // pela letra, entao Ctrl+V ou Shift+V tambem trocavam de ferramenta; o
+      // matcher exige os modificadores exatos e encerra esse efeito colateral.
+      const ferramentaPorAtalho: ReadonlyArray<readonly [string, CanvasTool]> = [
+        ["canvas.tool-select", "select"],
+        ["canvas.tool-rectangle", "rect"],
+        ["canvas.tool-freedraw", "freedraw"],
+        ["canvas.tool-eraser", "eraser"],
+        ["canvas.tool-text", "text"],
+        ["canvas.tool-image", "image"],
+        ["canvas.tool-frame", "frame"],
+      ];
 
-      if (event.key === "r" || event.key === "R") {
-        setTool("rect");
-        return;
-      }
-
-      if (event.key === "p" || event.key === "P") {
-        setTool("freedraw");
-        return;
-      }
-
-      if (event.key === "e" || event.key === "E") {
-        setTool("eraser");
-        return;
-      }
-
-      if (event.key === "t" || event.key === "T") {
-        setTool("text");
-        return;
-      }
-
-      if (event.key === "i" || event.key === "I") {
-        setTool("image");
-        return;
-      }
-
-      if (event.key === "f" || event.key === "F") {
-        setTool("frame");
-        return;
+      for (const [id, ferramenta] of ferramentaPorAtalho) {
+        if (matchesShortcut(id, event)) {
+          setTool(ferramenta);
+          return;
+        }
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
@@ -1980,7 +1966,7 @@ export function CanvasPanel({ panel, title, onClose, onCanvasChanged }: CanvasPa
 
     window.addEventListener("keydown", handleToolKeys);
     return () => window.removeEventListener("keydown", handleToolKeys);
-  }, [applyHistorySnapshot, pushHistorySnapshot, scheduleSave]);
+  }, [applyHistorySnapshot, matchesShortcut, pushHistorySnapshot, scheduleSave]);
 
   // Mantem o cursor coerente ao trocar de ferramenta enquanto o ponteiro esta
   // sobre o Quadro (ex.: selecionar uma forma vira crosshair; Mover vira grab).

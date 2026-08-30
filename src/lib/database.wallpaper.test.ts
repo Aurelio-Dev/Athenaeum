@@ -33,10 +33,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   clearWallpaperFile,
+  DEFAULT_WALLPAPER_BRIGHTNESS,
   DEFAULT_WALLPAPER_OPACITY,
+  getWallpaperBrightness,
   getWallpaperFile,
   getWallpaperOpacity,
+  normalizeWallpaperBrightness,
   normalizeWallpaperOpacity,
+  setWallpaperBrightness,
   setWallpaperFile,
   setWallpaperOpacity,
   WALLPAPER_SETTINGS_CHANGED_EVENT,
@@ -147,5 +151,33 @@ describe("papel de parede em app_settings", () => {
 
     await expect(setWallpaperOpacity(70, "preloaded")).resolves.toBeUndefined();
     expect(databaseMocks.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("persiste e le o brilho como percentual inteiro", async () => {
+    await setWallpaperBrightness(125, "preloaded");
+
+    expect(databaseMocks.execute).toHaveBeenCalledWith(
+      "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+      ["wallpaper_brightness", "125"],
+    );
+    expect(eventMocks.emit).toHaveBeenCalledWith(WALLPAPER_SETTINGS_CHANGED_EVENT, {
+      origin: "main",
+    });
+
+    databaseMocks.select.mockResolvedValueOnce([{ value: "75" }]);
+    await expect(getWallpaperBrightness("preloaded")).resolves.toBe(75);
+  });
+
+  it("normaliza o brilho para 50-150 e usa 100 quando o valor e invalido", async () => {
+    expect(normalizeWallpaperBrightness(10)).toBe(50);
+    expect(normalizeWallpaperBrightness(50)).toBe(50);
+    expect(normalizeWallpaperBrightness(100)).toBe(100);
+    expect(normalizeWallpaperBrightness(150)).toBe(150);
+    expect(normalizeWallpaperBrightness(190)).toBe(150);
+    expect(normalizeWallpaperBrightness(112.6)).toBe(113);
+    expect(normalizeWallpaperBrightness("opaco")).toBe(DEFAULT_WALLPAPER_BRIGHTNESS);
+    expect(normalizeWallpaperBrightness(null)).toBe(DEFAULT_WALLPAPER_BRIGHTNESS);
+
+    await expect(getWallpaperBrightness("preloaded")).resolves.toBe(DEFAULT_WALLPAPER_BRIGHTNESS);
   });
 });

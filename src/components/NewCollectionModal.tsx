@@ -1,4 +1,5 @@
 import { type KeyboardEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { TAG_COLOR_TOKEN_NAMES, TAG_COLOR_TOKENS, type TagColorToken } from "../lib/tagColors";
 import type { LibraryCollection } from "../types/library";
 import { TagColorPicker } from "./ui/TagColorPicker";
@@ -98,7 +99,10 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
     }
   }
 
-  return (
+  // O portal tira o dialogo de qualquer ilha com backdrop-filter. Um fixed
+  // aninhado nesse ancestral ganharia a ilha como containing block, em vez do
+  // viewport, e nao poderia ser o dono real do filtro do modal.
+  return createPortal(
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6"
       role="presentation"
@@ -109,6 +113,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
       }}
     >
       <section
+        data-glass-backdrop="optical"
         className="material-surface-overlay w-full max-w-lg rounded-lg bg-surface-panel text-text-primary shadow-2xl"
         role="dialog"
         aria-modal="true"
@@ -173,7 +178,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
           </button>
           <button
             type="button"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
             onClick={() => void submitCollection()}
             disabled={!canCreate}
           >
@@ -181,6 +186,7 @@ export function NewCollectionModal({ collection, onClose, onCreateCollection }: 
           </button>
         </footer>
       </section>
-    </div>
+    </div>,
+    window.document.body,
   );
 }

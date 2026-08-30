@@ -45,7 +45,7 @@ export function NotebooksGrid({ notebooks, collections, isLoading, hasError, onC
         <button
           type="button"
           onClick={onCreate}
-          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover"
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover"
         >
           Criar primeiro caderno
         </button>

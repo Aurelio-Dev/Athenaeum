@@ -144,6 +144,24 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
   }),
 }));
 
+vi.mock("../../hooks/useKeyboardShortcuts", async () => {
+  const real = await vi.importActual<typeof import("../../lib/keyboardShortcuts")>(
+    "../../lib/keyboardShortcuts",
+  );
+  const bindings = real.resolveShortcutBindings({});
+  return {
+    useKeyboardShortcuts: () => ({
+      bindings,
+      overrides: {},
+      matchesShortcut: (id: string, event: Parameters<typeof real.matchesBinding>[0]) =>
+        bindings[id] !== undefined && real.matchesBinding(event, bindings[id]),
+      setShortcutBinding: () => null,
+      resetShortcutBinding: () => {},
+      resetAllShortcutBindings: () => {},
+    }),
+  };
+});
+
 vi.mock("../../hooks/useInViewport", () => ({
   useInViewport: () => ({ elementRef: vi.fn(), isInViewport: false }),
 }));
