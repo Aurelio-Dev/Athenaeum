@@ -51,6 +51,7 @@ export function DocumentPickerModal({ documents, linkedDocumentIds, onPick, onCl
       onMouseDown={onClose}
     >
       <section
+        data-glass-backdrop="optical"
         className="material-surface-overlay flex max-h-[70vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"

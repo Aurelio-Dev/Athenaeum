@@ -16,6 +16,8 @@ import {
   type MaterialVariant,
 } from "../lib/database";
 import { useWallpaperBackdrop } from "./useWallpaperBackdrop";
+import { GlobalAppearancePreferencesProvider } from "./useGlobalAppearancePreferences";
+import { KeyboardShortcutsProvider } from "./useKeyboardShortcuts";
 
 // Fonte UNICA da aparencia global do app: o MODO (claro/escuro), o MATERIAL
 // (chapado/vidro) e a composicao do CHROME. Vive num contexto para que o botao de contraste do rodape da
@@ -241,7 +243,15 @@ export function ThemeProvider({ children, databaseSource = "loaded" }: ThemeProv
     [chrome, material, setChrome, setMaterial, storedChrome, theme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <GlobalAppearancePreferencesProvider databaseSource={databaseSource} theme={theme}>
+        <KeyboardShortcutsProvider databaseSource={databaseSource}>
+          {children}
+        </KeyboardShortcutsProvider>
+      </GlobalAppearancePreferencesProvider>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

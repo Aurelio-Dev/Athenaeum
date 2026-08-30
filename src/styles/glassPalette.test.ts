@@ -134,8 +134,16 @@ describe("isolamento: o material flat nao muda em nenhum valor", () => {
   // Zero consumidores reconfirmados em .tsx/.css antes da remocao; ver o
   // commit. Nao e regressao: e a mudanca deliberada que este teste existe
   // para distinguir de uma acidental.
-  const IMPRESSAO_FLAT = "91bfe4525c20782eb71dfe4bb041fd67";
-  const TOTAL_FLAT = 183;
+  // ATUALIZADO em 29/08/2026: a personalizacao aprovada de destaque separou
+  // o foreground de acao do branco inverso e criou o accent estavel de
+  // conteudo. Os dois aliases novos preservam os pixels do baseline; as duas
+  // referencias alteradas continuam resolvendo para os mesmos hexes.
+  // ATUALIZADO em 30/08/2026: o foreground cromatico do destaque deixou de
+  // reutilizar a cor bruta. O claro usa #814A26 e o override escuro #CE8757,
+  // derivados apenas em L para manter H/S e assegurar AA nas superficies reais
+  // da UI. A declaracao adicional em .dark explica 185 -> 186.
+  const IMPRESSAO_FLAT = "1d9841639b9ce716fb5b031a3e94b927";
+  const TOTAL_FLAT = 186;
 
   function inventarioFlat(): string[] {
     return [":root", ".dark"]
@@ -163,8 +171,14 @@ describe("isolamento: o material flat nao muda em nenhum valor", () => {
     expect(raiz).toContain("--color-surface-app: var(--background)");
     expect(raiz).toContain("--muted-foreground: #7A6558");
     expect(raiz).toContain("--color-sidebar-muted: #7A6558");
+    expect(raiz).toContain("--color-text-inverse: #FFFFFF");
+    expect(raiz).toContain("--color-primary-foreground: var(--primary-foreground)");
+    expect(raiz).toContain("--color-primary-text: #814A26");
+    expect(raiz).toContain("--color-content-accent: #9C5A2E");
+    expect(raiz).toContain("--diagram-accent: var(--color-content-accent)");
     expect(escuro).toContain("--background: #1A1410");
     expect(escuro).toContain("--muted-foreground: #9E8878");
+    expect(escuro).toContain("--color-primary-text: #CE8757");
   });
 
   it("as capas do flat seguem em 28%/30% de saturacao", () => {

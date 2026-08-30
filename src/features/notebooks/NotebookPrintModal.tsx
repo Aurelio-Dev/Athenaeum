@@ -178,7 +178,7 @@ export function NotebookPrintModal({
             </button>
             <button
               type="button"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
               onClick={confirmSelection}
               disabled={selectedCount === 0 || isPreparing}
             >

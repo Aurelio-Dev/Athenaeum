@@ -12,6 +12,10 @@ import {
   WALLPAPER_SETTINGS_CHANGED_EVENT,
   type DatabaseHandleSource,
 } from "../lib/database";
+import {
+  applyWallpaperVisibilityPresentation,
+} from "../lib/appearancePresentation";
+import { calculateGlassSurfaceAlpha } from "../lib/appearancePreferences";
 
 // O slider descreve VISIBILIDADE da imagem, mas quem varia e o scrim que
 // protege o texto. A curva linear reserva no minimo 60% de tinta da superficie:
@@ -19,8 +23,7 @@ import {
 export const MIN_WALLPAPER_SCRIM_ALPHA = 0.6;
 
 export function wallpaperScrimAlpha(opacity: number): number {
-  const normalized = normalizeWallpaperOpacity(opacity);
-  return 1 - (normalized / 100) * (1 - MIN_WALLPAPER_SCRIM_ALPHA);
+  return calculateGlassSurfaceAlpha(normalizeWallpaperOpacity(opacity), 100);
 }
 
 function cssUrl(url: string): string {
@@ -48,8 +51,8 @@ export function applyWallpaperPresentation(
     delete root.dataset.wallpaperTranslucent;
     delete root.dataset.wallpaperBrightnessAdjusted;
     root.style.removeProperty("--glass-wallpaper-image");
-    root.style.removeProperty("--glass-wallpaper-scrim-alpha");
     root.style.removeProperty("--glass-wallpaper-brightness");
+    applyWallpaperVisibilityPresentation(false, opacity);
     return;
   }
 
@@ -60,10 +63,7 @@ export function applyWallpaperPresentation(
     delete root.dataset.wallpaperTranslucent;
   }
   root.style.setProperty("--glass-wallpaper-image", cssUrl(assetUrl));
-  root.style.setProperty(
-    "--glass-wallpaper-scrim-alpha",
-    wallpaperScrimAlpha(opacity).toFixed(3),
-  );
+  applyWallpaperVisibilityPresentation(true, opacity);
 
   const normalizedBrightness = normalizeWallpaperBrightness(brightness);
   if (normalizedBrightness === DEFAULT_WALLPAPER_BRIGHTNESS) {

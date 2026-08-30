@@ -24,11 +24,12 @@ export function ConfirmationDialog({
   const confirmClassName =
     tone === "danger"
       ? "bg-status-red text-status-red-text hover:brightness-95"
-      : "bg-primary text-text-inverse shadow-button hover:bg-primary-hover";
+      : "bg-primary text-primary-foreground shadow-button hover:bg-primary-hover";
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={onCancel}>
       <section
+        data-glass-backdrop="optical"
         className="material-surface-overlay w-full max-w-md rounded-xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"

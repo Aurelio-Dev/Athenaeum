@@ -1,5 +1,133 @@
 # Athenaeum — Tokens de Cor (Tags, Badges, Texto Secundário)
 
+> **Changelog 30/08/2026 — Contraste dos títulos e atalhos remapeáveis.**
+>
+> ### Contraste dos títulos
+>
+> Terceiro eixo de contraste, `appearance_title_contrast` em `app_settings`,
+> faixa `90–150%` e padrão `100%`. Usa a mesma derivação HSL do contraste dos
+> textos (`deriveAppearanceTextContrastTone`), aplicada apenas a títulos de
+> página e de seção. **Não altera tamanho, espaçamento ou tipografia** — só cor.
+>
+> O provider publica a cor já derivada para o tema ativo em
+> `--appearance-title-text` e `--appearance-title-page-text`. No padrão nada é
+> publicado e as classes caem no fallback histórico: `.app-title` em
+> `var(--foreground)` e `.app-title-page` no marrom próprio `#2C1810` (claro) /
+> `#F0E8DF` (escuro).
+>
+> Os dois fallbacks são diferentes de propósito. Os títulos de `.app-title`
+> sempre acompanharam o contraste dos textos e continuam acompanhando quando o
+> eixo dos títulos está neutro; o título de página tem base própria, mais
+> quente, e nunca seguiu aquele eixo. Quando os dois eixos estão ativos, o dos
+> títulos age **sobre** o tom já ajustado pelo dos textos.
+>
+> A cor mora no CSS, e não numa utilitária do Tailwind no JSX: as duas seriam
+> seletores de uma classe só e a vitória dependeria da ordem do CSS gerado.
+> `titleContrastTokens.test.ts` trava isso, o inventário de títulos e a
+> ausência de propriedades tipográficas nas classes.
+>
+> Escopo deliberado: acompanham o eixo os títulos de página e de seção
+> (coleção, caderno, seções de Ajustes e painel de anotações). Ficam de fora
+> títulos de cartão e a marca do app, que é identidade fixa.
+>
+> **Limitação conhecida, herdada do eixo dos textos:** no tema claro a base
+> `#1A1410` já tem `L = 8,2%`, então a derivação satura em preto por volta de
+> `123%` (o título de página, em `133%`). A metade superior do slider tem pouco
+> efeito no claro — é exatamente o que o slider "Contraste dos textos" já fazia
+> antes desta mudança, e foi mantido por consistência.
+>
+> ### Atalhos de teclado
+>
+> `src/lib/keyboardShortcuts.ts` passou a ser o registro canônico: cada atalho
+> tem `id` estável e, quando remapeável, um `defaultBinding`. Os overrides do
+> usuário vivem em `keyboard_shortcut_overrides` (JSON versionado em
+> `app_settings`) e sincronizam entre janelas pelo evento
+> `app:keyboard-shortcuts-changed`.
+>
+> São remapeáveis apenas acordes de tecla única (12 ações). Permanecem fixos
+> `Esc`, `Tab`, `Enter`, setas e `/`, que carregam semântica de diálogo, ARIA ou
+> do editor, e as ações que aceitam mais de uma tecla para o mesmo efeito —
+> zoom com `+`/`=`/numérico, menu de contexto com `Shift+F10`/`Menu`, remover com
+> `Delete`/`Backspace` —, que perderiam essa tolerância ao virar acorde único.
+
+
+> **Changelog 29/08/2026 — Preferências globais de Aparência: destaque,
+> contrastes, blur e luz noturna.**
+>
+> As quatro famílias foram reunidas em um snapshot versionado de Aparência,
+> persistido nas chaves `appearance_accent_light`, `appearance_accent_dark`,
+> `appearance_interface_contrast`, `appearance_text_contrast`,
+> `appearance_glass_blur` e `appearance_night_light` de `app_settings`.
+> `GlobalAppearancePreferencesProvider` cobre todas as WebViews dentro do
+> `ThemeProvider`: SQLite é a fonte de verdade, `localStorage` antecipa apenas
+> o primeiro paint e o evento `app:appearance-preferences-changed` sincroniza
+> alterações validadas entre janelas. O antigo `athenaeum-ui-contrast` é
+> migrado uma vez para os dois eixos de contraste na janela principal.
+>
+> ### Destaque da interface
+>
+> Claro e escuro guardam cores independentes, ambos com `#9C5A2E` como padrão.
+> Os papéis primary/hover/soft/text/ring são derivados da cor escolhida. Tons
+> cromáticos de texto variam somente a luminosidade em HSL, preservando hue e
+> saturação; a busca usa o pior contraste entre background, card, input,
+> sidebar, sidebar elevada e `--color-primary-soft`. O foreground de
+> preenchimentos escolhe preto ou branco pelo maior contraste WCAG. Por isso
+> `--color-primary-foreground` foi separado de `--color-text-inverse`, que
+> continua branco para status e tags.
+>
+> A cor de UI não recolore conteúdo criado pelo usuário. Diagramas e traços do
+> Quadro usam `--color-content-accent: #9C5A2E`; `--diagram-accent` aponta para
+> esse token estável. No valor padrão e contraste de interface em `100%`, nenhum
+> override inline permanece; os foregrounds cromáticos estáticos são `#814A26`
+> no claro e `#CE8757` no escuro. Se o contraste da interface alterar as
+> superfícies, somente `--color-primary-text` é recalculado para o pior caso.
+>
+> ### Contrastes separados
+>
+> Os dois sliders usam `90–150%`, padrão `100%` e passo `1%`:
+>
+> - **Contraste da interface** altera a separação de superfícies, controles,
+>   bordas e arestas do Vidro, sem tocar nos tokens de texto;
+> - **Contraste dos textos** move somente a luminosidade HSL dos textos
+>   primário, secundário e da sidebar, sem alterar superfícies ou bordas.
+>
+> O valor `100%` remove os overrides e cai no inventário flat aprovado. Os
+> aliases de aresta calculados pelo eixo de interface só são consumidos dentro
+> de `[data-material="glass"]`; não existe valor `--glass-*` novo no flat.
+>
+> ### Desfoque extensível do LiquidGlass
+>
+> O blur usa `0–100%`, padrão `100%`: `12px/16px` em 100, `6px/8px` em 50 e
+> `0px/0px` em zero para action/optical. Em zero, `data-glass-blur="off"`
+> realmente remove os filtros. De 1 a 99, o estado é `adjusted`; em 100 o
+> atributo e os overrides ficam ausentes.
+>
+> O dono do backdrop agora se declara no JSX com
+> `data-glass-backdrop="action"` ou `"optical"`. O CSS deixa de depender de
+> uma lista rígida de classes; novos pontos LiquidGlass entram no slider ao
+> declarar seu papel. Donos aninhados reutilizam o backdrop do ancestral.
+> Overlays `fixed` são portaled para o `body` antes de assumir o papel, porque
+> um ancestral com `backdrop-filter` se torna seu containing block. Inputs,
+> previews, controles paint-only e chrome imersivo ficam fora.
+>
+> A visibilidade do wallpaper e o blur compartilham o alpha do scrim:
+> `alpha = 1 - v × (0,40 + 0,20 × (1 - b))`, com `v` e `b` normalizados em
+> `0–1`. Assim, em visibilidade máxima o alpha vai de `0,60` no blur máximo a
+> `0,40` no blur zero. A tinta de action retém de `100%` a `66,667%`, via
+> `color-mix`, sem aplicar `opacity` ao texto ou aos ícones. A documentação
+> operacional completa está em `docs/wallpaper-blur-implementation-plan.md`.
+>
+> ### Luz azul / luz noturna
+>
+> O toggle mestre controla uma camada âmbar global, com força `0–100%`
+> (padrão `50%`) e alpha máximo `0,52`. O agendamento diário é opcional e usa
+> `20:00–07:00` por padrão; intervalos que cruzam meia-noite são suportados e
+> horários iguais significam 24 horas. A agenda usa um timer pontual para a
+> próxima fronteira e reavalia ao recuperar foco/visibilidade, sem polling.
+>
+> A camada é `pointer-events: none`, fica acima do conteúdo das WebViews e é
+> removida na impressão. Decorações nativas do Windows não são afetadas.
+
 > **Changelog 29/08/2026 — Brilho do papel de parede isolado da interface.**
 >
 > A preferência `wallpaper_brightness` vive em `app_settings`, usa a faixa
@@ -1782,44 +1910,24 @@ trava o inventário medido, com as violações marcadas `passaAA: false`. Ele
 quebra se qualquer valor mudar — inclusive para melhor. Se você estiver
 corrigindo um destes tons, atualizar o inventário faz parte da correção.
 
-### Níveis de "Contraste da interface"
+### Eixos de contraste da Aparência
 
-O stepper de Ajustes › Aparência redefine `--muted-foreground`,
-`--color-sidebar-muted` e `--border` por `color-mix`. Os níveis são
-**90 / 100 / 110**, e o 100 é o **meio**, não o piso.
+Desde 29/08/2026, o stepper discreto foi substituído por dois sliders
+independentes de **90 a 150**, com `100` neutro:
 
-⚠️ **O nível 90 reduz contraste abaixo do legível** — um controle de
-contraste cujo mínimo derruba o texto secundário para 2.18:1 no pior caso do
-claro. Isso é conhecido e **aceito** (ver a entrada do topo); foi removido em
-17/08 e voltou na reversão de 18/08.
+- interface: superfícies, controles, bordas e arestas;
+- textos: foreground primário/secundário e textos da sidebar.
 
-Como `color-mix` interpola contra `--foreground`/`--background`, um bloco
-só serve aos dois temas: `html[data-ui-contrast="N"]` sem par escuro. É a
-adaptação automática que os hexes fixos da correção revertida perdiam — e o
-motivo de aquela versão precisar de blocos separados por tema.
+Não existem mais blocos `data-ui-contrast="90|110"`. O provider deriva os
+valores contínuos para o tema ativo e remove todos os overrides em `100`.
+Nos textos, apenas a luminosidade HSL varia; hue e saturação não são misturados
+com neutros. `appearancePresentation.test.ts` trava a independência dos eixos
+e o crescimento monotônico do contraste textual.
 
-`--muted-foreground`, com o pior caso de cada tema:
-
-| Nível | Claro | Pior claro | Escuro | Pior escuro |
-| --- | --- | --- | --- | --- |
-| 90 | `#908982` | **2.18:1** ❌ | `#7C766F` | **3.50:1** ❌ |
-| 100 (default) | `#7A6558` | **3.47:1** ❌ | `#9E8878` | 4.68:1 ✅ |
-| 110 | `#605954` | **4.35:1** ❌ | `#ACA49D` | 6.40:1 ✅ |
-
-O pior caso do claro é sempre `--color-sidebar-raised` (`#D8CCBD`); o do
-escuro é sempre `--muted`/`--input` (`#2E2018`). **Nenhum nível do tema
-claro fecha AA em todas as superfícies** — nem o 110.
-
-`--color-sidebar-muted` sobre `--sidebar`:
-
-| Nível | Claro | Contraste | Escuro | Contraste |
-| --- | --- | --- | --- | --- |
-| 90 | `#988B81` | **2.65:1** ❌ | `#756E68` | **3.80:1** ❌ |
-| 100 (default) | `#7A6558` | **4.39:1** ❌ | `#9E8878` | 5.66:1 ✅ |
-| 110 | `#66564D` | 5.60:1 ✅ | `#AEA79F` | 8.00:1 ✅ |
-
-Todos esses valores estão travados como inventário em
-`mutedForegroundContrast.test.ts` — que os afirma, não os exige.
+`mutedForegroundContrast.test.ts` continua registrando somente o inventário
+neutro aprovado e suas dívidas conhecidas. Os números dos antigos níveis
+90/110 pertencem ao histórico anterior a esta mudança e não descrevem mais o
+produto atual.
 
 ## Texto principal e seleção na biblioteca
 

@@ -68,16 +68,18 @@ describe("wallpaper: isolamento do material", () => {
       .filter((match: RegExpMatchArray) => match[2].includes("blur("))
       .map((match: RegExpMatchArray) => match[1]);
     expect(seletoresComBlur.length).toBeGreaterThan(0);
-    // A ação primária é a exceção nominal: seu vidro vale em todo material
-    // glass, com ou sem wallpaper. Qualquer terceiro blur sem um destes dois
-    // escopos continua sendo uma regressão.
+    // Action vale em todo material glass; optical exige wallpaper translucido.
+    // Os dois papeis sao declarativos e nenhuma classe visual e excecao.
     expect(
       seletoresComBlur.every((seletor: string) =>
         seletor
           .split(",")
           .every((parte: string) =>
-            parte.includes('[data-material="glass"][data-wallpaper="active"]')
-            || parte.includes(".material-surface-action"),
+            parte.includes('[data-material="glass"]')
+            && (
+              parte.includes('[data-wallpaper="active"]')
+              || parte.includes('[data-glass-backdrop="action"]')
+            ),
           ),
       ),
     ).toBe(true);

@@ -72,13 +72,37 @@ vi.mock("../../hooks/useDividerLines", () => ({
 }));
 
 vi.mock("../../hooks/useAppearancePreferences", () => ({
-  uiContrastOptions: [90, 100, 110],
   uiFontScaleOptions: [90, 100, 110],
   useAppearancePreferences: () => ({
-    uiContrast: 100,
-    setUiContrast: vi.fn(),
     uiFontScale: 100,
     setUiFontScale: vi.fn(),
+  }),
+}));
+
+vi.mock("../../hooks/useGlobalAppearancePreferences", () => ({
+  useGlobalAppearancePreferences: () => ({
+    preferences: {
+      accentLight: "#9C5A2E",
+      accentDark: "#9C5A2E",
+      interfaceContrast: 100,
+      textContrast: 100,
+      glassBlur: 100,
+      nightLight: {
+        version: 1,
+        enabled: false,
+        strength: 50,
+        scheduleEnabled: false,
+        startTime: "20:00",
+        endTime: "07:00",
+      },
+    },
+    setAccent: vi.fn(),
+    setInterfaceContrast: vi.fn(),
+    setTextContrast: vi.fn(),
+    setGlassBlur: vi.fn(),
+    setNightLight: vi.fn(),
+    resetAppearancePreferences: vi.fn(),
+    nightLightActive: false,
   }),
 }));
 

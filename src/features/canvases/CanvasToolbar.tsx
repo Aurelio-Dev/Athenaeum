@@ -210,7 +210,7 @@ function ToolButton({
       onClick={onClick}
       className={`flex h-9 items-center justify-center gap-0.5 rounded-xl px-2.5 transition ${
         active
-          ? "bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
+          ? "bg-[var(--color-accent-tint-bg)] text-[var(--color-primary-text)]"
           : "text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--card-foreground)]"
       }`}
     >
@@ -300,7 +300,7 @@ export function CanvasToolbar({ tool, onSelectTool, onTogglePan }: CanvasToolbar
           onClick={() => setIsShapesOpen((current) => !current)}
           className={`flex h-9 items-center justify-center gap-0.5 rounded-xl px-2.5 transition ${
             isPopupShapeActive || isShapesOpen
-              ? "bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
+              ? "bg-[var(--color-accent-tint-bg)] text-[var(--color-primary-text)]"
               : "text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--card-foreground)]"
           }`}
         >
@@ -327,7 +327,7 @@ export function CanvasToolbar({ tool, onSelectTool, onTogglePan }: CanvasToolbar
                   onClick={() => chooseShape(shape)}
                   className={`flex h-11 w-11 items-center justify-center rounded-xl transition ${
                     active
-                      ? "bg-[var(--color-accent-tint-bg)] text-[var(--accent)]"
+                      ? "bg-[var(--color-accent-tint-bg)] text-[var(--color-primary-text)]"
                       : "text-[var(--floating-header-control)] hover:bg-[var(--floating-header-hover-bg)] hover:text-[var(--card-foreground)]"
                   }`}
                 >

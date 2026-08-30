@@ -2865,7 +2865,7 @@ export function NotebookPageEditor({
   const menuItemClassName = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const plainMenuItemClassName = "block w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const disabledMenuItemClassName = "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary";
-  const activeMenuItemClassName = "bg-primary-soft text-primary";
+  const activeMenuItemClassName = "bg-primary-soft text-primary-text";
   const menuIconButtonClassName = "inline-flex h-8 w-full items-center justify-center rounded-md text-text-secondary transition hover:bg-surface-muted hover:text-text-primary";
   const boldButton = getToolbarButton("bold");
   const italicButton = getToolbarButton("italic");
@@ -3259,7 +3259,7 @@ export function NotebookPageEditor({
                 placeholder="https://..."
                 className="min-w-0 flex-1 rounded-md border border-border-subtle bg-[var(--card)] px-2 py-1.5 text-xs text-text-primary outline-none focus:border-primary"
               />
-              <button type="button" className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-bold text-text-inverse" onClick={commitLink}>
+              <button type="button" className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-bold text-primary-foreground" onClick={commitLink}>
                 Aplicar
               </button>
             </div>
@@ -3352,7 +3352,7 @@ export function NotebookPageEditor({
               aria-label={activeTableCell.isCleanMode ? "Mostrar as bordas da tabela" : "Ativar modo limpo da tabela"}
               aria-pressed={activeTableCell.isCleanMode}
               className={`rounded-md px-2 py-1 transition ${
-                activeTableCell.isCleanMode ? "bg-primary-soft text-primary" : "hover:bg-surface-muted hover:text-text-primary"
+                activeTableCell.isCleanMode ? "bg-primary-soft text-primary-text" : "hover:bg-surface-muted hover:text-text-primary"
               }`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={toggleCurrentTableCleanMode}
@@ -3374,7 +3374,7 @@ export function NotebookPageEditor({
                 aria-pressed={activeCallout.type === type}
                 className={`rounded-md px-2 py-1 transition ${
                   activeCallout.type === type
-                    ? "bg-primary-soft text-primary"
+                    ? "bg-primary-soft text-primary-text"
                     : "hover:bg-surface-muted hover:text-text-primary"
                 }`}
                 onMouseDown={(event) => event.preventDefault()}
@@ -3407,7 +3407,7 @@ export function NotebookPageEditor({
                 aria-pressed={activeDiagram.kind === kind}
                 className={`rounded-md px-2 py-1 transition ${
                   activeDiagram.kind === kind
-                    ? "bg-primary-soft text-primary"
+                    ? "bg-primary-soft text-primary-text"
                     : "hover:bg-surface-muted hover:text-text-primary"
                 }`}
                 onMouseDown={(event) => event.preventDefault()}
@@ -3421,7 +3421,7 @@ export function NotebookPageEditor({
               type="button"
               aria-pressed={isDiagramCleanMode}
               className={`rounded-md px-2 py-1 transition ${
-                isDiagramCleanMode ? "bg-primary-soft text-primary" : "hover:bg-surface-muted hover:text-text-primary"
+                isDiagramCleanMode ? "bg-primary-soft text-primary-text" : "hover:bg-surface-muted hover:text-text-primary"
               }`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => setIsDiagramCleanMode((current) => !current)}
@@ -3451,7 +3451,7 @@ export function NotebookPageEditor({
               aria-label={activeEquation.isCleanMode ? "Mostrar fonte LaTeX" : "Ativar modo limpo da equação"}
               aria-pressed={activeEquation.isCleanMode}
               className={`rounded-md px-2 py-1 transition ${
-                activeEquation.isCleanMode ? "bg-primary-soft text-primary" : "hover:bg-surface-muted hover:text-text-primary"
+                activeEquation.isCleanMode ? "bg-primary-soft text-primary-text" : "hover:bg-surface-muted hover:text-text-primary"
               }`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={toggleCurrentEquationCleanMode}

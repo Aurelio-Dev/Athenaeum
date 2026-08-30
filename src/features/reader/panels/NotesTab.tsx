@@ -298,7 +298,7 @@ export function NotesTab({ notesText, onNotesChange, onBlur, readOnly = false }:
                 type="button"
                 className={`min-w-7 rounded-md px-2 py-1 transition ${
                   activeFormats.has(button.action)
-                    ? "bg-primary text-white"
+                    ? "bg-primary text-primary-foreground"
                     : "text-[#9E8878] hover:bg-white/5 hover:text-white"
                 }`}
                 title={button.title}

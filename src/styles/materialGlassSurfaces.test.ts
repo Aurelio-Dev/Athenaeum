@@ -256,17 +256,17 @@ describe("material glass: Library no chrome flutuante", () => {
     const barraFlutuante = regraDaLeva((regra) =>
       regra.seletor === `${ESCOPO_ILHAS} .material-liquid-bar`,
     ).corpo;
-    const barraTranslucida = regraDaLeva((regra) =>
-      regra.seletor === `${ESCOPO_ILHAS}[data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar`,
-    ).corpo;
-
     expect(barraFlutuante).toContain("display: contents;");
     expect(barraFlutuante).toContain("background: none;");
     expect(barraFlutuante).toContain("box-shadow: none;");
-    expect(barraFlutuante).toContain("-webkit-backdrop-filter: none;");
-    expect(barraFlutuante).toContain("backdrop-filter: none;");
-    expect(barraTranslucida).toContain("-webkit-backdrop-filter: none;");
-    expect(barraTranslucida).toContain("backdrop-filter: none;");
+    expect(barraFlutuante).not.toContain("backdrop-filter");
+    expect(
+      regras.filter((regra) =>
+        regra.seletor.includes(ESCOPO_ILHAS)
+        && regra.corpo.includes("backdrop-filter"),
+      ),
+      "chrome flutuante nao precisa de reset ou restauracao nominal",
+    ).toEqual([]);
     expect(css).toMatch(
       /\[data-material="glass"\]\[data-wallpaper="active"\]\s+\.material-liquid-bar\s*\{[^}]*display:\s*block;/,
     );
@@ -302,7 +302,7 @@ describe("material glass: flat permanece byte-identico", () => {
 describe("material glass: acao primaria da Library", () => {
   const MARCADOR_DE_ACAO = "material-surface-action";
   const ESCOPO_GLASS = '[data-material="glass"]';
-  const SELETOR_DO_RESET_ANINHADO = `${ESCOPO_GLASS}[data-wallpaper="active"][data-wallpaper-translucent="true"]\n  :is(.material-surface, .material-surface-elevated, .material-surface-card, .material-surface-overlay, .material-liquid-card, .material-liquid-overlay, .material-liquid-bar)\n  .${MARCADOR_DE_ACAO}`;
+  const SELETOR_DO_RESET_ANINHADO = `${ESCOPO_GLASS} [data-glass-backdrop] [data-glass-backdrop]`;
   const regras = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .map((m: RegExpMatchArray) => ({ seletor: m[1].trim(), corpo: m[2].trim() }));
 
@@ -351,45 +351,31 @@ describe("material glass: acao primaria da Library", () => {
     }
   });
 
-  it("a acao aninhada reutiliza o backdrop filtrado pelo ancestral", () => {
-    // Repete o seletor geral de superficies aninhadas, incluindo a barra
-    // docada, para impedir uma segunda amostragem do mesmo wallpaper.
+  it("qualquer proprietario aninhado reutiliza o backdrop filtrado pelo ancestral", () => {
     const corpo = corpoDoBloco(SELETOR_DO_RESET_ANINHADO);
     expect(corpo).toContain("-webkit-backdrop-filter: none;");
     expect(corpo).toContain("backdrop-filter: none;");
   });
 
-  it("no chrome flutuante a acao recupera o filtro que o reset aninhado tirou", () => {
-    // O reset acima pressupoe que o ancestral JA compos um backdrop. No
-    // flutuante a faixa vira `display: contents` e nao compoe nada — mas
-    // continua casando como ancestral, porque `display: contents` tira a
-    // GERACAO DE CAIXA, nao o elemento da arvore de casamento de seletor.
-    // Sem esta restauracao o botao do topbar fica sem filtro nenhum.
-    const SELETOR_DA_RESTAURACAO = `${ESCOPO_GLASS}[data-chrome="floating"][data-wallpaper="active"][data-wallpaper-translucent="true"] .material-liquid-bar .${MARCADOR_DE_ACAO}`;
-    const corpo = corpoDoBloco(SELETOR_DA_RESTAURACAO);
+  it("a acao marcada recebe filtro generico sem restauracao do chrome", () => {
+    const SELETOR_DA_ACAO = `${ESCOPO_GLASS} [data-glass-backdrop="action"]`;
+    const corpo = corpoDoBloco(SELETOR_DA_ACAO);
 
-    expect(corpo).toContain("blur(var(--glass-action-blur))");
+    expect(corpo).toContain(
+      "blur(var(--glass-effective-action-blur, var(--glass-action-blur)))",
+    );
     expect(corpo).toContain("saturate(var(--glass-action-saturation))");
     expect(corpo).not.toContain("backdrop-filter: none");
-    // Quatro atributos + duas classes = (0,6,0), contra os (0,5,0) do reset.
-    // E o que a faz vencer sem repetir o literal do grupo :is(...), cuja
-    // contagem esta travada em liquidGlassLibrary.test.ts.
-    expect(SELETOR_DA_RESTAURACAO.match(/\[data-/g)).toHaveLength(4);
-
-    // ESPECIFICA A FLUTUANTE: no docado a faixa pinta de verdade e o reset
-    // esta correto — restaurar o filtro la criaria a segunda amostragem do
-    // wallpaper que o reset existe para impedir. A unica regra da acao com o
-    // blur fora do eixo de chrome tem de ser a declaracao base.
-    const comBlurDaAcao = regras.filter((regra) =>
-      regra.seletor.includes(`.${MARCADOR_DE_ACAO}`)
-      && regra.corpo.includes("blur(var(--glass-action-blur))"),
-    );
     expect(
-      comBlurDaAcao
-        .filter((regra) => !regra.seletor.includes('[data-chrome="floating"]'))
-        .map((regra) => regra.seletor),
-      "restauracao de filtro da acao fora do chrome flutuante",
-    ).toEqual([`${ESCOPO_GLASS} .${MARCADOR_DE_ACAO}`]);
+      regras.filter((regra) =>
+        regra.seletor.includes('[data-chrome="floating"]')
+        && regra.corpo.includes("backdrop-filter"),
+      ),
+      "nao deve haver hack nominal de filtro para o chrome flutuante",
+    ).toEqual([]);
+    expect(corpoDoBloco(`${ESCOPO_GLASS} .${MARCADOR_DE_ACAO}`)).not.toContain(
+      "backdrop-filter",
+    );
   });
 
   it("a acao nao escapa do inventario fechado de marcadores", () => {
@@ -423,7 +409,7 @@ describe("material glass: acao primaria da Library", () => {
       "px-4",
       "py-2",
       "font-bold",
-      "text-text-inverse",
+      "text-primary-foreground",
       "shadow-button",
       "transition",
       "hover:bg-primary-hover",
@@ -441,7 +427,7 @@ describe("material glass: acao primaria da Library", () => {
       "py-2.5",
       "text-sm",
       "font-bold",
-      "text-text-inverse",
+      "text-primary-foreground",
       "shadow-button",
       "transition",
       "hover:bg-primary-hover",
@@ -736,7 +722,7 @@ describe("material glass: o segmento selecionado e LUZ, nao terracota", () => {
       expect(classes, `o segmento perdeu a classe ${classe}`).toContain(classe);
     }
     // O ramo de estado do template literal segue sendo o do flat.
-    expect(jsx).toContain('viewMode === mode ? "bg-primary text-text-inverse" : "text-text-secondary hover:text-text-primary"');
+    expect(jsx).toContain('viewMode === mode ? "bg-primary text-primary-foreground" : "text-text-secondary hover:text-text-primary"');
     expect(jsx).toContain("aria-pressed={viewMode === mode}");
   });
 });
@@ -1181,7 +1167,7 @@ describe("material glass: trilho das abas", () => {
     }
     // E os dois ramos de estado do botao seguem intactos: peso de fonte e
     // cores continuam vindo do TSX, porque o flat depende deles.
-    expect(jsx).toContain('"bg-primary font-bold text-text-inverse"');
+    expect(jsx).toContain('"bg-primary font-bold text-primary-foreground"');
     expect(jsx).toContain('"font-normal text-text-secondary hover:bg-surface-muted hover:text-text-primary"');
     expect(jsx).toContain("rounded-full px-4 py-2 text-[13px] leading-[19.5px] transition");
     expect(jsx).toContain("aria-selected={active}");

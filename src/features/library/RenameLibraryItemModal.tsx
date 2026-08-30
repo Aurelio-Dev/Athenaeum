@@ -82,6 +82,7 @@ export function RenameLibraryItemModal({ title, initialName, onClose, onRename }
       }}
     >
       <section
+        data-glass-backdrop="optical"
         className="material-surface-overlay w-full max-w-md rounded-lg bg-surface-panel text-text-primary shadow-2xl"
         role="dialog"
         aria-modal="true"
@@ -129,7 +130,7 @@ export function RenameLibraryItemModal({ title, initialName, onClose, onRename }
           </button>
           <button
             type="button"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
             onClick={() => void submit()}
             disabled={!canSubmit}
           >

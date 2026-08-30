@@ -30,7 +30,7 @@ export function CollectionTabs({ activeTab, onTabChange }: CollectionTabsProps) 
             onClick={() => onTabChange(id)}
             className={`rounded-full px-4 py-2 text-[13px] leading-[19.5px] transition ${
               active
-                ? "bg-primary font-bold text-text-inverse"
+                ? "bg-primary font-bold text-primary-foreground"
                 : "font-normal text-text-secondary hover:bg-surface-muted hover:text-text-primary"
             }`}
           >

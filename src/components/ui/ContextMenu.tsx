@@ -98,6 +98,7 @@ export function ContextMenu({
       <ContextMenuA11yContext.Provider value={autoFocus}>
         <div
           ref={menuRef}
+          data-glass-backdrop="optical"
           data-context-menu-root="true"
           role={autoFocus ? "menu" : undefined}
           aria-orientation={autoFocus ? "vertical" : undefined}

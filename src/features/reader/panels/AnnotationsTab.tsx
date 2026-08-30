@@ -224,7 +224,7 @@ function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: An
             type="button"
             aria-label={`Ir para a página ${annotation.page}`}
             title={`Ir para a página ${annotation.page}`}
-            className="inline-flex shrink-0 items-center rounded-full border border-border-subtle bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--muted-foreground)] outline-none transition hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+            className="inline-flex shrink-0 items-center rounded-full border border-border-subtle bg-[var(--muted)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--muted-foreground)] outline-none transition hover:border-primary hover:text-primary-text focus-visible:ring-2 focus-visible:ring-primary/60"
             onClick={() => onJumpToPage(annotation.page, annotation.id)}
           >
             p. {annotation.page}
@@ -297,7 +297,7 @@ function AnnotationCard({ annotation, onJumpToPage, onDelete, onUpdateNote }: An
         {isQuoteTruncated ? (
           <button
             type="button"
-            className="mt-1 text-xs font-semibold text-primary outline-none transition hover:text-primary-hover focus-visible:ring-2 focus-visible:ring-primary/60"
+            className="mt-1 text-xs font-semibold text-primary-text outline-none transition hover:text-primary-text focus-visible:ring-2 focus-visible:ring-primary/60"
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();

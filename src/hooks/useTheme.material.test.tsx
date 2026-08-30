@@ -66,6 +66,10 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: eventMocks.listen,
 }));
 
+vi.mock("./useGlobalAppearancePreferences", () => ({
+  GlobalAppearancePreferencesProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
 const materialEvent = "app:material-variant-changed";
 const materialStorageKey = "athenaeum-material";
 const chromeStorageKey = "athenaeum-chrome";

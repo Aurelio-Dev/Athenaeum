@@ -51,6 +51,7 @@ import type { Canvas, LibraryCollection, LibraryDocument, LibraryRoute, Notebook
 import { NewCollectionModal } from "../../components/NewCollectionModal";
 import { floatingPanelId, getCenteredPanelPosition, useFloatingPanels } from "../../components/floating/FloatingPanelsContext";
 import { useContextMenu } from "../../hooks/useContextMenu";
+import { useTheme } from "../../hooks/useTheme";
 import { CanvasesGrid } from "../canvases/CanvasesGrid";
 import { canvasPanelHeight, canvasPanelWidth } from "../canvases/canvasPanelDimensions";
 import { NotebooksGrid } from "../notebooks/NotebooksGrid";
@@ -226,6 +227,7 @@ function EmptyReadingListIcon(props: SVGProps<SVGSVGElement>) {
 
 export function LibraryView() {
   const queryClient = useQueryClient();
+  const { chrome } = useTheme();
   const { panels: floatingPanelsList, openPanel: openFloatingPanel, closePanel: closeFloatingPanel } = useFloatingPanels();
   const [activeRoute, setActiveRoute] = useState<LibraryRoute>({ type: "all" });
   const [searchTerm, setSearchTerm] = useState("");
@@ -716,7 +718,10 @@ export function LibraryView() {
           className={`material-island min-h-0 min-w-0 flex-1 flex-col ${selectedDocument ? "hidden xl:flex" : "flex"}`}
           onContextMenu={openLibraryAreaContextMenu}
         >
-          <div className="material-liquid-bar contents">
+          <div
+            data-glass-backdrop={chrome === "docked" ? "optical" : undefined}
+            className="material-liquid-bar contents"
+          >
             <div className="material-liquid-bar-section flex items-center gap-3 bg-surface-app px-8 pb-5 pt-6">
               <label className="material-liquid-control ml-auto flex w-full max-w-[340px] items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text-subtle">
                 <SearchIcon />
@@ -730,8 +735,9 @@ export function LibraryView() {
               {isTrashRoute ? null : (
                 <button
                   type="button"
+                  data-glass-backdrop={chrome === "floating" ? "action" : undefined}
                   onClick={() => setIsAddPdfModalOpen(true)}
-                  className="material-surface-action inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-text-inverse shadow-button transition hover:bg-primary-hover"
+                  className="material-surface-action inline-flex shrink-0 items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-[12px] font-bold leading-[18px] text-primary-foreground shadow-button transition hover:bg-primary-hover"
                 >
                   <PlusIcon />
                   Adicionar
@@ -776,7 +782,7 @@ export function LibraryView() {
                       void createCanvasInCollection();
                     }
                   }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-primary bg-transparent px-4 py-2 text-[12px] font-bold leading-[18px] text-primary transition hover:bg-primary hover:text-text-inverse"
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary bg-transparent px-4 py-2 text-[12px] font-bold leading-[18px] text-primary-text transition hover:bg-primary hover:text-primary-foreground"
                 >
                   <PlusIcon />
                   Criar
@@ -784,6 +790,7 @@ export function LibraryView() {
               ) : (
                 <LibraryToolbar
                   compact={isTrashRoute}
+                  chrome={chrome}
                   sortMode={sortMode}
                   viewMode={viewMode}
                   recentSortLabel={activeRoute.type === "reading-list" ? "Aberto recentemente" : "Recente"}
@@ -846,7 +853,10 @@ export function LibraryView() {
                 </div>
               </div>
             ) : documents.length > 0 ? (
-              <div className={listClassName}>
+              <div
+                data-glass-backdrop={viewMode === "list" ? "optical" : undefined}
+                className={listClassName}
+              >
                 {documents.map((document) => (
                   <DocumentCard
                     key={document.id}
@@ -1033,6 +1043,7 @@ export function LibraryView() {
       {fileDeletionNotice ? (
         <div
           role="status"
+          data-glass-backdrop="optical"
           className="material-surface-elevated fixed bottom-6 left-1/2 z-[70] flex max-w-xl -translate-x-1/2 items-start gap-3 rounded-xl border border-border bg-surface-elevated px-4 py-3 text-sm text-text-primary shadow-lg"
         >
           <p className="flex-1">{fileDeletionNotice}</p>

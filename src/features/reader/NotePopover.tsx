@@ -130,7 +130,7 @@ export function NotePopover({ selectedText, initialNote, onCancel, onSave, onDel
             <button
               type="button"
               disabled={isBusy}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
               onClick={() => void handleSave()}
             >
               Salvar

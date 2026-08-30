@@ -1,175 +1,110 @@
-# Plano de implementação — ajuste de blur do Liquid Glass
+# Ajuste de blur do LiquidGlass
 
 ## Status
 
-Planejamento concluído e implementação adiada.
+Implementado em 29/08/2026 como parte das preferências globais de Aparência.
+Este arquivo preserva as decisões do plano original e registra o contrato que
+novos componentes devem seguir.
 
-## Objetivo
+## Comportamento
 
-Adicionar um ajuste percentual de intensidade do blur limitado estritamente
-aos filtros que já pertencem ao Liquid Glass. O material Padrão, conteúdos
-imersivos, campos, previews e superfícies sem marcador devem permanecer
-inalterados.
+- Nome na interface: **Desfoque do material Vidro**.
+- Faixa: `0–100%`, passo de `1%`, padrão `100%`.
+- O controle fica desabilitado no material Padrão, sem apagar o valor salvo.
+- A aplicação visual acompanha o arraste; a persistência usa debounce de
+  `250 ms` e descarrega o último valor ao desmontar.
+- `100%` preserva o caminho visual e o custo gráfico históricos.
+- `0%` remove o filtro de verdade, em vez de manter uma camada com `blur(0)`.
 
-## Decisão inicial recomendada
+Conversão proporcional:
 
-Usar uma faixa de `0%` a `100%`, em que `100%` preserva exatamente o visual
-atual. O ajuste permite reduzir o blur, mas não ultrapassa o custo gráfico já
-validado.
-
-Se o produto decidir permitir um blur mais forte que o atual, a faixa e os
-limites de desempenho deverão ser redefinidos antes da implementação.
-
-## Comportamento proposto
-
-- Nome: **Intensidade do desfoque**.
-- Descrição: **Ajuste o desfoque das superfícies do material Vidro.**
-- Faixa: `0–100%`.
-- Padrão: `100%`.
-- Passo: `1%`.
-- Controle desabilitado enquanto o material Padrão estiver selecionado.
-- Aplicação visual imediata durante o arraste.
-- Persistência com debounce de aproximadamente `250 ms`.
-
-Conversão proposta:
-
-| Ajuste | Ações Liquid Glass | Superfícies sobre wallpaper |
+| Ajuste | Ações LiquidGlass | Superfícies ópticas |
 | ---: | ---: | ---: |
 | 0% | 0px | 0px |
 | 50% | 6px | 8px |
 | 100% | 12px | 16px |
 
-A saturação continua independente. Portanto, `0%` remove somente o desfoque
-espacial, sem transformar o material Vidro em material Padrão.
+A saturação continua independente. Reduzir o blur também reduz a retenção da
+tinta das ações, de `100%` até `66,667%`, sem aplicar `opacity` ao elemento e
+sem esmaecer texto, ícones ou foco.
 
-## Plano de implementação
+## Persistência e sincronização
 
-### 1. Criar o contrato persistido
+A chave `appearance_glass_blur` vive em `app_settings`; nenhuma migration foi
+necessária. Ela faz parte do snapshot versionado de Aparência, junto de
+destaque, contrastes e luz noturna.
 
-Em `src/lib/database.ts`:
+`GlobalAppearancePreferencesProvider`, montado dentro de `ThemeProvider`, é a
+fonte de estado para todas as WebViews. SQLite continua sendo a fonte de
+verdade; `localStorage` é somente cache de bootstrap. Alterações confirmadas
+são propagadas pelo evento discriminado
+`app:appearance-preferences-changed`.
 
-- adicionar a chave `glass_blur_intensity` em `app_settings`;
-- definir mínimo `0`, máximo `100` e padrão `100`;
-- criar normalização com arredondamento e limitação da faixa;
-- criar `getGlassBlurIntensity` e `setGlassBlurIntensity`;
-- persistir antes de emitir o evento entre janelas;
-- validar valores inválidos ou produzidos por versões futuras.
+## Contrato extensível de backdrops
 
-Não é necessária migration, pois `app_settings` já é uma tabela chave-valor.
+O CSS não mantém mais uma lista paralela de classes que podem filtrar. O
+componente que realmente possui o backdrop declara um papel:
 
-### 2. Sincronizar entre janelas
+```tsx
+data-glass-backdrop="optical"
+data-glass-backdrop="action"
+```
 
-Criar um hook específico, sugerido como
-`src/hooks/useGlassBlurPreference.ts`, e integrá-lo ao `ThemeProvider`.
+- `optical`: superfície que filtra o wallpaper quando ele está ativo e
+  visível;
+- `action`: ação LiquidGlass que pode filtrar mesmo sem wallpaper;
+- superfícies aninhadas reutilizam o backdrop do ancestral e nunca empilham
+  filtros;
+- overlays `position: fixed` não contam como aninhados: eles são portaled para
+  `document.body` e declaram o próprio papel, pois `backdrop-filter` transforma
+  o ancestral em containing block;
+- controles apenas pintados, inputs, previews e chrome imersivo não recebem o
+  marcador;
+- elementos condicionais só declaram o papel quando realmente geram a caixa.
 
-O hook deverá:
+Assim, uma superfície nova passa a responder ao slider ao declarar o papel no
+próprio JSX. `glassBackdropMarkers.test.ts` mantém um inventário auditável e
+reprova papéis desconhecidos, marcadores indevidos e novos donos não
+revisados.
 
-- usar SQLite como fonte de verdade;
-- manter um espelho em `localStorage` para evitar o primeiro frame com blur
-  incorreto;
-- escutar um novo evento global, por exemplo `app:glass-blur-changed`;
-- proteger a leitura inicial contra eventos ou alterações locais mais recentes;
-- atualizar imediatamente a janela de origem;
-- aplicar debounce às gravações causadas pelo slider;
-- concluir uma gravação pendente ao desmontar;
-- expor `glassBlurIntensity` e `setGlassBlurIntensity` pelo `useTheme`.
+## Acoplamento com a visibilidade do wallpaper
 
-Isso também cobre Reader, Caderno e painéis nativos porque todos passam pelo
-`ThemeProvider`, embora atualmente essas janelas quase não tenham superfícies
-filtráveis.
+O slider de visibilidade controla o scrim; o de blur controla o raio e, para
+evitar uma superfície opaca sem difusão, também participa do alpha do scrim.
+Para `v = visibilidade / 100` e `b = blur / 100`:
 
-### 3. Aplicar os valores nos tokens existentes
+```text
+alpha = 1 - v × (0,40 + 0,20 × (1 - b))
+```
 
-Não criar novos seletores de `backdrop-filter`. O ajuste deverá substituir
-somente os tokens existentes:
+| Visibilidade | Blur 100% | Blur 50% | Blur 0% |
+| ---: | ---: | ---: | ---: |
+| 0% | 1,00 | 1,00 | 1,00 |
+| 50% | 0,80 | 0,75 | 0,70 |
+| 100% | 0,60 | 0,50 | 0,40 |
 
-- `--glass-action-blur`, atualmente `12px`;
-- `--glass-optical-blur`, atualmente `16px`.
+A imagem continua em alpha `1`; apenas a tinta protetora varia. O brilho do
+wallpaper permanece outro eixo e continua aplicado somente à imagem.
 
-O hook calculará os dois valores proporcionais e os aplicará como propriedades
-CSS no elemento raiz somente quando `data-material="glass"` estiver ativo. Ao
-entrar no material Padrão, removerá as propriedades inline.
+## Estados CSS
 
-Devem ser preservados sem ampliação de escopo:
+- padrão `100%`: `data-glass-blur` e overrides neutros ausentes;
+- `1–99%`: `data-glass-blur="adjusted"`;
+- `0%`: `data-glass-blur="off"` e `backdrop-filter: none` nos donos;
+- variáveis `--appearance-glass-*` são neutras no elemento raiz, mas só são
+  consumidas sob `[data-material="glass"]`;
+- os dois filtros mantêm paridade entre `-webkit-backdrop-filter` e
+  `backdrop-filter`.
 
-- o filtro das ações primárias Liquid Glass;
-- o filtro das superfícies translúcidas sobre o wallpaper;
-- a restauração específica da ação no layout de ilhas;
-- os resets `backdrop-filter: none` das superfícies aninhadas.
+O material Padrão, conteúdo do Reader/Caderno/Quadro, previews, campos e
+superfícies sem marcador permanecem fora do efeito.
 
-Os resets impedem que o wallpaper seja filtrado repetidamente e não devem ser
-alterados para implementar a preferência.
+## Cobertura
 
-### 4. Adicionar o controle em Aparência
+Os guards cobrem normalização, curvas `0/50/100`, persistência, cache,
+sincronização entre janelas, debounce/flush, controle de Aparência, inventário
+de donos, ausência de empilhamento, estado desligado e isolamento do material
+Vidro. O guard estrutural foi exercitado por mutação negativa antes de ser
+aceito.
 
-Em `src/features/settings/AppearanceSettings.tsx`:
-
-- criar um slider próprio para intensidade do desfoque;
-- posicioná-lo próximo às opções de material, wallpaper e visibilidade;
-- exibir o percentual atual;
-- usar `aria-label` e `aria-valuetext`;
-- desabilitar o slider no material Padrão, preservando o valor escolhido;
-- restaurar para `100%` em **Restaurar padrões**;
-- não condicionar o controle à existência de wallpaper, pois ações Liquid
-  Glass já possuem blur mesmo sem imagem.
-
-### 5. Preservar as interações existentes
-
-Documentar e testar estes casos:
-
-- material Padrão: nenhuma alteração visual, independentemente do valor salvo;
-- Vidro sem wallpaper: o ajuste afeta somente alvos Liquid Glass que já possuem
-  filtro, principalmente ações;
-- Vidro com wallpaper visível: afeta sidebars, detalhes, cards, overlays e
-  barra superior filtráveis;
-- visibilidade do wallpaper em `0%`: o blur óptico das superfícies continua
-  desativado, pois nenhum pixel do wallpaper atravessa o scrim; o blur das
-  ações permanece independente;
-- inputs, textareas, formulários, previews, frames imersivos e conteúdo de
-  Reader, Caderno e Quadro permanecem fora.
-
-### 6. Cobertura automatizada
-
-Criar ou ampliar testes para verificar:
-
-- normalização, persistência e emissão do novo evento;
-- padrão `100%` na ausência da chave;
-- restauração pelo cache antes da resposta do SQLite;
-- reconciliação entre SQLite e cache;
-- propagação entre janelas;
-- debounce durante o arraste;
-- conclusão do valor pendente;
-- conversões `0/50/100% → 0/6/12px` e `0/8/16px`;
-- remoção das propriedades CSS no material Padrão;
-- slider desabilitado em Padrão e habilitado em Vidro;
-- **Restaurar padrões** retornando a `100%`;
-- ausência de seletores com blur fora de `[data-material="glass"]`;
-- preservação dos resets para superfícies aninhadas.
-
-O novo teste de isolamento deverá ser provado por mutação: remover
-temporariamente o escopo `[data-material="glass"]` de um seletor filtrável,
-confirmar que o teste falha com mensagem clara e restaurar o seletor.
-
-### 7. Documentação e validação
-
-Atualizar `docs/design/athenaeum-design-tokens-cores.md` com:
-
-- chave persistida;
-- faixa e curva;
-- dois valores-base;
-- relação com saturação e visibilidade do wallpaper;
-- limites de aplicação;
-- motivo de `100%` ser o máximo atual.
-
-Validações previstas:
-
-- `npm run typecheck`;
-- testes específicos de banco, provider, Aparência e estilos;
-- `npm test`;
-- verificação manual exclusivamente com `npm run tauri:dev`;
-- matriz claro/escuro × docado/ilhas × blur 0/50/100;
-- confirmação visual de que o material Padrão não muda;
-- teste de reinicialização e sincronização entre janelas;
-- revisão do diff e do `git status`.
-
-Não são previstos alteração Rust, migration ou instalação de dependências.
+Não houve alteração em Rust, schema ou dependências.

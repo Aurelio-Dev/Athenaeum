@@ -8,10 +8,10 @@ type IconButtonProps = {
 
 const variantClassName: Record<NonNullable<IconButtonProps["variant"]>, string> = {
   ghost: "text-text-secondary hover:bg-surface-muted hover:text-text-primary",
-  selected: "bg-surface-panel text-primary shadow-sm",
+  selected: "bg-surface-panel text-primary-text shadow-sm",
   danger: "text-text-subtle hover:bg-status-red hover:text-status-red-text",
-  primary: "bg-primary text-text-inverse hover:bg-primary-hover shadow-button",
-  accent: "text-primary hover:bg-primary-soft",
+  primary: "bg-primary text-primary-foreground hover:bg-primary-hover shadow-button",
+  accent: "text-primary-text hover:bg-primary-soft",
 };
 
 export function IconButton({ label, children, variant = "ghost", type = "button", ...buttonProps }: IconButtonProps) {

@@ -199,7 +199,7 @@ export function ReadingStatusCard({
                 className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-[var(--muted)]"
                 onClick={() => void selectReadingStatus(option)}
               >
-                <span aria-hidden="true" className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-primary">
+                <span aria-hidden="true" className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-primary-text">
                   {isCurrent ? <CheckIcon /> : null}
                 </span>
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${token.className}`}>

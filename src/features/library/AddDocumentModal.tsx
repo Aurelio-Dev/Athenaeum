@@ -514,7 +514,7 @@ export function AddDocumentModal({
           type="button"
           disabled={isImporting}
           onClick={onClose}
-          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
+          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
         >
           {isImporting ? "Importando..." : allResolved ? "Concluído — Fechar" : "Fechar"}
         </button>
@@ -525,7 +525,7 @@ export function AddDocumentModal({
           type="button"
           disabled={!canConfirm}
           onClick={() => void handleImport()}
-          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-text-inverse shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
+          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-button transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle disabled:shadow-none"
         >
           {isBatch ? `Adicionar ${items.length} arquivos à biblioteca →` : "Adicionar à biblioteca →"}
         </button>
@@ -537,6 +537,7 @@ export function AddDocumentModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay-modal p-6" role="presentation" onMouseDown={requestClose}>
       <section
         ref={modalRef}
+        data-glass-backdrop="optical"
         className="material-surface-overlay flex max-h-[calc(100vh-48px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface-panel shadow-2xl"
         role="dialog"
         aria-modal="true"

@@ -392,7 +392,7 @@ export function ReaderFloatingChrome({
         onMouseDown={(event) => event.stopPropagation()}
         onClick={onToggleDetails}
       >
-        <span className="shrink-0 text-primary">
+        <span className="shrink-0 text-primary-text">
           <ChromeIcon name="book" size={22} />
         </span>
         <span className="min-w-0 flex-1">
@@ -521,7 +521,7 @@ export function ReaderFloatingChrome({
           title="Visualização"
           aria-haspopup="menu"
           aria-expanded={viewMenu.isOpen}
-          className={`${chromeButtonClassName} ${viewMenu.isOpen ? "bg-primary-soft text-primary" : ""}`}
+          className={`${chromeButtonClassName} ${viewMenu.isOpen ? "bg-primary-soft text-primary-text" : ""}`}
           onClick={openViewMenu}
         >
           <ChromeIcon name="view" size={18} />

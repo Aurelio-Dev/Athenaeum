@@ -224,7 +224,7 @@ function ThumbnailRow({ pdfDocument, page, active, sectionTitle, registerPdfCanc
         }`}
         onClick={onClick}
       >
-        <span className={`text-center text-xs tabular-nums ${active ? "font-bold text-primary" : "text-[var(--muted-foreground)]"}`}>{page}</span>
+        <span className={`text-center text-xs tabular-nums ${active ? "font-bold text-primary-text" : "text-[var(--muted-foreground)]"}`}>{page}</span>
         <span className={`overflow-hidden rounded border bg-white ${active ? "border-primary" : "border-border-subtle"}`} style={{ width: thumbnailWidth }}>
           {pdfDocument && hasRendered ? (
             <PageThumbnailCanvas
@@ -423,7 +423,7 @@ function BookmarksView({
               >
                 {isEditing ? (
                   <div className="min-w-0 flex-1 px-3 py-2">
-                    <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary" : "text-[var(--foreground)]"}`}>
+                    <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary-text" : "text-[var(--foreground)]"}`}>
                       Página {bookmark.pageNumber}
                     </span>
                     <input
@@ -455,7 +455,7 @@ function BookmarksView({
                     className="min-w-0 flex-1 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                     onClick={() => onJumpToPage(bookmark.pageNumber)}
                   >
-                    <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary" : "text-[var(--foreground)]"}`}>
+                    <span className={`block text-xs font-bold tabular-nums ${isCurrentPage ? "text-primary-text" : "text-[var(--foreground)]"}`}>
                       Página {bookmark.pageNumber}
                     </span>
                     <span
@@ -699,7 +699,7 @@ export function ReaderLeftSidebar({
               <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">Página {result.page}</p>
               <p className="mt-1 text-xs leading-5 text-[var(--foreground)]">
                 {result.before}
-                <strong className="font-bold text-primary">{result.match}</strong>
+                <strong className="font-bold text-primary-text">{result.match}</strong>
                 {result.after}
               </p>
             </button>
@@ -804,7 +804,7 @@ export function ReaderLeftSidebar({
               tabIndex={isSelected ? 0 : -1}
               className={`inline-flex h-[30px] min-w-0 flex-1 items-center justify-center rounded-[7px] outline-none transition focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 isSelected
-                  ? "bg-[var(--color-accent-tint-bg)] text-primary"
+                  ? "bg-[var(--color-accent-tint-bg)] text-primary-text"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
               }`}
               onClick={() => selectView(tab.id)}
