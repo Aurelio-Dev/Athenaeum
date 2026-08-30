@@ -544,6 +544,25 @@ path. A v1→N chain test must build the sqlx `Migrator` from the same
 migration source and apply it directly in Rust, which runs under `cargo test`
 with no Tauri, no WebView2 and no display.
 
+That chain test now exists in `mod tests` in `lib.rs`. It consumes
+`database_migrations()` directly — the production list — and converts to
+`sqlx::migrate::Migration` through a local newtype that mirrors the
+plugin's private `MigrationList`. Three tests: the chain applies cleanly
+on an empty database, versions are sequential without gaps or
+duplicates, and the resulting schema matches a literal `sqlite_master`
+snapshot.
+
+The snapshot deliberately includes the FTS5 shadow tables and
+`sqlite_autoindex_*` entries. Those come from the SQLite engine via
+`libsqlite3-sys`, not from our migrations, which means a `sqlx` or
+`libsqlite3-sys` bump can break the snapshot test with no migration
+change at all. When that test fails and nothing under `migrations/`
+moved, check the `Cargo.lock` diff before suspecting the schema.
+
+Updating the snapshot is a deliberate act: read the diff, confirm the
+change is the intended one, then update the constant. Updating it
+without reading the diff voids the test.
+
 The `PRAGMA foreign_keys = ON` in `database.ts` is **redundant**:
 `sqlx-sqlite` 0.8.6 already includes `foreign_keys = ON` in the
 `SqliteConnectOptions` default and executes its pragmas per connection on

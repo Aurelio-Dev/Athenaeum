@@ -5755,6 +5755,22 @@ mod tests {
     // O snapshot e texto integral, nao um hash: um hash falharia dizendo
     // apenas "mudou" e obrigaria a reinvestigar do zero a cada alteracao
     // legitima de schema; o texto falha mostrando o diff.
+    //
+    // Aviso sobre a origem de uma falha aqui: o snapshot inclui as tabelas
+    // -sombra do FTS5 (documents\_fts\_data, \_idx, \_content, \_docsize,
+    // *config) e os indices sqlite\_autoindex*\*. Nenhum desses e escrito
+    // pelas nossas migrations — quem os gera e o proprio motor do SQLite,
+    // que chega via libsqlite3-sys.
+    //
+    // Consequencia pratica: um bump de sqlx ou libsqlite3-sys pode quebrar
+    // este teste sem que nenhuma migration tenha mudado. Se a falha
+    // aparecer sem alteracao em migrations/ nem em database\_migrations(),
+    // verifique o diff do Cargo.lock antes de suspeitar do schema. Isso e
+    // informacao legitima, nao ruido: mudou o layout real do banco em
+    // disco.
+    //
+    // Nao delete este teste ao encontrar uma divergencia inesperada. Leia o
+    // diff primeiro.
     const MIGRATION_SCHEMA_SNAPSHOT: &str = r#"== index idx_annotations_document_id
 CREATE INDEX idx_annotations_document_id ON annotations(document_id)
 == index idx_annotations_document_page
