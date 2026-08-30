@@ -35,3 +35,9 @@ tauri-plugin-opener = "2.5.4"
 # (BEGIN...COMMIT numa unica conexao). Reaproveitamos o MESMO pool do plugin-sql,
 # entao a versao precisa casar com a que o plugin ja traz (0.8.x).
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
+
+# Apenas para os testes: `#[tokio::test]` no teste da cadeia de migrations,
+# que aplica o Migrator do sqlx direto num SQLite em arquivo. Nao entra no
+# binario de producao.
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
