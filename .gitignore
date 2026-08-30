@@ -25,6 +25,7 @@ desktop.ini
 # Internal development artifacts
 CLAUDE.md
 references/
+.scratch/
 # Cópia local aninhada do repositório; não deve participar do build nem dos testes.
 Athenaeum/
 
