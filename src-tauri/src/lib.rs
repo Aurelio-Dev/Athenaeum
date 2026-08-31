@@ -280,6 +280,37 @@ fn select_pdf_files(
         .collect())
 }
 
+#[tauri::command]
+fn read_pdf_file<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    sources: tauri::State<'_, PdfImportSources>,
+    file_path: String,
+) -> Result<String, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Nao foi possivel achar o diretorio de dados: {error}"))?;
+    read_pdf_file_from_path(&data_dir.join("pdfs"), &sources, Path::new(&file_path))
+}
+
+fn read_pdf_file_from_path(
+    managed_pdf_dir: &Path,
+    sources: &PdfImportSources,
+    source: &Path,
+) -> Result<String, String> {
+    let (canonical_source, authorization_reserved) =
+        reserve_pdf_source(managed_pdf_dir, sources, source, PdfSourceUse::Read)?;
+    match std::fs::read(&canonical_source) {
+        Ok(bytes) => Ok(base64::engine::general_purpose::STANDARD.encode(bytes)),
+        Err(error) => {
+            if authorization_reserved {
+                sources.restore(canonical_source, PdfSourceUse::Read);
+            }
+            Err(format!("Nao foi possivel ler o PDF: {error}"))
+        }
+    }
+}
+
 // Destinos de exportacao AUTORIZADOS pelo usuario via dialogo nativo nesta
 // sessao. write_notebook_export so grava em um caminho presente aqui: o
 // WebView nao consegue inventar um destino — todo caminho de escrita passou
@@ -531,37 +562,6 @@ fn select_notebook_export_destination(
     drop(authorized);
 
     Ok(Some(path.to_string_lossy().to_string()))
-}
-
-#[tauri::command]
-fn read_pdf_file<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    sources: tauri::State<'_, PdfImportSources>,
-    file_path: String,
-) -> Result<String, String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Nao foi possivel achar o diretorio de dados: {error}"))?;
-    read_pdf_file_from_path(&data_dir.join("pdfs"), &sources, Path::new(&file_path))
-}
-
-fn read_pdf_file_from_path(
-    managed_pdf_dir: &Path,
-    sources: &PdfImportSources,
-    source: &Path,
-) -> Result<String, String> {
-    let (canonical_source, authorization_reserved) =
-        reserve_pdf_source(managed_pdf_dir, sources, source, PdfSourceUse::Read)?;
-    match std::fs::read(&canonical_source) {
-        Ok(bytes) => Ok(base64::engine::general_purpose::STANDARD.encode(bytes)),
-        Err(error) => {
-            if authorization_reserved {
-                sources.restore(canonical_source, PdfSourceUse::Read);
-            }
-            Err(format!("Nao foi possivel ler o PDF: {error}"))
-        }
-    }
 }
 
 // ===========================================================================
@@ -1195,8 +1195,6 @@ fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
 // anuncia — uma unica fonte de verdade, sem duas mensagens de erro diferentes
 // para o mesmo problema.
 const MAX_CANVAS_FILE_BYTES: usize = 4 * 1024 * 1024;
-const MAX_NOTEBOOK_ASSET_BYTES: usize = 4 * 1024 * 1024;
-const MAX_NOTEBOOK_ATTACHMENT_BYTES: usize = 4 * 1024 * 1024;
 
 // Traduz o mime type do Excalidraw para a extensao do arquivo em disco.
 // Lista fechada de proposito: mime desconhecido e rejeitado com erro claro
@@ -1210,17 +1208,6 @@ fn mime_to_extension(mime_type: &str) -> Result<&'static str, String> {
         "image/svg+xml" => Ok("svg"),
         "image/webp" => Ok("webp"),
         other => Err(format!("Tipo de arquivo nao suportado no quadro: {other}")),
-    }
-}
-
-fn notebook_asset_mime_to_extension(mime_type: &str) -> Result<&'static str, String> {
-    match mime_type {
-        "image/png" => Ok("png"),
-        "image/jpeg" => Ok("jpg"),
-        "image/gif" => Ok("gif"),
-        "image/webp" => Ok("webp"),
-        "image/svg+xml" => Err("SVG ainda nao e suportado em assets de caderno.".to_string()),
-        other => Err(format!("Tipo de arquivo nao suportado no caderno: {other}")),
     }
 }
 
@@ -1254,29 +1241,6 @@ fn validate_numeric_path_id(value: &str, label: &str) -> Result<i64, String> {
     }
 
     Ok(parsed)
-}
-
-fn normalize_attachment_display_name(original_name: &str) -> Result<String, String> {
-    let trimmed = original_name.trim();
-    if trimmed.is_empty() || trimmed.chars().any(char::is_control) {
-        return Err("Nome do arquivo anexado invalido.".to_string());
-    }
-
-    let base_name = Path::new(trimmed)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or(trimmed)
-        .trim();
-
-    if base_name.is_empty()
-        || base_name == "."
-        || base_name == ".."
-        || base_name.chars().any(char::is_control)
-    {
-        return Err("Nome do arquivo anexado invalido.".to_string());
-    }
-
-    Ok(base_name.chars().take(240).collect())
 }
 
 fn sanitize_attachment_file_name(original_name: &str) -> Result<String, String> {
@@ -1543,6 +1507,19 @@ async fn load_canvas_files<R: tauri::Runtime>(
 // (`data-notebook-asset-id` no futuro); bytes ficam em disco.
 // ===========================================================================
 
+const MAX_NOTEBOOK_ASSET_BYTES: usize = 4 * 1024 * 1024;
+
+fn notebook_asset_mime_to_extension(mime_type: &str) -> Result<&'static str, String> {
+    match mime_type {
+        "image/png" => Ok("png"),
+        "image/jpeg" => Ok("jpg"),
+        "image/gif" => Ok("gif"),
+        "image/webp" => Ok("webp"),
+        "image/svg+xml" => Err("SVG ainda nao e suportado em assets de caderno.".to_string()),
+        other => Err(format!("Tipo de arquivo nao suportado no caderno: {other}")),
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NotebookAssetMetadata {
@@ -1805,6 +1782,31 @@ async fn load_notebook_assets<R: tauri::Runtime>(
 // save_notebook_file_attachment / load_notebook_file_attachments — arquivos
 // anexados as paginas de Caderno. Primeira fase: sem abrir/revelar/remover.
 // ===========================================================================
+
+const MAX_NOTEBOOK_ATTACHMENT_BYTES: usize = 4 * 1024 * 1024;
+
+fn normalize_attachment_display_name(original_name: &str) -> Result<String, String> {
+    let trimmed = original_name.trim();
+    if trimmed.is_empty() || trimmed.chars().any(char::is_control) {
+        return Err("Nome do arquivo anexado invalido.".to_string());
+    }
+
+    let base_name = Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(trimmed)
+        .trim();
+
+    if base_name.is_empty()
+        || base_name == "."
+        || base_name == ".."
+        || base_name.chars().any(char::is_control)
+    {
+        return Err("Nome do arquivo anexado invalido.".to_string());
+    }
+
+    Ok(base_name.chars().take(240).collect())
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
