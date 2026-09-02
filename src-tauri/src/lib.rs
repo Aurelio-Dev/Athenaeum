@@ -329,22 +329,6 @@ struct ReaderDocumentPayload {
     document_id: String,
 }
 
-#[cfg(test)]
-fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
-    let bytes = value.as_bytes();
-    let has_valid_shape = bytes.len() == 36
-        && bytes.iter().enumerate().all(|(index, byte)| match index {
-            8 | 13 | 18 | 23 => *byte == b'-',
-            _ => byte.is_ascii_hexdigit(),
-        });
-
-    if !has_valid_shape {
-        return Err(format!("{label} invalido."));
-    }
-
-    Ok(())
-}
-
 fn validate_document_id(value: &str) -> Result<(), String> {
     if value.len() > 255 || validate_file_id(value).is_err() {
         return Err("Identificador do documento invalido.".to_string());
@@ -1303,13 +1287,6 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn validates_canonical_uuid_shape() {
-        assert!(validate_uuid("550e8400-e29b-41d4-a716-446655440000", "Identificador").is_ok());
-        assert!(validate_uuid("550e8400e29b41d4a716446655440000", "Identificador").is_err());
-        assert!(validate_uuid("550e8400-e29b-41d4-a716-44665544000z", "Identificador").is_err());
-    }
 
     #[test]
     fn accepts_document_ids_generated_by_the_import_flow() {
